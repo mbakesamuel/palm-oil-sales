@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SUPERVISOR
+  CLERK
+}
+
+enum CustomerType {
+  INDUSTRY
+  WHOLE_SALE
+  RETAIL
+  WORKER
+}
+
+model CompanySettings {
+  id            String   @id @default("default")
+  companyName   String
+  phone         String?
+  address       String?
+  vatRate       Decimal  @db.Decimal(5, 4) // 0.1925 for 19.25%
+  invoicePrefix String   @default("PO")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model InvoiceSequence {
+  id         String   @id @default("default")
+  nextNumber Int      @default(1)
+  updatedAt  DateTime @updatedAt
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      UserRole @default(CLERK)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales Sale[] @relation("SalesCreatedBy")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  email       String?
+  address     String?
+  customerType CustomerType @default(INDUSTRY)
+  taxRegimeId   String
+  taxpayerId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  taxRegime TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
+  sales Sale[]
+
+  @@index([name])
+  @@index([taxRegimeId])
+}
+
+model TaxRegime {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  vatApplies Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customers Customer[]
+  sales     Sale[]
+}
+
+model Product {
+  productId     Int        @id @default(autoincrement())
+  productName   String
+  productCode   String?    // nullable
+  productCatId  Int
+
+  productCat    ProductCat @relation(fields: [productCatId], references: [productCatId])
+  batches       Batch[]
+  saleLines     SaleLine[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("PRODUCT") // maps to Derby table name
+}
+
+model ProductCat {
+  productCatId  Int       @id @default(autoincrement())
+  productCat    String
+  productCode   String
+
+  products      Product[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("PRODUCT_CAT")
+}
+
+model Batch {
+  id             String   @id @default(cuid())
+  productId      Int
+  receivedAt     DateTime @default(now())
+  costPerKg      Decimal  @db.Decimal(12, 2)
+  qtyReceivedKg  Decimal  @db.Decimal(14, 3)
+  qtyRemainingKg Decimal  @db.Decimal(14, 3)
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+   product Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+
+
+  @@index([productId, receivedAt])
+}
+
+model Sale {
+  id                 String    @id @default(cuid())
+  invoiceNo           String    @unique
+  soldAt              DateTime  @default(now())
+  customerId          String
+  createdByUserId     String
+  customerNameSnapshot String
+  customerTaxpayerIdSnapshot String?
+  taxRegimeId            String
+  vatRateSnapshot     Decimal   @db.Decimal(5, 4)
+  netAmount           Decimal   @db.Decimal(14, 2)
+  vatAmount           Decimal   @db.Decimal(14, 2)
+  grossAmount         Decimal   @db.Decimal(14, 2)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy User @relation("SalesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  taxRegime TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
+  lines     SaleLine[]
+  payments  Payment[]
+
+  @@index([soldAt])
+  @@index([customerId, soldAt])
+  @@index([createdByUserId, soldAt])
+  @@index([taxRegimeId, soldAt])
+}
+
+model SaleLine {
+  id              String   @id @default(cuid())
+  saleId          String
+  productId       Int
+  qtyKg           Decimal  @db.Decimal(14, 3)
+  unitPricePerKg  Decimal  @db.Decimal(14, 2)
+  costPerKgSnapshot Decimal @db.Decimal(12, 2)
+  lineNet         Decimal  @db.Decimal(14, 2)
+  lineVat         Decimal  @db.Decimal(14, 2)
+  lineGross       Decimal  @db.Decimal(14, 2)
+
+  sale  Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  saleId    String
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(14, 2)
+  chequeNo  String?
+  paidAt    DateTime      @default(now())
+  createdAt DateTime      @default(now())
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([method, paidAt])
+}
+
+model SalesPoint {
+  id   Int    @id @default(autoincrement())
+  name String
+
+  @@map("SalesPoint") // maps to the actual Derby table name
+}
+
