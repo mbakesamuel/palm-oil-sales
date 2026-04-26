@@ -29,6 +29,7 @@ enum CustomerType {
 model CompanySettings {
   id            String   @id @default("default")
   companyName   String
+  department    String?
   phone         String?
   address       String?
   vatRate       Decimal  @db.Decimal(5, 4) // 0.1925 for 19.25%
@@ -38,6 +39,12 @@ model CompanySettings {
 }
 
 model InvoiceSequence {
+  id         String   @id @default("default")
+  nextNumber Int      @default(1)
+  updatedAt  DateTime @updatedAt
+}
+
+model DeliveryOrderSequence {
   id         String   @id @default("default")
   nextNumber Int      @default(1)
   updatedAt  DateTime @updatedAt
@@ -68,6 +75,7 @@ model Customer {
 
   taxRegime TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
   sales Sale[]
+  deliveryOrders DeliveryOrder[]
 
   @@index([name])
   @@index([taxRegimeId])
@@ -93,10 +101,11 @@ model Product {
   productCat    ProductCat @relation(fields: [productCatId], references: [productCatId])
   batches       Batch[]
   saleLines     SaleLine[]
+  deliveryOrderDetails DeliveryOrderDetails[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("PRODUCT") // maps to Derby table name
+  @@map("Product") // maps to Derby table name
 }
 
 model ProductCat {
@@ -108,7 +117,7 @@ model ProductCat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("PRODUCT_CAT")
+  @@map("ProductCat")
 }
 
 model Batch {
@@ -195,4 +204,53 @@ model SalesPoint {
 
   @@map("SalesPoint") // maps to the actual Derby table name
 }
+
+model DeliveryOrder {
+  id               Int      @id @default(autoincrement())
+  deliveryOrderNo  String   @unique
+  dateIssued       DateTime
+  customerId       String
+  orderRef         String?
+  collectionPoint  String?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  details  DeliveryOrderDetails[]
+  payments DeliveryOrderPaymentDetails[]
+
+  @@index([customerId])
+  @@map("DeliveryOrder")
+}
+
+model DeliveryOrderDetails {
+  id              Int           @id @default(autoincrement())
+  deliveryOrderId Int
+  productId       Int
+  orderQty        Int
+  orderUnit       String?
+  unitPrice       Decimal?      @db.Decimal(14, 2)
+  amount          Decimal?      @db.Decimal(14, 2)
+
+  deliveryOrder DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [productId], onDelete: Restrict)
+
+  @@index([deliveryOrderId])
+  @@map("DeliveryOrderDetails")
+}
+
+model DeliveryOrderPaymentDetails {
+  id              Int           @id @default(autoincrement())
+  deliveryOrderId Int
+  method          PaymentMethod
+  paymentDate     DateTime
+  chequeNo        String?
+  bank            String?
+  cashReceiptNo   String?
+  receiptDate     DateTime?
+
+  deliveryOrder DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryOrderId])
+  @@map("DeliveryOrderPaymentDetails")
+}
+
 

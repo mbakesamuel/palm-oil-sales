@@ -1,34 +1,42 @@
+import Link from "next/link";
+import { getOrInitCompanySettings } from "@/lib/settings";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+export default async function Home() {
+  const settings = await getOrInitCompanySettings();
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="opacity-80">
-        Start a sale in POS, manage customers, and configure VAT/invoice settings.
-      </p>
+    <div className="mx-auto w-full max-w-5xl px-4 py-10">
+      <div className="rounded-2xl border border-black/10 dark:border-white/10 p-6 sm:p-10">
+        <div className="space-y-3">
+          {settings.department ? (
+            <div className="text-lg font-semibold opacity-70 uppercase tracking-wide">
+              {settings.department}
+            </div>
+          ) : null}
+          <div className="text-sm font-semibold opacity-70">{settings.companyName}</div>
+          <h1 className="text-3xl font-semibold">Welcome</h1>
+          <p className="opacity-80 max-w-2xl">
+            Manage palm oil products, palm oil stock, sales, and cashier reporting.
+          </p>
+        </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <a
-          href="/pos"
-          className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
-        >
-          <div className="font-medium">POS</div>
-          <div className="text-sm opacity-75">Create a sale (cash/cheque).</div>
-        </a>
-        <a
-          href="/customers"
-          className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
-        >
-          <div className="font-medium">Customers</div>
-          <div className="text-sm opacity-75">Tax regime & taxpayer ID.</div>
-        </a>
-        <a
-          href="/setup"
-          className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
-        >
-          <div className="font-medium">Setup</div>
-          <div className="text-sm opacity-75">Company, VAT rate, invoice prefix.</div>
-        </a>
+        <div className="mt-6 flex items-center gap-3">
+          <Link
+            href="/login"
+            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+          >
+            Continue to login
+          </Link>
+          <Link
+            href="/dashboard"
+            className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            View dashboard (temporary)
+          </Link>
+        </div>
       </div>
     </div>
   );

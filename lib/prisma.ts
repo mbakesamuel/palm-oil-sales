@@ -26,4 +26,3 @@ export function getPrismaClient() {
   if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
   return client;
 }
-

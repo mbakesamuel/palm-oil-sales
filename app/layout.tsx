@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { getOrInitCompanySettings } from "@/lib/settings";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,58 +14,60 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Palm Oil Sales (PO)",
-  description: "Palm oil sales, inventory, and cashier reporting.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const s = await getOrInitCompanySettings();
+    const title =
+      s.department != null && s.department.trim() !== ""
+        ? `${s.companyName} · ${s.department.trim()}`
+        : s.companyName;
+    return {
+      title: `${title} (PO)`,
+      description: "Palm oil sales, inventory, and cashier reporting.",
+    };
+  } catch {
+    return {
+      title: "Palm Oil Sales (PO)",
+      description: "Palm oil sales, inventory, and cashier reporting.",
+    };
+  }
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let footerLine = "Currency: XAF · VAT: 19.25% · Invoice prefix: PO";
+  try {
+    const s = await getOrInitCompanySettings();
+    const vatPct = (Number.parseFloat(String(s.vatRate)) * 100).toFixed(2);
+    const dept = s.department?.trim();
+    footerLine = [
+      s.companyName,
+      dept ? dept : null,
+      `Currency: XAF`,
+      `VAT: ${vatPct}%`,
+      `Invoice prefix: ${s.invoicePrefix}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  } catch {
+    /* build without DB */
+  }
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="border-b border-black/10 dark:border-white/10">
-          <div className="mx-auto w-full max-w-5xl px-4 py-3 flex items-center justify-between gap-4">
-            <div className="font-semibold">Palm Oil Sales</div>
-            <nav className="text-sm flex items-center gap-3">
-              <Link className="underline-offset-4 hover:underline" href="/">
-                Dashboard
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/pos">
-                POS
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/customers">
-                Customers
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/tax-regimes">
-                Regimes
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/products">
-                Products
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/sales-points">
-                Sales points
-              </Link>
-              <Link className="underline-offset-4 hover:underline" href="/setup">
-                Setup
-              </Link>
-            </nav>
-          </div>
-        </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
-          {children}
-        </main>
-        <footer className="border-t border-black/10 dark:border-white/10">
-          <div className="mx-auto w-full max-w-5xl px-4 py-3 text-xs opacity-70">
-            Currency: XAF · VAT: 19.25% · Invoice prefix: PO
-          </div>
-        </footer>
+        <AuthProvider>
+          <main className="flex-1">{children}</main>
+          <footer className="border-t border-black/10 dark:border-white/10 print:hidden">
+            <div className="mx-auto w-full max-w-5xl px-4 py-3 text-xs opacity-70">{footerLine}</div>
+          </footer>
+        </AuthProvider>
       </body>
     </html>
   );
