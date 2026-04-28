@@ -48,3 +48,35 @@ export function monthName(month1To12: number): string {
   if (month1To12 < 1 || month1To12 > 12) return "";
   return new Date(2000, month1To12 - 1, 1).toLocaleString("en-GB", { month: "long" });
 }
+
+/** Calendar month/year for fiscal month `financialMonth` (1–12) within `financialYear`. */
+export function calendarMonthForFiscalMonth(
+  financialYear: number,
+  financialMonth: number,
+  fiscalYearStartMonth: number,
+): { month: number; year: number } {
+  if (financialMonth < 1 || financialMonth > 12) {
+    throw new Error("Financial month must be between 1 and 12.");
+  }
+  let calMonth = fiscalYearStartMonth + (financialMonth - 1);
+  let calYear = financialYear;
+  while (calMonth > 12) {
+    calMonth -= 12;
+    calYear += 1;
+  }
+  return { month: calMonth, year: calYear };
+}
+
+/** Short label e.g. "Mar 2025" for the calendar month tied to a fiscal month. */
+export function formatFiscalMonthCalendarLabel(
+  financialYear: number,
+  financialMonth: number,
+  fiscalYearStartMonth: number,
+): string {
+  const { month, year } = calendarMonthForFiscalMonth(
+    financialYear,
+    financialMonth,
+    fiscalYearStartMonth,
+  );
+  return new Date(year, month - 1, 1).toLocaleString("en-GB", { month: "short", year: "numeric" });
+}

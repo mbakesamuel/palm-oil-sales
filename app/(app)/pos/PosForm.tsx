@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { UserRole } from "@prisma/client";
+import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 
 type Customer = {
   id: string;
@@ -27,6 +28,7 @@ export function PosForm(props: {
   action: (formData: FormData) => void;
 }) {
   const { customers, grades, users, vatRateDecimal, action } = props;
+  const wp = useWorkingPeriod();
 
   const [customerId, setCustomerId] = React.useState(customers[0]?.id ?? "");
   const [cashierId, setCashierId] = React.useState(users[0]?.id ?? "");
@@ -57,6 +59,16 @@ export function PosForm(props: {
       <input type="hidden" name="createdByUserId" value={cashierId} />
       <input type="hidden" name="lines" value={JSON.stringify(lines)} />
       <input type="hidden" name="payments" value={JSON.stringify(payments)} />
+      <input
+        type="hidden"
+        name="postingFinancialYear"
+        value={wp.openFinancialYear != null ? String(wp.openFinancialYear) : ""}
+      />
+      <input
+        type="hidden"
+        name="postingFinancialMonth"
+        value={wp.openFinancialYear != null ? String(wp.workingMonth) : ""}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">

@@ -42,7 +42,7 @@ export default async function PosPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">POS</h1>
+        <h1 className="text-2xl font-semibold">Sales</h1>
         <p className="text-sm opacity-75">
           Payments allowed: cash, cheque. No credit sales.
         </p>

@@ -10,19 +10,180 @@ import { roleLabel } from "@/lib/auth-display";
 
 type NavItem = { href: string; label: string };
 
+type NavGroupConfig = {
+  id: string;
+  label: string;
+  items: NavItem[];
+  /** Narrow sidebar: one shortcut link */
+  collapsedHref: string;
+  collapsedAbbrev: string;
+  collapsedTitle: string;
+  /** Optional first link inside the expanded group (e.g. Reports overview) */
+  overview?: { href: string; label: string };
+};
+
+function pathMatchesItem(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function groupContainsPath(pathname: string, items: NavItem[], overviewHref?: string) {
+  if (overviewHref && pathMatchesItem(pathname, overviewHref)) return true;
+  return items.some((item) => pathMatchesItem(pathname, item.href));
+}
+
+function NavGroup(props: {
+  config: NavGroupConfig;
+  pathname: string;
+  collapsed: boolean;
+}) {
+  const { config, pathname, collapsed } = props;
+  const { id, label, items, collapsedHref, collapsedAbbrev, collapsedTitle, overview } = config;
+  const storageKey = `sidebar_group_${id}_open`;
+  const [open, setOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    try {
+      const v = localStorage.getItem(storageKey);
+      if (v === "0" || v === "1") setOpen(v === "1");
+    } catch {
+      // ignore
+    }
+  }, [storageKey]);
+
+  React.useEffect(() => {
+    if (groupContainsPath(pathname, items, overview?.href)) {
+      setOpen(true);
+    }
+  }, [pathname, items, overview?.href]);
+
+  function toggle() {
+    setOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(storageKey, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }
+
+  if (collapsed) {
+    return (
+      <Link
+        href={collapsedHref}
+        className="rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 lg:px-2 lg:text-center"
+        title={collapsedTitle}
+      >
+        <span className="lg:hidden">{label}</span>
+        <span className="hidden lg:inline" aria-hidden>
+          {collapsedAbbrev}
+        </span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-black/5 dark:border-white/5">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-black/5 dark:hover:bg-white/5"
+        aria-expanded={open}
+      >
+        <span>{label}</span>
+        <span className="text-xs opacity-70 tabular-nums" aria-hidden>
+          {open ? "−" : "+"}
+        </span>
+      </button>
+      {open ? (
+        <div className="flex flex-col gap-0.5 border-t border-black/5 dark:border-white/5 px-1 pb-1 pt-0.5">
+          {overview ? (
+            <Link
+              href={overview.href}
+              className={[
+                "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
+                pathname === overview.href ? "bg-black/5 dark:bg-white/10" : "",
+              ].join(" ")}
+            >
+              {overview.label}
+            </Link>
+          ) : null}
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={[
+                "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
+                pathMatchesItem(pathname, item.href) ? "bg-black/5 dark:bg-white/10" : "",
+              ].join(" ")}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Sidebar(props: {
-  nav: NavItem[];
-  reportNav?: NavItem[];
   brand: string;
   department?: string | null;
   subtitle: string;
+  dashboardNav: NavItem[];
+  setupNav: NavItem[];
+  operationsNav: NavItem[];
+  reportNav?: NavItem[];
 }) {
-  const { nav, reportNav = [], brand, department, subtitle } = props;
+  const {
+    brand,
+    department,
+    subtitle,
+    dashboardNav,
+    setupNav,
+    operationsNav,
+    reportNav = [],
+  } = props;
   const router = useRouter();
   const pathname = usePathname();
   const { status, session, signOut } = useAuth();
   const [collapsed, setCollapsed] = React.useState(false);
-  const [reportsOpen, setReportsOpen] = React.useState(true);
+
+  const setupGroup: NavGroupConfig = React.useMemo(
+    () => ({
+      id: "setup",
+      label: "Setup",
+      items: setupNav,
+      collapsedHref: "/setup",
+      collapsedAbbrev: "SU",
+      collapsedTitle: "Setup — company, sales points, tax, products, customers",
+    }),
+    [setupNav],
+  );
+
+  const operationsGroup: NavGroupConfig = React.useMemo(
+    () => ({
+      id: "operations",
+      label: "Operations",
+      items: operationsNav,
+      collapsedHref: "/delivery-orders",
+      collapsedAbbrev: "OP",
+      collapsedTitle: "Operations — delivery orders, sales",
+    }),
+    [operationsNav],
+  );
+
+  const reportsGroup: NavGroupConfig | null = React.useMemo(() => {
+    if (reportNav.length === 0) return null;
+    return {
+      id: "reports",
+      label: "Reports",
+      items: reportNav,
+      collapsedHref: "/reports",
+      collapsedAbbrev: "RP",
+      collapsedTitle: "Reports — printable lists",
+      overview: { href: "/reports", label: "Overview" },
+    };
+  }, [reportNav]);
 
   React.useEffect(() => {
     try {
@@ -32,36 +193,11 @@ export function Sidebar(props: {
     }
   }, []);
 
-  React.useEffect(() => {
-    try {
-      const v = localStorage.getItem("sidebar_reports_open");
-      if (v === "0" || v === "1") setReportsOpen(v === "1");
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (reportNav.length > 0 && pathname.startsWith("/reports")) {
-      setReportsOpen(true);
-    }
-  }, [pathname, reportNav.length]);
-
   function toggle() {
     setCollapsed((v) => {
       const next = !v;
       try {
         localStorage.setItem("sidebar_collapsed", next ? "1" : "0");
-      } catch {}
-      return next;
-    });
-  }
-
-  function toggleReports() {
-    setReportsOpen((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem("sidebar_reports_open", next ? "1" : "0");
       } catch {}
       return next;
     });
@@ -96,13 +232,14 @@ export function Sidebar(props: {
       </div>
 
       <nav className="mt-3 flex flex-col gap-1">
-        {nav.map((item) => (
+        {dashboardNav.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             className={[
               "rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5",
               collapsed ? "lg:px-2 lg:text-center" : "",
+              pathMatchesItem(pathname, item.href) ? "bg-black/5 dark:bg-white/10" : "",
             ].join(" ")}
             title={collapsed ? item.label : undefined}
           >
@@ -113,58 +250,10 @@ export function Sidebar(props: {
           </Link>
         ))}
 
-        {reportNav.length > 0 ? (
-          collapsed ? (
-            <Link
-              href="/reports"
-              className="rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 lg:px-2 lg:text-center"
-              title="Reports"
-            >
-              <span className="lg:hidden">Reports</span>
-              <span className="hidden lg:inline" aria-hidden>
-                RP
-              </span>
-            </Link>
-          ) : (
-            <div className="rounded-md border border-black/5 dark:border-white/5">
-              <button
-                type="button"
-                onClick={toggleReports}
-                className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-black/5 dark:hover:bg-white/5"
-                aria-expanded={reportsOpen}
-              >
-                <span>Reports</span>
-                <span className="text-xs opacity-70 tabular-nums" aria-hidden>
-                  {reportsOpen ? "−" : "+"}
-                </span>
-              </button>
-              {reportsOpen ? (
-                <div className="flex flex-col gap-0.5 border-t border-black/5 dark:border-white/5 px-1 pb-1 pt-0.5">
-                  <Link
-                    href="/reports"
-                    className={[
-                      "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
-                      pathname === "/reports" ? "bg-black/5 dark:bg-white/10" : "",
-                    ].join(" ")}
-                  >
-                    Overview
-                  </Link>
-                  {reportNav.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={[
-                        "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
-                        pathname === item.href ? "bg-black/5 dark:bg-white/10" : "",
-                      ].join(" ")}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )
+        <NavGroup config={setupGroup} pathname={pathname} collapsed={collapsed} />
+        <NavGroup config={operationsGroup} pathname={pathname} collapsed={collapsed} />
+        {reportsGroup ? (
+          <NavGroup config={reportsGroup} pathname={pathname} collapsed={collapsed} />
         ) : null}
       </nav>
 
@@ -224,4 +313,3 @@ export function Sidebar(props: {
     </aside>
   );
 }
-

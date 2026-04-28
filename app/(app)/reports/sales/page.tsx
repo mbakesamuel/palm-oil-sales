@@ -52,7 +52,7 @@ export default async function SalesReportPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between print:block">
         <div>
-          <h1 className="text-2xl font-semibold">Report · POS sales</h1>
+          <h1 className="text-2xl font-semibold">Report · Sales register</h1>
           <p className="text-sm opacity-80 mt-1">{settings.companyName}</p>
           <p className="text-xs opacity-70 mt-1 tabular-nums">
             Generated {generated.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} ·{" "}
@@ -120,7 +120,7 @@ export default async function SalesReportPage() {
       </div>
 
       {sales.length === 0 ? (
-        <p className="text-sm opacity-75">No POS sales recorded yet.</p>
+        <p className="text-sm opacity-75">No sales recorded yet.</p>
       ) : null}
     </div>
   );

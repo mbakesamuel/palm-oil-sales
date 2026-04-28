@@ -2,7 +2,7 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateInvoiceNo } from "@/lib/invoice";
-import { fiscalPeriodForDate } from "@/lib/fiscal";
+import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -38,13 +38,18 @@ export async function createSale(formData: FormData) {
   const lines = JSON.parse(linesJson) as PosLineInput[];
   const payments = JSON.parse(paymentsJson) as PosPaymentInput[];
 
+  const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
+  const postingFMRaw = String(formData.get("postingFinancialMonth") ?? "").trim();
+  const postingFY = Number.parseInt(postingFYRaw, 10);
+  const postingFM = Number.parseInt(postingFMRaw, 10);
+
   if (!customerId) throw new Error("Customer is required.");
   if (!createdByUserId) throw new Error("Cashier is required.");
   if (!Array.isArray(lines) || lines.length === 0) throw new Error("Add at least one line.");
   if (!Array.isArray(payments) || payments.length === 0)
     throw new Error("Add at least one payment.");
 
-  const [settings, customer] = await Promise.all([
+  const [settings, customer, openPeriod] = await Promise.all([
     getOrInitCompanySettings(),
     prisma.customer.findUnique({
       where: { id: customerId },
@@ -56,9 +61,17 @@ export async function createSale(formData: FormData) {
         taxRegime: { select: { vatApplies: true } },
       },
     }),
+    getOpenFinancialYearPeriod(),
   ]);
 
   if (!customer) throw new Error("Customer not found.");
+
+  if (!Number.isFinite(postingFY) || !Number.isFinite(postingFM)) {
+    throw new Error(
+      "Working financial period is missing. Set your working month under Financial years before posting.",
+    );
+  }
+  assertPostingPeriod(openPeriod, postingFY, postingFM);
 
   const vatRate = customer.taxRegime.vatApplies
     ? d(settings.vatRate as unknown as string)
@@ -113,11 +126,6 @@ export async function createSale(formData: FormData) {
 
   const invoiceNo = await allocateInvoiceNo(settings.invoicePrefix, soldAt);
 
-  const { financialYear, financialMonth } = fiscalPeriodForDate(
-    soldAt,
-    settings.fiscalYearStartMonth,
-  );
-
   await prisma.sale.create({
     data: {
       invoiceNo,
@@ -131,8 +139,8 @@ export async function createSale(formData: FormData) {
       netAmount: net,
       vatAmount: vat,
       grossAmount: gross,
-      financialYear,
-      financialMonth,
+      financialYear: postingFY,
+      financialMonth: postingFM,
       lines: {
         create: preparedLines.map((l) => ({
           productId: l.productId,

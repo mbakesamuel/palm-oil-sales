@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { fiscalPeriodForDate, formatFinancialYearLabel } from "@/lib/fiscal";
+import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import type {
   LoadedDeliveryOrderView,
   SaveHeaderResult,
@@ -50,7 +50,6 @@ export function DeliveryOrdersClient(props: {
   products: Product[];
   salesPoints: SalesPointOpt[];
   companyVatRate: string;
-  fiscalYearStartMonth: number;
   loadDeliveryOrderByNo: (
     no: string,
   ) => Promise<LoadedDeliveryOrderView | null>;
@@ -63,13 +62,13 @@ export function DeliveryOrdersClient(props: {
     products,
     salesPoints,
     companyVatRate,
-    fiscalYearStartMonth,
     loadDeliveryOrderByNo,
     saveDeliveryOrderHeader,
     saveDeliveryOrderDetails,
     saveDeliveryOrderPayments,
   } = props;
 
+  const wp = useWorkingPeriod();
   const router = useRouter();
   const vatRateNum = Number.parseFloat(companyVatRate);
   const vatPercentLabel = Number.isFinite(vatRateNum)
@@ -98,16 +97,6 @@ export function DeliveryOrdersClient(props: {
         ]
       : [],
   );
-
-  const headerFiscal = React.useMemo(() => {
-    try {
-      const d = new Date(`${dateIssued}T12:00:00`);
-      if (Number.isNaN(d.getTime())) return null;
-      return fiscalPeriodForDate(d, fiscalYearStartMonth);
-    } catch {
-      return null;
-    }
-  }, [dateIssued, fiscalYearStartMonth]);
 
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
@@ -207,6 +196,14 @@ export function DeliveryOrdersClient(props: {
       fd.set("dateIssued", dateIssued);
       fd.set("orderRef", orderRef);
       fd.set("salesPointId", salesPointId);
+      fd.set(
+        "postingFinancialYear",
+        wp.openFinancialYear != null ? String(wp.openFinancialYear) : "",
+      );
+      fd.set(
+        "postingFinancialMonth",
+        wp.openFinancialYear != null ? String(wp.workingMonth) : "",
+      );
       const r = await saveDeliveryOrderHeader(fd);
       if (r.ok) {
         setOrderId(r.id);
@@ -415,15 +412,19 @@ export function DeliveryOrdersClient(props: {
               ) : null}
             </div>
 
-            {headerFiscal ? (
+            {wp.openFinancialYear != null ? (
               <p className="text-xs opacity-75">
-                From <span className="font-medium">date issued</span> (company fiscal settings):{" "}
+                <span className="font-medium">Posting period</span> (your working month):{" "}
                 <span className="font-medium tabular-nums">
-                  FY {formatFinancialYearLabel(headerFiscal.financialYear, fiscalYearStartMonth)} ·
-                  financial month {headerFiscal.financialMonth}/12
+                  FY {wp.fyLabel} · {wp.workingMonthLabel}
                 </span>
+                . <span className="opacity-70">Date issued is the document date only.</span>
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-amber-800 dark:text-amber-200/90">
+                No financial year is open — open one under Financial years before saving this order.
+              </p>
+            )}
 
             {orderId != null ? (
               <div className="flex flex-wrap items-center gap-2">

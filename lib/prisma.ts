@@ -19,10 +19,30 @@ function createPrismaClient() {
   });
 }
 
+/** Detects a dev-global PrismaClient from before `prisma generate` added newer models. */
+function clientHasFinancialYearPeriod(client: PrismaClient): boolean {
+  return (
+    "financialYearPeriod" in client &&
+    typeof (client as unknown as { financialYearPeriod?: { findFirst?: unknown } })
+      .financialYearPeriod?.findFirst === "function"
+  );
+}
+
 export function getPrismaClient() {
   // Lazy init so `next build` can run without DATABASE_URL.
-  if (globalForPrisma.prisma) return globalForPrisma.prisma;
+  if (globalForPrisma.prisma) {
+    if (clientHasFinancialYearPeriod(globalForPrisma.prisma)) {
+      return globalForPrisma.prisma;
+    }
+    // Stale cached client — drop so the next line creates a fresh one from the current generator.
+    globalForPrisma.prisma = undefined;
+  }
   const client = createPrismaClient();
+  if (!clientHasFinancialYearPeriod(client)) {
+    throw new Error(
+      "Prisma Client is out of date (missing FinancialYearPeriod). Run: npx prisma generate",
+    );
+  }
   if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
   return client;
 }

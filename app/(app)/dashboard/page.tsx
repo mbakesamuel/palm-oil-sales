@@ -19,7 +19,7 @@ export default function DashboardPage() {
           href="/pos"
           className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
         >
-          <div className="font-medium">POS</div>
+          <div className="font-medium">Sales</div>
           <div className="text-sm opacity-75">Create a sale (cash/cheque).</div>
         </Link>
         <Link
@@ -27,7 +27,7 @@ export default function DashboardPage() {
           className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
         >
           <div className="font-medium">Products</div>
-          <div className="text-sm opacity-75">Manage products and categories.</div>
+          <div className="text-sm opacity-75">Manage products; categories live under Setup.</div>
         </Link>
         <Link
           href="/customers"

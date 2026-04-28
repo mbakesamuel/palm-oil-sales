@@ -3,27 +3,39 @@ export const runtime = "nodejs";
 
 import { Prisma } from "@prisma/client";
 import { BrandingProvider } from "@/components/BrandingProvider";
+import { WorkingPeriodBanner } from "@/components/WorkingPeriodBanner";
+import { WorkingPeriodProvider } from "@/contexts/WorkingPeriodContext";
+import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { Sidebar } from "./Sidebar";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/pos", label: "POS" },
-  { href: "/delivery-orders", label: "Delivery orders" },
-  { href: "/customers", label: "Customers" },
-  { href: "/products", label: "Products" },
-  { href: "/tax-regimes", label: "Tax regimes" },
-  { href: "/sales-points", label: "Sales points" },
+const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
+
+const setupNav = [
   { href: "/setup", label: "Setup" },
+  { href: "/financial-years", label: "Financial years" },
+  { href: "/sales-points", label: "Sales points" },
+  { href: "/tax-regimes", label: "Tax regimes" },
+  { href: "/product-categories", label: "Product categories" },
+  { href: "/products", label: "Products" },
+  { href: "/customers", label: "Customers" },
+] as const;
+
+const operationsNav = [
+  { href: "/delivery-orders", label: "Delivery orders" },
+  { href: "/pos", label: "Sales" },
 ] as const;
 
 const reportNav = [
-  { href: "/reports/sales", label: "POS sales" },
+  { href: "/reports/sales", label: "Sales register" },
   { href: "/reports/delivery-orders", label: "Delivery orders" },
 ] as const;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const settings = await getOrInitCompanySettings();
+  const [settings, openPeriod] = await Promise.all([
+    getOrInitCompanySettings(),
+    getOpenFinancialYearPeriod(),
+  ]);
   const vatPct = new Prisma.Decimal(String(settings.vatRate)).mul(100).toDecimalPlaces(2).toString();
   const subtitle = `Currency: XAF · VAT: ${vatPct}%`;
 
@@ -34,25 +46,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         department: settings.department ?? null,
       }}
     >
-      <div className="min-h-[calc(100vh-41px)] print:min-h-0">
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
-          <div className="print:hidden shrink-0">
-            <Sidebar
-              brand={settings.companyName}
-              department={settings.department}
-              subtitle={subtitle}
-              nav={[...nav]}
-              reportNav={[...reportNav]}
-            />
-          </div>
-
-          <section className="min-w-0 flex-1 print:w-full">
-            <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 sm:p-6 print:border-0 print:shadow-none print:p-0 print:rounded-none">
-              {children}
+      <WorkingPeriodProvider
+        openFinancialYear={openPeriod?.financialYear ?? null}
+        fiscalYearStartMonth={settings.fiscalYearStartMonth}
+      >
+        <div className="min-h-[calc(100vh-41px)] print:min-h-0">
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
+            <div className="print:hidden shrink-0">
+              <Sidebar
+                brand={settings.companyName}
+                department={settings.department}
+                subtitle={subtitle}
+                dashboardNav={[...dashboardNav]}
+                setupNav={[...setupNav]}
+                operationsNav={[...operationsNav]}
+                reportNav={[...reportNav]}
+              />
             </div>
-          </section>
+
+            <section className="min-w-0 flex-1 print:w-full">
+              <WorkingPeriodBanner />
+              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 sm:p-6 print:border-0 print:shadow-none print:p-0 print:rounded-none">
+                {children}
+              </div>
+            </section>
+          </div>
         </div>
-      </div>
+      </WorkingPeriodProvider>
     </BrandingProvider>
   );
 }

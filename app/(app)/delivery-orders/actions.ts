@@ -2,7 +2,7 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
-import { fiscalPeriodForDate } from "@/lib/fiscal";
+import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -160,12 +160,27 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const dateIssued = dateIssuedRaw ? new Date(`${dateIssuedRaw}T12:00:00`) : new Date();
   if (Number.isNaN(dateIssued.getTime())) return { ok: false, error: "Invalid date." };
 
+  const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
+  const postingFMRaw = String(formData.get("postingFinancialMonth") ?? "").trim();
+  const postingFY = Number.parseInt(postingFYRaw, 10);
+  const postingFM = Number.parseInt(postingFMRaw, 10);
+
+  if (!Number.isFinite(postingFY) || !Number.isFinite(postingFM)) {
+    return {
+      ok: false,
+      error:
+        "Working financial period is missing. Set your working month under Financial years before saving.",
+    };
+  }
+
   try {
-    const settings = await getOrInitCompanySettings();
-    const { financialYear, financialMonth } = fiscalPeriodForDate(
-      dateIssued,
-      settings.fiscalYearStartMonth,
-    );
+    const [settings, openPeriod] = await Promise.all([
+      getOrInitCompanySettings(),
+      getOpenFinancialYearPeriod(),
+    ]);
+    assertPostingPeriod(openPeriod, postingFY, postingFM);
+    const financialYear = postingFY;
+    const financialMonth = postingFM;
 
     if (idRaw) {
       const id = Number.parseInt(idRaw, 10);

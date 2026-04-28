@@ -52,7 +52,6 @@ export default async function DeliveryOrdersPage() {
       products={products}
       salesPoints={salesPoints}
       companyVatRate={companyVatRate}
-      fiscalYearStartMonth={settings.fiscalYearStartMonth}
       loadDeliveryOrderByNo={loadDeliveryOrderByNo}
       saveDeliveryOrderHeader={saveDeliveryOrderHeader}
       saveDeliveryOrderDetails={saveDeliveryOrderDetails}

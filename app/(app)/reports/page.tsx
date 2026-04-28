@@ -20,7 +20,7 @@ export default function ReportsIndexPage() {
             href="/reports/sales"
             className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
           >
-            <div className="font-medium">POS sales</div>
+            <div className="font-medium">Sales register</div>
             <div className="text-sm opacity-75">Invoices, customers, net / VAT / gross (XAF).</div>
           </Link>
         </li>

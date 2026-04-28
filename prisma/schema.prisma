@@ -26,6 +26,24 @@ enum CustomerType {
   WORKER
 }
 
+enum FinancialYearStatus {
+  OPEN
+  CLOSED
+}
+
+/// One row per financial year value (calendar year in which the FY starts). Only one row may be OPEN at a time (enforced in application code).
+model FinancialYearPeriod {
+  id            String               @id @default(cuid())
+  financialYear Int
+  status        FinancialYearStatus  @default(OPEN)
+  openedAt      DateTime             @default(now())
+  closedAt      DateTime?
+
+  @@unique([financialYear])
+  @@index([status])
+  @@map("FinancialYearPeriod")
+}
+
 model CompanySettings {
   id            String   @id @default("default")
   companyName   String
