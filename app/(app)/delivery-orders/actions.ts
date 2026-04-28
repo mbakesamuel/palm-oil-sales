@@ -2,14 +2,58 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
+import { fiscalPeriodForDate } from "@/lib/fiscal";
+import { getOrInitCompanySettings } from "@/lib/settings";
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+
+export type SaveHeaderResult =
+  | { ok: true; id: number; deliveryOrderNo: string }
+  | { ok: false; error: string };
+
+export type SaveSectionResult = { ok: true } | { ok: false; error: string };
+
+export type LoadedDeliveryOrderView = {
+  id: number;
+  deliveryOrderNo: string;
+  customerId: string;
+  customerName: string;
+  vatApplies: boolean;
+  dateIssued: string;
+  orderRef: string | null;
+  salesPointId: number | null;
+  lines: Array<{
+    productId: number;
+    productName: string;
+    orderQty: number;
+    orderUnit: string;
+    unitPrice: string;
+    lineSubtotalExTax: string;
+    vatRate: string;
+    vatAmount: string;
+    otherTaxLabel: string;
+    otherTaxAmount: string;
+    amount: string;
+  }>;
+  payments: Array<{
+    method: PaymentMethod;
+    paymentDate: string;
+    chequeNo: string;
+    bank: string;
+    cashReceiptNo: string;
+    receiptDate: string;
+  }>;
+  financialYear: number | null;
+  financialMonth: number | null;
+};
 
 type LineInput = {
   productId: string;
   orderQty: string;
   orderUnit: string;
   unitPrice: string;
+  otherTaxLabel: string;
+  otherTaxAmount: string;
 };
 
 type PaymentInput = {
@@ -29,89 +73,293 @@ function money2(value: Prisma.Decimal) {
   return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
-export async function createDeliveryOrder(formData: FormData) {
+function revalidateOrderPaths(id: number) {
+  revalidatePath("/delivery-orders");
+  revalidatePath(`/delivery-orders/${id}`);
+  revalidatePath("/dashboard");
+}
+
+export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDeliveryOrderView | null> {
+  const deliveryOrderNo = String(rawNo ?? "").trim();
+  if (!deliveryOrderNo) return null;
+
   const prisma = getPrismaClient();
-  const customerId = String(formData.get("customerId") ?? "").trim();
-  const dateIssuedRaw = String(formData.get("dateIssued") ?? "").trim();
-  const orderRef = String(formData.get("orderRef") ?? "").trim() || null;
-  const collectionPoint = String(formData.get("collectionPoint") ?? "").trim() || null;
-  const linesJson = String(formData.get("lines") ?? "[]");
-  const paymentsJson = String(formData.get("payments") ?? "[]");
-
-  if (!customerId) throw new Error("Customer is required.");
-
-  const dateIssued = dateIssuedRaw ? new Date(`${dateIssuedRaw}T12:00:00`) : new Date();
-  if (Number.isNaN(dateIssued.getTime())) throw new Error("Invalid date.");
-
-  const lines = JSON.parse(linesJson) as LineInput[];
-  const payments = JSON.parse(paymentsJson) as PaymentInput[];
-
-  if (!Array.isArray(lines) || lines.length === 0) {
-    throw new Error("Add at least one line item.");
-  }
-
-  let subtotal = d(0);
-  const preparedLines = lines.map((l) => {
-    const productId = Number.parseInt(l.productId, 10);
-    if (!Number.isFinite(productId)) throw new Error("Invalid product.");
-    const orderQty = Number.parseInt(l.orderQty, 10);
-    if (!Number.isFinite(orderQty) || orderQty <= 0) throw new Error("Quantity must be a positive whole number.");
-
-    const orderUnit = String(l.orderUnit ?? "").trim() || null;
-    const unitPriceRaw = String(l.unitPrice ?? "").trim();
-    const unitPrice = unitPriceRaw ? money2(d(unitPriceRaw)) : null;
-    let amount: Prisma.Decimal | null = null;
-    if (unitPrice) {
-      amount = money2(unitPrice.mul(d(orderQty)));
-      subtotal = subtotal.add(amount);
-    }
-
-    return {
-      productId,
-      orderQty,
-      orderUnit,
-      unitPrice,
-      amount,
-    };
-  });
-
-  const preparedPayments = (Array.isArray(payments) ? payments : [])
-    .filter((p) => p && (p.method === "CASH" || p.method === "CHEQUE"))
-    .map((p) => {
-      const paymentDate = p.paymentDate ? new Date(`${p.paymentDate}T12:00:00`) : dateIssued;
-      if (Number.isNaN(paymentDate.getTime())) throw new Error("Invalid payment date.");
-      const method = p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH;
-      return {
-        method,
-        paymentDate,
-        chequeNo: String(p.chequeNo ?? "").trim() || null,
-        bank: String(p.bank ?? "").trim() || null,
-        cashReceiptNo: String(p.cashReceiptNo ?? "").trim() || null,
-        receiptDate: p.receiptDate
-          ? (() => {
-              const rd = new Date(`${p.receiptDate}T12:00:00`);
-              return Number.isNaN(rd.getTime()) ? null : rd;
-            })()
-          : null,
-      };
-    });
-
-  const deliveryOrderNo = await allocateDeliveryOrderNo(dateIssued);
-
-  await prisma.deliveryOrder.create({
-    data: {
-      deliveryOrderNo,
-      dateIssued,
-      customerId,
-      orderRef,
-      collectionPoint,
-      details: { create: preparedLines },
-      payments: preparedPayments.length ? { create: preparedPayments } : undefined,
+  const order = await prisma.deliveryOrder.findUnique({
+    where: { deliveryOrderNo },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          taxRegime: { select: { vatApplies: true } },
+        },
+      },
+      details: {
+        orderBy: { id: "asc" },
+        include: {
+          product: { select: { productName: true } },
+        },
+      },
+      payments: { orderBy: { id: "asc" } },
     },
   });
 
-  revalidatePath("/delivery-orders");
-  revalidatePath("/dashboard");
+  if (!order) return null;
+
+  return {
+    id: order.id,
+    deliveryOrderNo: order.deliveryOrderNo,
+    customerId: order.customerId,
+    customerName: order.customer.name,
+    vatApplies: order.customer.taxRegime.vatApplies,
+    dateIssued: order.dateIssued.toISOString().slice(0, 10),
+    orderRef: order.orderRef,
+    salesPointId: order.salesPointId,
+    lines: order.details.map((det) => ({
+      productId: det.productId,
+      productName: det.product.productName,
+      orderQty: det.orderQty,
+      orderUnit: det.orderUnit ?? "",
+      unitPrice: det.unitPrice != null ? det.unitPrice.toString() : "",
+      lineSubtotalExTax: det.lineSubtotalExTax != null ? det.lineSubtotalExTax.toString() : "",
+      vatRate: det.vatRate != null ? det.vatRate.toString() : "",
+      vatAmount: det.vatAmount != null ? det.vatAmount.toString() : "",
+      otherTaxLabel: det.otherTaxLabel ?? "",
+      otherTaxAmount: det.otherTaxAmount != null ? det.otherTaxAmount.toString() : "",
+      amount: det.amount != null ? det.amount.toString() : "",
+    })),
+    payments: order.payments.map((p) => ({
+      method: p.method,
+      paymentDate: p.paymentDate.toISOString().slice(0, 10),
+      chequeNo: p.chequeNo ?? "",
+      bank: p.bank ?? "",
+      cashReceiptNo: p.cashReceiptNo ?? "",
+      receiptDate: p.receiptDate ? p.receiptDate.toISOString().slice(0, 10) : "",
+    })),
+    financialYear: order.financialYear,
+    financialMonth: order.financialMonth,
+  };
+}
+
+export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveHeaderResult> {
+  const prisma = getPrismaClient();
+  const idRaw = String(formData.get("id") ?? "").trim();
+  const customerId = String(formData.get("customerId") ?? "").trim();
+  const dateIssuedRaw = String(formData.get("dateIssued") ?? "").trim();
+  const orderRef = String(formData.get("orderRef") ?? "").trim() || null;
+  const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
+  let salesPointId: number | null = null;
+  if (salesPointRaw) {
+    const sp = Number.parseInt(salesPointRaw, 10);
+    if (!Number.isFinite(sp)) return { ok: false, error: "Invalid sales point." };
+    salesPointId = sp;
+  }
+
+  if (!customerId) return { ok: false, error: "Customer is required." };
+
+  const dateIssued = dateIssuedRaw ? new Date(`${dateIssuedRaw}T12:00:00`) : new Date();
+  if (Number.isNaN(dateIssued.getTime())) return { ok: false, error: "Invalid date." };
+
+  try {
+    const settings = await getOrInitCompanySettings();
+    const { financialYear, financialMonth } = fiscalPeriodForDate(
+      dateIssued,
+      settings.fiscalYearStartMonth,
+    );
+
+    if (idRaw) {
+      const id = Number.parseInt(idRaw, 10);
+      if (!Number.isFinite(id)) return { ok: false, error: "Invalid order." };
+
+      await prisma.deliveryOrder.update({
+        where: { id },
+        data: {
+          customerId,
+          dateIssued,
+          orderRef,
+          salesPointId,
+          financialYear,
+          financialMonth,
+        },
+      });
+
+      const row = await prisma.deliveryOrder.findUnique({
+        where: { id },
+        select: { id: true, deliveryOrderNo: true },
+      });
+      if (!row) return { ok: false, error: "Order not found." };
+
+      revalidateOrderPaths(row.id);
+      return { ok: true, id: row.id, deliveryOrderNo: row.deliveryOrderNo };
+    }
+
+    const deliveryOrderNo = await allocateDeliveryOrderNo(dateIssued);
+    const created = await prisma.deliveryOrder.create({
+      data: {
+        deliveryOrderNo,
+        dateIssued,
+        customerId,
+        orderRef,
+        salesPointId,
+        financialYear,
+        financialMonth,
+      },
+      select: { id: true, deliveryOrderNo: true },
+    });
+
+    revalidateOrderPaths(created.id);
+    return { ok: true, id: created.id, deliveryOrderNo: created.deliveryOrderNo };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not save delivery order header.";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function saveDeliveryOrderDetails(formData: FormData): Promise<SaveSectionResult> {
+  const prisma = getPrismaClient();
+  const deliveryOrderId = Number.parseInt(String(formData.get("deliveryOrderId") ?? ""), 10);
+  if (!Number.isFinite(deliveryOrderId)) {
+    return { ok: false, error: "Save the delivery order header first." };
+  }
+
+  let lines: LineInput[];
+  try {
+    lines = JSON.parse(String(formData.get("lines") ?? "[]")) as LineInput[];
+  } catch {
+    return { ok: false, error: "Invalid line data." };
+  }
+
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return { ok: false, error: "Add at least one line item." };
+  }
+
+  try {
+    const order = await prisma.deliveryOrder.findUnique({
+      where: { id: deliveryOrderId },
+      include: { customer: { include: { taxRegime: true } } },
+    });
+    if (!order) return { ok: false, error: "Order not found." };
+
+    const settings = await getOrInitCompanySettings();
+    const companyVatRate = settings.vatRate;
+    const vatApplies = order.customer.taxRegime.vatApplies;
+    const appliedVatRate = vatApplies ? companyVatRate : new Prisma.Decimal(0);
+
+    const prepared = lines.map((l) => {
+      const productId = Number.parseInt(l.productId, 10);
+      if (!Number.isFinite(productId)) throw new Error("Invalid product on a line.");
+
+      const orderQty = Number.parseInt(l.orderQty, 10);
+      if (!Number.isFinite(orderQty) || orderQty <= 0) {
+        throw new Error("Quantity must be a positive whole number.");
+      }
+
+      const orderUnit = String(l.orderUnit ?? "").trim() || null;
+      const unitPriceRaw = String(l.unitPrice ?? "").trim();
+      if (!unitPriceRaw) throw new Error("Unit price (ex VAT) is required on each line.");
+
+      const unitPrice = money2(d(unitPriceRaw));
+      const lineSubtotalExTax = money2(unitPrice.mul(d(orderQty)));
+      const vatAmount = vatApplies
+        ? money2(lineSubtotalExTax.mul(appliedVatRate))
+        : money2(d(0));
+
+      const otherTaxLabel = String(l.otherTaxLabel ?? "").trim() || null;
+      const otherTaxRaw = String(l.otherTaxAmount ?? "").trim();
+      const otherTaxAmount = otherTaxRaw ? money2(d(otherTaxRaw)) : money2(d(0));
+
+      const amount = money2(lineSubtotalExTax.add(vatAmount).add(otherTaxAmount));
+
+      return {
+        productId,
+        orderQty,
+        orderUnit,
+        unitPrice,
+        lineSubtotalExTax,
+        vatRate: appliedVatRate,
+        vatAmount,
+        otherTaxLabel,
+        otherTaxAmount,
+        amount,
+      };
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.deliveryOrderDetails.deleteMany({ where: { deliveryOrderId } });
+      if (prepared.length > 0) {
+        await tx.deliveryOrderDetails.createMany({
+          data: prepared.map((p) => ({ ...p, deliveryOrderId })),
+        });
+      }
+    });
+
+    revalidateOrderPaths(deliveryOrderId);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not save line items.";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function saveDeliveryOrderPayments(formData: FormData): Promise<SaveSectionResult> {
+  const prisma = getPrismaClient();
+  const deliveryOrderId = Number.parseInt(String(formData.get("deliveryOrderId") ?? ""), 10);
+  if (!Number.isFinite(deliveryOrderId)) {
+    return { ok: false, error: "Save the delivery order header first." };
+  }
+
+  let payments: PaymentInput[];
+  try {
+    payments = JSON.parse(String(formData.get("payments") ?? "[]")) as PaymentInput[];
+  } catch {
+    return { ok: false, error: "Invalid payment data." };
+  }
+
+  try {
+    const order = await prisma.deliveryOrder.findUnique({
+      where: { id: deliveryOrderId },
+      select: { id: true, dateIssued: true },
+    });
+    if (!order) return { ok: false, error: "Order not found." };
+
+    const dateIssued = order.dateIssued;
+
+    const preparedPayments = (Array.isArray(payments) ? payments : [])
+      .filter((p) => p && (p.method === "CASH" || p.method === "CHEQUE"))
+      .map((p) => {
+        const paymentDate = p.paymentDate ? new Date(`${p.paymentDate}T12:00:00`) : dateIssued;
+        if (Number.isNaN(paymentDate.getTime())) throw new Error("Invalid payment date.");
+        const method = p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH;
+        return {
+          method,
+          paymentDate,
+          chequeNo: String(p.chequeNo ?? "").trim() || null,
+          bank: String(p.bank ?? "").trim() || null,
+          cashReceiptNo: String(p.cashReceiptNo ?? "").trim() || null,
+          receiptDate: p.receiptDate
+            ? (() => {
+                const rd = new Date(`${p.receiptDate}T12:00:00`);
+                return Number.isNaN(rd.getTime()) ? null : rd;
+              })()
+            : null,
+        };
+      });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.deliveryOrderPaymentDetails.deleteMany({ where: { deliveryOrderId } });
+      if (preparedPayments.length > 0) {
+        await tx.deliveryOrderPaymentDetails.createMany({
+          data: preparedPayments.map((p) => ({ ...p, deliveryOrderId })),
+        });
+      }
+    });
+
+    revalidateOrderPaths(deliveryOrderId);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not save payments.";
+    return { ok: false, error: msg };
+  }
 }
 
 export async function deleteDeliveryOrder(formData: FormData) {
@@ -122,5 +370,6 @@ export async function deleteDeliveryOrder(formData: FormData) {
   await prisma.deliveryOrder.delete({ where: { id } });
 
   revalidatePath("/delivery-orders");
+  revalidatePath(`/delivery-orders/${id}`);
   revalidatePath("/dashboard");
 }

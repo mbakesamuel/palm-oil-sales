@@ -10,6 +10,12 @@ function parseVatRate(input: string) {
   return num.toString();
 }
 
+function parseFiscalYearStartMonth(raw: string): number | null {
+  const n = Number.parseInt(String(raw ?? "").trim(), 10);
+  if (!Number.isFinite(n) || n < 1 || n > 12) return null;
+  return n;
+}
+
 export async function saveCompanySettings(formData: FormData) {
   const prisma = getPrismaClient();
   const companyName = String(formData.get("companyName") ?? "").trim();
@@ -18,6 +24,9 @@ export async function saveCompanySettings(formData: FormData) {
   const address = String(formData.get("address") ?? "").trim() || null;
   const invoicePrefix = String(formData.get("invoicePrefix") ?? "").trim() || "PO";
   const vatRateRaw = String(formData.get("vatRate") ?? "").trim();
+  const fiscalYearStartMonth = parseFiscalYearStartMonth(
+    String(formData.get("fiscalYearStartMonth") ?? "1"),
+  );
 
   if (!companyName) {
     throw new Error("Company name is required.");
@@ -26,6 +35,9 @@ export async function saveCompanySettings(formData: FormData) {
   const vatRate = parseVatRate(vatRateRaw);
   if (!vatRate) {
     throw new Error("VAT rate must be a decimal like 0.1925.");
+  }
+  if (fiscalYearStartMonth == null) {
+    throw new Error("Financial year start month must be between 1 and 12.");
   }
 
   await prisma.companySettings.upsert({
@@ -38,6 +50,7 @@ export async function saveCompanySettings(formData: FormData) {
       address,
       invoicePrefix,
       vatRate,
+      fiscalYearStartMonth,
     },
     update: {
       companyName,
@@ -46,6 +59,7 @@ export async function saveCompanySettings(formData: FormData) {
       address,
       invoicePrefix,
       vatRate,
+      fiscalYearStartMonth,
     },
   });
 

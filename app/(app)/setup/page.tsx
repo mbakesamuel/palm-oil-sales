@@ -1,6 +1,7 @@
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getPrismaClient } from "@/lib/prisma";
 import { saveCompanySettings } from "@/app/(app)/setup/actions";
+import { fiscalPeriodForDate, formatFinancialYearLabel, monthName } from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -8,6 +9,8 @@ export const runtime = "nodejs";
 export default async function SetupPage() {
   const settings = await getOrInitCompanySettings();
   const prisma = getPrismaClient();
+  const today = new Date();
+  const currentFy = fiscalPeriodForDate(today, settings.fiscalYearStartMonth);
   const users = await prisma.user.findMany({
     where: { isActive: true },
     orderBy: [{ role: "asc" }, { name: "asc" }],
@@ -19,7 +22,7 @@ export default async function SetupPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Setup</h1>
         <p className="text-sm opacity-75">
-          Configure your company info, department, VAT rate, and invoice prefix.
+          Configure your company info, department, VAT rate, invoice prefix, and when your financial year starts.
         </p>
       </div>
 
@@ -103,6 +106,45 @@ export default async function SetupPage() {
             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
             required
           />
+        </div>
+
+        <div className="grid gap-2">
+          <label className="text-sm font-medium" htmlFor="fiscalYearStartMonth">
+            Financial year starts in
+          </label>
+          <select
+            id="fiscalYearStartMonth"
+            name="fiscalYearStartMonth"
+            defaultValue={String(settings.fiscalYearStartMonth)}
+            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            required
+          >
+            {Array.from({ length: 12 }, (_, i) => {
+              const m = i + 1;
+              return (
+                <option key={m} value={m}>
+                  {monthName(m)}
+                </option>
+              );
+            })}
+          </select>
+          <div className="text-xs opacity-70">
+            Month <span className="font-medium">1</span> of the financial year begins on the first day of this calendar
+            month. Choose January if your financial year matches the calendar year.
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-black/10 dark:border-white/10 bg-black/2 dark:bg-white/3 px-4 py-3 text-sm space-y-1">
+          <div className="font-medium">Today’s financial period (preview)</div>
+          <p className="opacity-90">
+            FY <span className="font-semibold tabular-nums">{formatFinancialYearLabel(currentFy.financialYear, settings.fiscalYearStartMonth)}</span>
+            {" · "}
+            Financial month{" "}
+            <span className="font-semibold tabular-nums">
+              {currentFy.financialMonth}
+            </span>
+            /12
+          </p>
         </div>
 
         <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">

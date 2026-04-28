@@ -17,6 +17,11 @@ const nav = [
   { href: "/setup", label: "Setup" },
 ] as const;
 
+const reportNav = [
+  { href: "/reports/sales", label: "POS sales" },
+  { href: "/reports/delivery-orders", label: "Delivery orders" },
+] as const;
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const settings = await getOrInitCompanySettings();
   const vatPct = new Prisma.Decimal(String(settings.vatRate)).mul(100).toDecimalPlaces(2).toString();
@@ -37,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               department={settings.department}
               subtitle={subtitle}
               nav={[...nav]}
+              reportNav={[...reportNav]}
             />
           </div>
 

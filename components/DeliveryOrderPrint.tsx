@@ -1,3 +1,5 @@
+import * as React from "react";
+
 function formatDisplayDate(iso: string) {
   try {
     const d = new Date(iso);
@@ -15,7 +17,7 @@ function moneyLabel(value: string | null | undefined) {
   if (value == null || value === "") return "—";
   const n = Number.parseFloat(value);
   if (!Number.isFinite(n)) return value;
-  return `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XAF`;
+  return `${n.toLocaleString("en-US", { maximumFractionDigits: 0 })} XAF`;
 }
 
 export type DeliveryOrderPrintModel = {
@@ -36,6 +38,10 @@ export type DeliveryOrderPrintModel = {
     orderQty: number;
     orderUnit: string | null;
     unitPrice: string | null;
+    lineSubtotalExTax: string | null;
+    vatAmount: string | null;
+    otherTaxLabel: string | null;
+    otherTaxAmount: string | null;
     amount: string | null;
   }>;
   payments: Array<{
@@ -46,7 +52,10 @@ export type DeliveryOrderPrintModel = {
     cashReceiptNo: string | null;
     receiptDateIso: string | null;
   }>;
-  subtotal: string;
+  subtotalExTax: string;
+  totalVat: string;
+  totalOtherTax: string;
+  grandTotal: string;
 };
 
 export function DeliveryOrderPrint(props: {
@@ -108,42 +117,103 @@ export function DeliveryOrderPrint(props: {
       </div>
 
       <div className="overflow-x-auto mb-6">
-        <table className="w-full text-sm border-collapse">
+        <table className="w-full text-sm border-collapse min-w-[640px]">
           <thead>
             <tr className="border-b border-black/25">
               <th className="text-left py-2 pr-2 w-10">#</th>
               <th className="text-left py-2 pr-2">Product</th>
               <th className="text-right py-2 pr-2">Qty</th>
-              <th className="text-left py-2 pr-2 w-16">Unit</th>
-              <th className="text-right py-2 pr-2">Unit price</th>
-              <th className="text-right py-2">Amount</th>
+              <th className="text-left py-2 pr-2 w-14">Unit</th>
+              <th className="text-right py-2 pr-2">Unit (ex VAT)</th>
+              <th className="text-right py-2 pr-2">Net</th>
             </tr>
           </thead>
           <tbody>
-            {order.details.map((row) => (
-              <tr key={row.lineNo} className="border-b border-black/10">
-                <td className="py-2 pr-2 tabular-nums opacity-80">{row.lineNo}</td>
-                <td className="py-2 pr-2">
-                  <span className="font-medium">{row.productName}</span>
-                  {row.productCode ? (
-                    <span className="block text-xs opacity-70">Code: {row.productCode}</span>
-                  ) : null}
-                </td>
-                <td className="py-2 pr-2 text-right tabular-nums">{row.orderQty}</td>
-                <td className="py-2 pr-2">{row.orderUnit ?? "—"}</td>
-                <td className="py-2 pr-2 text-right tabular-nums">{moneyLabel(row.unitPrice)}</td>
-                <td className="py-2 text-right tabular-nums font-medium">{moneyLabel(row.amount)}</td>
-              </tr>
-            ))}
+            {order.details.map((row) => {
+              const otherTaxVisible =
+                row.otherTaxAmount != null &&
+                row.otherTaxAmount !== "" &&
+                row.otherTaxAmount !== "0";
+              const vatVisible =
+                row.vatAmount != null && row.vatAmount !== "" && row.vatAmount !== "0";
+
+              return (
+                <React.Fragment key={row.lineNo}>
+                  {/* Main line: product + qty + net */}
+                  <tr className="border-b border-black/10">
+                    <td className="py-2 pr-2 tabular-nums opacity-80 align-top">
+                      {row.lineNo}
+                    </td>
+                    <td className="py-2 pr-2 align-top">
+                      <span className="font-medium">{row.productName}</span>
+                      {row.productCode ? (
+                        <span className="block text-xs opacity-70">
+                          Code: {row.productCode}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-2 pr-2 text-right tabular-nums align-top">
+                      {row.orderQty}
+                    </td>
+                    <td className="py-2 pr-2 align-top">{row.orderUnit ?? "—"}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums align-top">
+                      {moneyLabel(row.unitPrice)}
+                    </td>
+                    <td className="py-2 pr-2 text-right tabular-nums align-top">
+                      {moneyLabel(row.lineSubtotalExTax)}
+                    </td>
+                  </tr>
+
+                  {/* Taxes line: shown under the main line */}
+                  <tr className="border-b border-black/10">
+                    <td className="py-2 pr-2" />
+                    <td colSpan={5} className="py-2 pr-2">
+                      <div className="text-xs opacity-80 space-y-1">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          <span className="opacity-70">Taxes</span>
+                          <span>
+                            VAT:{" "}
+                            <span className="tabular-nums">
+                              {vatVisible ? moneyLabel(row.vatAmount) : "—"}
+                            </span>
+                          </span>
+                          <span>
+                            Other:{" "}
+                            <span className="tabular-nums">
+                              {otherTaxVisible ? moneyLabel(row.otherTaxAmount) : "—"}
+                            </span>
+                            {otherTaxVisible && row.otherTaxLabel ? (
+                              <span className="opacity-80"> ({row.otherTaxLabel})</span>
+                            ) : null}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       <div className="flex justify-end mb-8">
-        <div className="text-sm space-y-1 min-w-[200px]">
-          <div className="flex justify-between gap-8 border-t border-black/20 pt-2">
-            <span className="opacity-70">Subtotal</span>
-            <span className="font-semibold tabular-nums">{moneyLabel(order.subtotal)}</span>
+        <div className="text-sm space-y-1 min-w-[240px]">
+          <div className="flex justify-between gap-8">
+            <span className="opacity-70">Subtotal (ex VAT)</span>
+            <span className="tabular-nums">{moneyLabel(order.subtotalExTax)}</span>
+          </div>
+          <div className="flex justify-between gap-8">
+            <span className="opacity-70">VAT</span>
+            <span className="tabular-nums">{moneyLabel(order.totalVat)}</span>
+          </div>
+          <div className="flex justify-between gap-8">
+            <span className="opacity-70">Other taxes</span>
+            <span className="tabular-nums">{moneyLabel(order.totalOtherTax)}</span>
+          </div>
+          <div className="flex justify-between gap-8 border-t border-black/20 pt-2 font-semibold">
+            <span>Grand total</span>
+            <span className="tabular-nums">{moneyLabel(order.grandTotal)}</span>
           </div>
         </div>
       </div>
@@ -177,14 +247,10 @@ export function DeliveryOrderPrint(props: {
         </section>
       ) : null}
 
-      <footer className="mt-12 pt-8 border-t border-black/15 text-sm grid sm:grid-cols-2 gap-8 print:mt-16">
-        <div>
-          <p className="opacity-70 mb-8">Prepared by</p>
-          <div className="border-b border-black/40 h-px w-full max-w-xs" />
-        </div>
-        <div>
-          <p className="opacity-70 mb-8">Received by</p>
-          <div className="border-b border-black/40 h-px w-full max-w-xs" />
+      <footer className="mt-12 pt-8 border-t border-black/15 text-sm flex justify-end print:mt-16">
+        <div className="text-right">
+          <p className="opacity-70 mb-8">Manager, Local Sales</p>
+          <div className="border-b border-black/40 h-px w-[260px]" />
         </div>
       </footer>
     </article>

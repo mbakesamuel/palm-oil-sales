@@ -9,22 +9,53 @@ import { Prisma } from "@prisma/client";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function subtotalFromDetails(
+function money2(value: Prisma.Decimal) {
+  return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+}
+
+function totalsFromDetails(
   details: Array<{
     orderQty: number;
     unitPrice: Prisma.Decimal | null;
+    lineSubtotalExTax: Prisma.Decimal | null;
+    vatAmount: Prisma.Decimal | null;
+    otherTaxAmount: Prisma.Decimal | null;
     amount: Prisma.Decimal | null;
   }>,
-): string {
-  let sum = new Prisma.Decimal(0);
+) {
+  const z = new Prisma.Decimal(0);
+  let subEx = z;
+  let totVat = z;
+  let totOther = z;
+  let grand = z;
+
   for (const d of details) {
+    const net =
+      d.lineSubtotalExTax != null
+        ? d.lineSubtotalExTax
+        : d.unitPrice != null
+          ? money2(d.unitPrice.mul(d.orderQty))
+          : z;
+    subEx = subEx.add(net);
+
+    if (d.vatAmount != null) totVat = totVat.add(d.vatAmount);
+    if (d.otherTaxAmount != null) totOther = totOther.add(d.otherTaxAmount);
+
     if (d.amount != null) {
-      sum = sum.add(d.amount);
-    } else if (d.unitPrice != null) {
-      sum = sum.add(d.unitPrice.mul(d.orderQty));
+      grand = grand.add(d.amount);
+    } else {
+      const v = d.vatAmount ?? z;
+      const o = d.otherTaxAmount ?? z;
+      grand = grand.add(money2(net.add(v).add(o)));
     }
   }
-  return sum.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toString();
+
+  return {
+    subtotalExTax: money2(subEx).toString(),
+    totalVat: money2(totVat).toString(),
+    totalOtherTax: money2(totOther).toString(),
+    grandTotal: money2(grand).toString(),
+  };
 }
 
 export default async function DeliveryOrderDetailPage(props: { params: Promise<{ id: string }> }) {
@@ -38,6 +69,7 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
     prisma.deliveryOrder.findUnique({
       where: { id },
       include: {
+        salesPoint: { select: { name: true } },
         customer: {
           select: {
             name: true,
@@ -61,13 +93,13 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
 
   if (!order) notFound();
 
-  const subtotal = subtotalFromDetails(order.details);
+  const t = totalsFromDetails(order.details);
 
   const printModel = {
     deliveryOrderNo: order.deliveryOrderNo,
     dateIssuedIso: order.dateIssued.toISOString(),
     orderRef: order.orderRef,
-    collectionPoint: order.collectionPoint,
+    collectionPoint: order.salesPoint?.name ?? null,
     customer: order.customer,
     details: order.details.map((d, i) => ({
       lineNo: i + 1,
@@ -76,6 +108,10 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
       orderQty: d.orderQty,
       orderUnit: d.orderUnit,
       unitPrice: d.unitPrice != null ? d.unitPrice.toString() : null,
+      lineSubtotalExTax: d.lineSubtotalExTax != null ? d.lineSubtotalExTax.toString() : null,
+      vatAmount: d.vatAmount != null ? d.vatAmount.toString() : null,
+      otherTaxLabel: d.otherTaxLabel,
+      otherTaxAmount: d.otherTaxAmount != null ? d.otherTaxAmount.toString() : null,
       amount: d.amount != null ? d.amount.toString() : null,
     })),
     payments: order.payments.map((p) => ({
@@ -86,7 +122,10 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
       cashReceiptNo: p.cashReceiptNo,
       receiptDateIso: p.receiptDate ? p.receiptDate.toISOString() : null,
     })),
-    subtotal,
+    subtotalExTax: t.subtotalExTax,
+    totalVat: t.totalVat,
+    totalOtherTax: t.totalOtherTax,
+    grandTotal: t.grandTotal,
   };
 
   return (

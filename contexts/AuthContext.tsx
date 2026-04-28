@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import * as React from "react";
 import { UserRole } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
@@ -36,6 +38,7 @@ function readSessionFromStorage(): AuthSession | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Keep initial render deterministic for SSR + hydration.
   const [status, setStatus] = React.useState<AuthStatus>("loading");
   const [session, setSession] = React.useState<AuthSession | null>(null);
 

@@ -13,6 +13,7 @@ export async function getOrInitCompanySettings() {
       companyName: "Palm Oil Sales",
       vatRate: getVatRateDecimal(),
       invoicePrefix: DEFAULTS.invoicePrefix,
+      fiscalYearStartMonth: 1,
     },
   });
 }

@@ -1,8 +1,10 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/auth-display";
 
@@ -10,27 +12,56 @@ type NavItem = { href: string; label: string };
 
 export function Sidebar(props: {
   nav: NavItem[];
+  reportNav?: NavItem[];
   brand: string;
   department?: string | null;
   subtitle: string;
 }) {
-  const { nav, brand, department, subtitle } = props;
+  const { nav, reportNav = [], brand, department, subtitle } = props;
   const router = useRouter();
-  const { session, signOut } = useAuth();
-  const [collapsed, setCollapsed] = React.useState(() => {
-    // Initialize from localStorage without an effect (eslint rule).
+  const pathname = usePathname();
+  const { status, session, signOut } = useAuth();
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [reportsOpen, setReportsOpen] = React.useState(true);
+
+  React.useEffect(() => {
     try {
-      return localStorage.getItem("sidebar_collapsed") === "1";
+      setCollapsed(localStorage.getItem("sidebar_collapsed") === "1");
     } catch {
-      return false;
+      // ignore
     }
-  });
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      const v = localStorage.getItem("sidebar_reports_open");
+      if (v === "0" || v === "1") setReportsOpen(v === "1");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (reportNav.length > 0 && pathname.startsWith("/reports")) {
+      setReportsOpen(true);
+    }
+  }, [pathname, reportNav.length]);
 
   function toggle() {
     setCollapsed((v) => {
       const next = !v;
       try {
         localStorage.setItem("sidebar_collapsed", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }
+
+  function toggleReports() {
+    setReportsOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("sidebar_reports_open", next ? "1" : "0");
       } catch {}
       return next;
     });
@@ -81,10 +112,64 @@ export function Sidebar(props: {
             </span>
           </Link>
         ))}
+
+        {reportNav.length > 0 ? (
+          collapsed ? (
+            <Link
+              href="/reports"
+              className="rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 lg:px-2 lg:text-center"
+              title="Reports"
+            >
+              <span className="lg:hidden">Reports</span>
+              <span className="hidden lg:inline" aria-hidden>
+                RP
+              </span>
+            </Link>
+          ) : (
+            <div className="rounded-md border border-black/5 dark:border-white/5">
+              <button
+                type="button"
+                onClick={toggleReports}
+                className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-black/5 dark:hover:bg-white/5"
+                aria-expanded={reportsOpen}
+              >
+                <span>Reports</span>
+                <span className="text-xs opacity-70 tabular-nums" aria-hidden>
+                  {reportsOpen ? "−" : "+"}
+                </span>
+              </button>
+              {reportsOpen ? (
+                <div className="flex flex-col gap-0.5 border-t border-black/5 dark:border-white/5 px-1 pb-1 pt-0.5">
+                  <Link
+                    href="/reports"
+                    className={[
+                      "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
+                      pathname === "/reports" ? "bg-black/5 dark:bg-white/10" : "",
+                    ].join(" ")}
+                  >
+                    Overview
+                  </Link>
+                  {reportNav.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={[
+                        "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
+                        pathname === item.href ? "bg-black/5 dark:bg-white/10" : "",
+                      ].join(" ")}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )
+        ) : null}
       </nav>
 
       <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 space-y-2">
-        {session ? (
+        {status === "ready" && session ? (
           <div
             className={[
               "text-xs opacity-80 space-y-1",

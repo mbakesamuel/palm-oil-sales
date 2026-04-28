@@ -1,6 +1,12 @@
 import { getPrismaClient } from "@/lib/prisma";
+import { getOrInitCompanySettings } from "@/lib/settings";
 import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
-import { createDeliveryOrder, deleteDeliveryOrder } from "./actions";
+import {
+  loadDeliveryOrderByNo,
+  saveDeliveryOrderDetails,
+  saveDeliveryOrderHeader,
+  saveDeliveryOrderPayments,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -8,10 +14,14 @@ export const runtime = "nodejs";
 export default async function DeliveryOrdersPage() {
   const prisma = getPrismaClient();
 
-  const [customers, products, orders] = await Promise.all([
+  const [customers, products, salesPoints, settings] = await Promise.all([
     prisma.customer.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        taxRegime: { select: { vatApplies: true } },
+      },
       take: 200,
     }),
     prisma.product.findMany({
@@ -23,32 +33,30 @@ export default async function DeliveryOrdersPage() {
       },
       take: 200,
     }),
-    prisma.deliveryOrder.findMany({
-      orderBy: { dateIssued: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        deliveryOrderNo: true,
-        dateIssued: true,
-        customer: { select: { name: true } },
-        _count: { select: { details: true } },
-      },
+    prisma.salesPoint.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
+    getOrInitCompanySettings(),
   ]);
+
+  const companyVatRate = settings.vatRate.toString();
 
   return (
     <DeliveryOrdersClient
-      customers={customers}
-      products={products}
-      orders={orders.map((o) => ({
-        id: o.id,
-        deliveryOrderNo: o.deliveryOrderNo,
-        dateIssuedIso: o.dateIssued.toISOString(),
-        customerName: o.customer.name,
-        lineCount: o._count.details,
+      customers={customers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        vatApplies: c.taxRegime.vatApplies,
       }))}
-      createDeliveryOrderAction={createDeliveryOrder}
-      deleteDeliveryOrderAction={deleteDeliveryOrder}
+      products={products}
+      salesPoints={salesPoints}
+      companyVatRate={companyVatRate}
+      fiscalYearStartMonth={settings.fiscalYearStartMonth}
+      loadDeliveryOrderByNo={loadDeliveryOrderByNo}
+      saveDeliveryOrderHeader={saveDeliveryOrderHeader}
+      saveDeliveryOrderDetails={saveDeliveryOrderDetails}
+      saveDeliveryOrderPayments={saveDeliveryOrderPayments}
     />
   );
 }

@@ -2,6 +2,7 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateInvoiceNo } from "@/lib/invoice";
+import { fiscalPeriodForDate } from "@/lib/fiscal";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -112,6 +113,11 @@ export async function createSale(formData: FormData) {
 
   const invoiceNo = await allocateInvoiceNo(settings.invoicePrefix, soldAt);
 
+  const { financialYear, financialMonth } = fiscalPeriodForDate(
+    soldAt,
+    settings.fiscalYearStartMonth,
+  );
+
   await prisma.sale.create({
     data: {
       invoiceNo,
@@ -125,6 +131,8 @@ export async function createSale(formData: FormData) {
       netAmount: net,
       vatAmount: vat,
       grossAmount: gross,
+      financialYear,
+      financialMonth,
       lines: {
         create: preparedLines.map((l) => ({
           productId: l.productId,

@@ -34,6 +34,8 @@ model CompanySettings {
   address       String?
   vatRate       Decimal  @db.Decimal(5, 4) // 0.1925 for 19.25%
   invoicePrefix String   @default("PO")
+  /// 1 = January. Financial month 1 begins in this calendar month.
+  fiscalYearStartMonth Int @default(1)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -150,6 +152,10 @@ model Sale {
   netAmount           Decimal   @db.Decimal(14, 2)
   vatAmount           Decimal   @db.Decimal(14, 2)
   grossAmount         Decimal   @db.Decimal(14, 2)
+  /// Calendar year in which the financial year started (see CompanySettings.fiscalYearStartMonth)
+  financialYear       Int?
+  /// 1 = first month of that financial year
+  financialMonth      Int?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -163,6 +169,7 @@ model Sale {
   @@index([customerId, soldAt])
   @@index([createdByUserId, soldAt])
   @@index([taxRegimeId, soldAt])
+  @@index([financialYear, financialMonth])
 }
 
 model SaleLine {
@@ -202,6 +209,8 @@ model SalesPoint {
   id   Int    @id @default(autoincrement())
   name String
 
+  deliveryOrders DeliveryOrder[]
+
   @@map("SalesPoint") // maps to the actual Derby table name
 }
 
@@ -211,13 +220,18 @@ model DeliveryOrder {
   dateIssued       DateTime
   customerId       String
   orderRef         String?
-  collectionPoint  String?
+  salesPointId     Int?
+  salesPoint       SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  financialYear    Int?
+  financialMonth   Int?
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   details  DeliveryOrderDetails[]
   payments DeliveryOrderPaymentDetails[]
 
   @@index([customerId])
+  @@index([salesPointId])
+  @@index([financialYear, financialMonth])
   @@map("DeliveryOrder")
 }
 
@@ -227,7 +241,14 @@ model DeliveryOrderDetails {
   productId       Int
   orderQty        Int
   orderUnit       String?
+  /// Unit price excluding VAT (nett)
   unitPrice       Decimal?      @db.Decimal(14, 2)
+  lineSubtotalExTax Decimal?    @db.Decimal(14, 2)
+  vatRate         Decimal?      @db.Decimal(5, 4)
+  vatAmount       Decimal?      @db.Decimal(14, 2)
+  otherTaxLabel   String?
+  otherTaxAmount  Decimal?      @db.Decimal(14, 2)
+  /// Line total (ex-VAT net + VAT + other taxes)
   amount          Decimal?      @db.Decimal(14, 2)
 
   deliveryOrder DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
