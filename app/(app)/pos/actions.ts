@@ -4,7 +4,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { allocateInvoiceNo } from "@/lib/invoice";
 import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { PaymentMethod, Prisma } from "@prisma/client";
+import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 type PosLineInput = {
@@ -27,12 +27,19 @@ export type LoadedSaleView = {
   id: string;
   invoiceNo: string;
   soldAtIso: string;
+  referenceNumber: string | null;
+  salesPointId: number | null;
+  salesPointName: string | null;
   customerId: string;
   customerName: string;
   taxpayerId: string | null;
   vatApplies: boolean;
   createdByUserId: string;
   createdByName: string;
+  status: ValidationStatus;
+  validatedAtIso: string | null;
+  validatedByUserId: string | null;
+  validatedByName: string | null;
   financialYear: number | null;
   financialMonth: number | null;
   netAmount: string;
@@ -68,7 +75,10 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const prisma = getPrismaClient();
   const soldAt = new Date();
   const customerId = String(formData.get("customerId") ?? "");
-  const createdByUserId = String(formData.get("createdByUserId") ?? "");
+  const createdByUserId = String(formData.get("createdByUserId") ?? "").trim();
+  const referenceNumber = String(formData.get("referenceNumber") ?? "").trim() || null;
+  const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
+  const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
   const linesJson = String(formData.get("lines") ?? "[]");
   const paymentsJson = String(formData.get("payments") ?? "[]");
 
@@ -81,7 +91,10 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const postingFM = Number.parseInt(postingFMRaw, 10);
 
   if (!customerId) return { ok: false, error: "Customer is required." };
-  if (!createdByUserId) return { ok: false, error: "Cashier is required." };
+  if (!createdByUserId) return { ok: false, error: "Logged-in user is required." };
+  if (salesPointRaw && !Number.isFinite(salesPointId)) {
+    return { ok: false, error: "Invalid sales point." };
+  }
   if (!Array.isArray(lines) || lines.length === 0) return { ok: false, error: "Add at least one line." };
   if (!Array.isArray(payments) || payments.length === 0)
     return { ok: false, error: "Add at least one payment." };
@@ -191,8 +204,10 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       soldAt,
       customerId: customer.id,
       createdByUserId,
+      referenceNumber,
+      salesPointId,
+      status: ValidationStatus.PENDING,
       customerNameSnapshot: customer.name,
-      customerTaxpayerIdSnapshot: customer.taxpayerId,
       taxRegimeId: customer.taxRegimeId,
       vatRateSnapshot: vatRate,
       netAmount: net,
@@ -239,6 +254,8 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     include: {
       customer: { select: { id: true, name: true, taxpayerId: true, taxRegime: { select: { vatApplies: true } } } },
       createdBy: { select: { id: true, name: true } },
+      validatedBy: { select: { id: true, name: true } },
+      salesPoint: { select: { id: true, name: true } },
       lines: { include: { product: { select: { productName: true, productCat: { select: { productCat: true } } } } }, orderBy: { id: "asc" } },
       payments: { orderBy: { id: "asc" } },
     },
@@ -249,12 +266,19 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     id: row.id,
     invoiceNo: row.invoiceNo,
     soldAtIso: row.soldAt.toISOString(),
+    referenceNumber: row.referenceNumber ?? null,
+    salesPointId: row.salesPointId ?? null,
+    salesPointName: row.salesPoint?.name ?? null,
     customerId: row.customerId,
     customerName: row.customer.name,
     taxpayerId: row.customer.taxpayerId,
     vatApplies: row.customer.taxRegime.vatApplies,
     createdByUserId: row.createdByUserId,
     createdByName: row.createdBy.name,
+    status: row.status,
+    validatedAtIso: row.validatedAt ? row.validatedAt.toISOString() : null,
+    validatedByUserId: row.validatedByUserId ?? null,
+    validatedByName: row.validatedBy?.name ?? null,
     financialYear: row.financialYear,
     financialMonth: row.financialMonth,
     netAmount: row.netAmount.toString(),
@@ -284,11 +308,46 @@ export async function deleteSale(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
   if (!id) throw new Error("Invalid sale.");
 
-  const existing = await prisma.sale.findUnique({ where: { id }, select: { invoiceNo: true } });
+  const existing = await prisma.sale.findUnique({
+    where: { id },
+    select: { invoiceNo: true, status: true },
+  });
   if (!existing) throw new Error("Sale not found.");
+  if (existing.status === ValidationStatus.VALIDATED) {
+    throw new Error("Validated invoices cannot be deleted.");
+  }
 
   await prisma.sale.delete({ where: { id } });
   revalidatePath("/pos");
+  revalidatePath("/dashboard");
+}
+
+export async function validateSale(formData: FormData) {
+  const prisma = getPrismaClient();
+  const id = String(formData.get("id") ?? "").trim();
+  const validatorUserId = String(formData.get("validatorUserId") ?? "").trim();
+  const validatorRole = String(formData.get("validatorRole") ?? "").trim() as UserRole;
+  if (!id) throw new Error("Invalid sale.");
+  if (!validatorUserId) throw new Error("Logged-in user is required.");
+  if (validatorRole !== UserRole.SUPERVISOR && validatorRole !== UserRole.MANAGER && validatorRole !== UserRole.ADMIN) {
+    throw new Error("Only supervisor/manager/admin can validate a sale.");
+  }
+
+  const existing = await prisma.sale.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) throw new Error("Sale not found.");
+  if (existing.status === ValidationStatus.VALIDATED) return;
+
+  await prisma.sale.update({
+    where: { id },
+    data: {
+      status: ValidationStatus.VALIDATED,
+      validatedAt: new Date(),
+      validatedByUserId: validatorUserId,
+    },
+  });
+
+  revalidatePath("/pos");
+  revalidatePath(`/sales/${id}`);
   revalidatePath("/dashboard");
 }
 

@@ -7,21 +7,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel, roleRequiresSalesPoint } from "@/lib/auth-display";
 import type { AuthSalesPoint } from "@/lib/auth-session";
 
-const SALES_POINT_ROLES: UserRole[] = [UserRole.CLERK, UserRole.SUPERVISOR];
-
-const CONSOLIDATION_ROLES: UserRole[] = [UserRole.MANAGER, UserRole.ADMIN];
+type LoginUser = { id: string; name: string; role: UserRole };
 
 export function LoginForm(props: {
   salesPoints: AuthSalesPoint[];
+  users: LoginUser[];
   companyName: string;
   department: string | null;
 }) {
-  const { salesPoints, companyName, department } = props;
+  const { salesPoints, users, companyName, department } = props;
   const router = useRouter();
   const { signIn } = useAuth();
 
-  const [username, setUsername] = React.useState("Demo user");
-  const [role, setRole] = React.useState<UserRole>(UserRole.CLERK);
+  const [userId, setUserId] = React.useState<string>(users[0]?.id ?? "");
   const [salesPointId, setSalesPointId] = React.useState<string>(
     salesPoints[0] ? String(salesPoints[0].id) : "",
   );
@@ -30,11 +28,12 @@ export function LoginForm(props: {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const name = username.trim();
-    if (!name) {
-      setError("Username is required.");
+    const u = users.find((x) => x.id === userId);
+    if (!u) {
+      setError("Select a user.");
       return;
     }
+    const role = u.role;
     if (roleRequiresSalesPoint(role)) {
       const id = Number.parseInt(salesPointId, 10);
       const sp = salesPoints.find((p) => p.id === id);
@@ -42,9 +41,14 @@ export function LoginForm(props: {
         setError("Select a sales point for this role.");
         return;
       }
-      signIn({ username: name, role, salesPoint: { id: sp.id, name: sp.name } });
+      signIn({
+        userId: u.id,
+        username: u.name,
+        role,
+        salesPoint: { id: sp.id, name: sp.name },
+      });
     } else {
-      signIn({ username: name, role, salesPoint: null });
+      signIn({ userId: u.id, username: u.name, role, salesPoint: null });
     }
     router.push("/dashboard");
   }
@@ -71,46 +75,38 @@ export function LoginForm(props: {
       </div>
 
       <div className="grid gap-2">
-        <label className="text-sm font-medium" htmlFor="username">
-          Username
-        </label>
-        <input
-          id="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-          autoComplete="username"
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <label className="text-sm font-medium" htmlFor="role">
-          Role
+        <label className="text-sm font-medium" htmlFor="user">
+          User
         </label>
         <select
-          id="role"
+          id="user"
           className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-          value={role}
-          onChange={(e) => setRole(e.target.value as UserRole)}
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+          required
         >
-          <optgroup label="Sales point">
-            {SALES_POINT_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleLabel(r)}
+          {users.length === 0 ? (
+            <option value="">No users — add one in Setup first</option>
+          ) : (
+            users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({roleLabel(u.role)})
               </option>
-            ))}
-          </optgroup>
-          <optgroup label="Consolidation">
-            {CONSOLIDATION_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleLabel(r)}
-              </option>
-            ))}
-          </optgroup>
+            ))
+          )}
         </select>
       </div>
 
-      {roleRequiresSalesPoint(role) ? (
+      {users.find((u) => u.id === userId) ? (
+        <p className="text-xs opacity-70 rounded-md border border-black/10 dark:border-white/10 px-3 py-2">
+          Role:{" "}
+          <span className="font-medium">
+            {roleLabel(users.find((u) => u.id === userId)!.role)}
+          </span>
+        </p>
+      ) : null}
+
+      {roleRequiresSalesPoint(users.find((u) => u.id === userId)?.role ?? UserRole.CLERK) ? (
         <div className="grid gap-2">
           <label className="text-sm font-medium" htmlFor="salesPoint">
             Sales point

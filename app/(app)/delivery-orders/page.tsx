@@ -7,6 +7,7 @@ import {
   saveDeliveryOrderDetails,
   saveDeliveryOrderHeader,
   saveDeliveryOrderPayments,
+  validateDeliveryOrder,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,7 @@ export default async function DeliveryOrdersPage() {
       saveDeliveryOrderDetails={saveDeliveryOrderDetails}
       saveDeliveryOrderPayments={saveDeliveryOrderPayments}
       deleteDeliveryOrder={deleteDeliveryOrder}
+      validateDeliveryOrder={validateDeliveryOrder}
     />
   );
 }

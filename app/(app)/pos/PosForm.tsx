@@ -77,7 +77,7 @@ export function PosForm(props: {
             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-          >
+          >          
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

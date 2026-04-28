@@ -31,6 +31,12 @@ enum FinancialYearStatus {
   CLOSED
 }
 
+enum ValidationStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+}
+
 /// One row per financial year value (calendar year in which the FY starts). Only one row may be OPEN at a time (enforced in application code).
 model FinancialYearPeriod {
   id            String               @id @default(cuid())
@@ -79,6 +85,9 @@ model User {
   updatedAt DateTime @updatedAt
 
   sales Sale[] @relation("SalesCreatedBy")
+  validatedSales Sale[] @relation("SalesValidatedBy")
+  deliveryOrdersCreated DeliveryOrder[] @relation("DeliveryOrdersCreatedBy")
+  deliveryOrdersValidated DeliveryOrder[] @relation("DeliveryOrdersValidatedBy")
 }
 
 model Customer {
@@ -166,6 +175,9 @@ model Sale {
   salesPoint          SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   customerId          String
   createdByUserId     String
+  status             ValidationStatus @default(PENDING)
+  validatedAt        DateTime?
+  validatedByUserId  String?
   customerNameSnapshot String
   taxRegimeId            String
   vatRateSnapshot     Decimal   @db.Decimal(5, 4)
@@ -181,6 +193,7 @@ model Sale {
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy User @relation("SalesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  validatedBy User? @relation("SalesValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
   taxRegime TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
   lines     SaleLine[]
   payments  Payment[]
@@ -190,6 +203,7 @@ model Sale {
   @@index([createdByUserId, soldAt])
   @@index([taxRegimeId, soldAt])
   @@index([financialYear, financialMonth])
+  @@index([status, soldAt])
 }
 
 model SaleLine {
@@ -238,20 +252,28 @@ model DeliveryOrder {
   id               Int      @id @default(autoincrement())
   deliveryOrderNo  String   @unique
   dateIssued       DateTime
+  referenceNumber  String?
   customerId       String
   orderRef         String?
   salesPointId     Int?
   salesPoint       SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   financialYear    Int?
   financialMonth   Int?
+  createdByUserId  String?
+  status           ValidationStatus @default(PENDING)
+  validatedAt      DateTime?
+  validatedByUserId String?
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy User? @relation("DeliveryOrdersCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  validatedBy User? @relation("DeliveryOrdersValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
   details  DeliveryOrderDetails[]
   payments DeliveryOrderPaymentDetails[]
 
   @@index([customerId])
   @@index([salesPointId])
   @@index([financialYear, financialMonth])
+  @@index([status, dateIssued])
   @@map("DeliveryOrder")
 }
 

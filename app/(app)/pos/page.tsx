@@ -1,6 +1,6 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { createSale, deleteSale, loadSaleByInvoiceNo } from "./actions";
+import { createSale, deleteSale, loadSaleByInvoiceNo, validateSale } from "./actions";
 import { SalesClient } from "./SalesClient";
 import Link from "next/link";
 
@@ -11,7 +11,7 @@ export default async function PosPage() {
   const settings = await getOrInitCompanySettings();
   const prisma = getPrismaClient();
 
-  const [customers, grades, users] = await Promise.all([
+  const [customers, grades, salesPoints] = await Promise.all([
     prisma.customer.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -31,11 +31,10 @@ export default async function PosPage() {
       },
       take: 50,
     }),
-    prisma.user.findMany({
-      where: { isActive: true },
-      orderBy: [{ role: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, role: true },
-      take: 50,
+    prisma.salesPoint.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+      take: 200,
     }),
   ]);
 
@@ -48,13 +47,12 @@ export default async function PosPage() {
         </p>
       </div>
 
-      {customers.length === 0 || grades.length === 0 || users.length === 0 ? (
+      {customers.length === 0 || grades.length === 0 ? (
         <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
             {customers.length === 0 ? <li>Add at least one customer.</li> : null}
             {grades.length === 0 ? <li>Add at least one product.</li> : null}
-            {users.length === 0 ? <li>Create at least one user under Setup (save settings).</li> : null}
           </ul>
           <div className="mt-3 flex gap-3">
             <Link className="underline underline-offset-4" href="/customers">
@@ -72,10 +70,11 @@ export default async function PosPage() {
         <SalesClient
           customers={customers}
           products={grades}
-          users={users.map((u) => ({ id: u.id, name: u.name, role: String(u.role) }))}
+          salesPoints={salesPoints}
           vatRateDecimal={String(settings.vatRate)}
           saveSaleAction={createSale}
           loadSaleByInvoiceNo={loadSaleByInvoiceNo}
+          validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
         />
       )}

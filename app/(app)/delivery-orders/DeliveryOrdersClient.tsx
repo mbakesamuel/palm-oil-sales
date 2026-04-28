@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { UserRole, ValidationStatus } from "@prisma/client";
 import type {
   LoadedDeliveryOrderView,
   SaveHeaderResult,
@@ -58,6 +60,7 @@ export function DeliveryOrdersClient(props: {
   saveDeliveryOrderDetails: (formData: FormData) => Promise<SaveSectionResult>;
   saveDeliveryOrderPayments: (formData: FormData) => Promise<SaveSectionResult>;
   deleteDeliveryOrder: (formData: FormData) => void | Promise<void>;
+  validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
 }) {
   const {
     customers,
@@ -69,9 +72,11 @@ export function DeliveryOrdersClient(props: {
     saveDeliveryOrderDetails,
     saveDeliveryOrderPayments,
     deleteDeliveryOrder,
+    validateDeliveryOrder,
   } = props;
 
   const wp = useWorkingPeriod();
+  const { status: authStatus, session } = useAuth();
   const router = useRouter();
   const vatRateNum = Number.parseFloat(companyVatRate);
   const vatPercentLabel = Number.isFinite(vatRateNum)
@@ -83,8 +88,12 @@ export function DeliveryOrdersClient(props: {
   const [customerId, setCustomerId] = React.useState(customers[0]?.id ?? "");
   const [dateIssued, setDateIssued] = React.useState(todayIsoDate);
   const [orderRef, setOrderRef] = React.useState("");
+  const [referenceNumber, setReferenceNumber] = React.useState("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [lookupNo, setLookupNo] = React.useState("");
+  const [docStatus, setDocStatus] = React.useState<ValidationStatus | null>(null);
+  const [validatedByName, setValidatedByName] = React.useState("");
+  const [validatedAtIso, setValidatedAtIso] = React.useState("");
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [lines, setLines] = React.useState<LineRow[]>(() =>
     products.length > 0
@@ -133,6 +142,10 @@ export function DeliveryOrdersClient(props: {
     setOrderRef(data.orderRef ?? "");
     setSalesPointId(data.salesPointId != null ? String(data.salesPointId) : "");
     setLookupNo(data.deliveryOrderNo);
+    setReferenceNumber(data.referenceNumber ?? "");
+    setDocStatus(data.status);
+    setValidatedByName(data.validatedByName ?? "");
+    setValidatedAtIso(data.validatedAtIso ?? "");
     setLines(
       data.lines.length > 0
         ? data.lines.map((l) => ({
@@ -167,8 +180,12 @@ export function DeliveryOrdersClient(props: {
     setCustomerId(customers[0]?.id ?? "");
     setDateIssued(todayIsoDate());
     setOrderRef("");
+    setReferenceNumber("");
     setSalesPointId("");
     setLookupNo("");
+    setDocStatus(null);
+    setValidatedByName("");
+    setValidatedAtIso("");
     setLines(products.length > 0 ? [emptyLine()] : []);
     setPayments([]);
     setBanner(null);
@@ -197,12 +214,18 @@ export function DeliveryOrdersClient(props: {
     setBusy("header");
     setBanner(null);
     try {
+      if (authStatus !== "ready" || !session?.userId) {
+        setBanner({ type: "error", text: "Login required." });
+        return;
+      }
       const fd = new FormData();
       if (orderId != null) fd.set("id", String(orderId));
       fd.set("customerId", customerId);
       fd.set("dateIssued", dateIssued);
       fd.set("orderRef", orderRef);
+      fd.set("referenceNumber", referenceNumber);
       fd.set("salesPointId", salesPointId);
+      fd.set("createdByUserId", session.userId);
       fd.set(
         "postingFinancialYear",
         wp.openFinancialYear != null ? String(wp.openFinancialYear) : "",
@@ -216,6 +239,7 @@ export function DeliveryOrdersClient(props: {
         setOrderId(r.id);
         setDeliveryOrderNo(r.deliveryOrderNo);
         setLookupNo(r.deliveryOrderNo);
+        setDocStatus(ValidationStatus.PENDING);
         setBanner({
           type: "ok",
           text: orderId
@@ -239,6 +263,32 @@ export function DeliveryOrdersClient(props: {
     resetNew();
     setBanner({ type: "ok", text: "Delivery order deleted." });
     router.refresh();
+  }
+
+  async function onValidateOrder() {
+    if (orderId == null) return;
+    if (authStatus !== "ready" || !session?.userId) {
+      setBanner({ type: "error", text: "Login required." });
+      return;
+    }
+    setBusy("validate");
+    setBanner(null);
+    try {
+      const fd = new FormData();
+      fd.set("id", String(orderId));
+      fd.set("validatorUserId", session.userId);
+      fd.set("validatorRole", session.role);
+      const r = await validateDeliveryOrder(fd);
+      if (r.ok) {
+        setDocStatus(ValidationStatus.VALIDATED);
+        setBanner({ type: "ok", text: "Delivery order validated." });
+        router.refresh();
+      } else {
+        setBanner({ type: "error", text: r.error });
+      }
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function onSaveLines() {
@@ -442,6 +492,25 @@ export function DeliveryOrdersClient(props: {
               </p>
             )}
 
+            {docStatus ? (
+              <p className="text-xs opacity-75">
+                <span className="opacity-70">Status</span>{" "}
+                <span className="font-medium">{docStatus}</span>
+                {docStatus === ValidationStatus.VALIDATED ? (
+                  <span className="opacity-70">
+                    {" "}
+                    · Validated by <span className="font-medium">{validatedByName || "—"}</span>
+                    {validatedAtIso ? (
+                      <span className="opacity-70">
+                        {" "}
+                        ({new Date(validatedAtIso).toISOString().slice(0, 16).replace("T", " ")})
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+
             {orderId != null ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Link
@@ -490,6 +559,22 @@ export function DeliveryOrdersClient(props: {
                     onChange={(e) => setDateIssued(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="grid gap-2 sm:max-w-xl">
+                <label
+                  className="text-sm font-medium leading-none"
+                  htmlFor="do-reference"
+                >
+                  Reference no. (optional)
+                </label>
+                <input
+                  id="do-reference"
+                  className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  placeholder="Voucher / customer ref"
+                  disabled={orderId != null && docStatus === ValidationStatus.VALIDATED}
+                />
               </div>
               <p className="text-xs opacity-70 -mt-1">
                 VAT on lines follows this customer’s regime:{" "}
@@ -569,6 +654,21 @@ export function DeliveryOrdersClient(props: {
                     ? "Update header"
                     : "Save header (create order)"}
               </button>
+              {orderId != null &&
+              docStatus === ValidationStatus.PENDING &&
+              session &&
+              (session.role === UserRole.SUPERVISOR ||
+                session.role === UserRole.MANAGER ||
+                session.role === UserRole.ADMIN) ? (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void onValidateOrder()}
+                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                >
+                  {busy === "validate" ? "Validating…" : "Validate"}
+                </button>
+              ) : null}
               {orderId != null ? (
                 <button
                   type="button"

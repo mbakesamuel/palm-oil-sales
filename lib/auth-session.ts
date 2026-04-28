@@ -11,6 +11,7 @@ export type AuthSalesPoint = {
 };
 
 export type AuthSession = {
+  userId: string;
   username: string;
   role: UserRole;
   salesPoint: AuthSalesPoint | null;
@@ -22,6 +23,7 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
     const data = JSON.parse(raw) as unknown;
     if (!data || typeof data !== "object") return null;
     const o = data as Record<string, unknown>;
+    if (typeof o.userId !== "string" || !o.userId.trim()) return null;
     if (typeof o.username !== "string" || !o.username.trim()) return null;
     if (typeof o.role !== "string") return null;
     let salesPoint: AuthSalesPoint | null = null;
@@ -32,6 +34,7 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
       }
     }
     return {
+      userId: o.userId.trim(),
       username: o.username.trim(),
       role: o.role as UserRole,
       salesPoint,

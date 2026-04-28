@@ -4,7 +4,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
 import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { PaymentMethod, Prisma } from "@prisma/client";
+import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 export type SaveHeaderResult =
@@ -16,12 +16,19 @@ export type SaveSectionResult = { ok: true } | { ok: false; error: string };
 export type LoadedDeliveryOrderView = {
   id: number;
   deliveryOrderNo: string;
+  referenceNumber: string | null;
   customerId: string;
   customerName: string;
   vatApplies: boolean;
   dateIssued: string;
   orderRef: string | null;
   salesPointId: number | null;
+  status: ValidationStatus;
+  createdByUserId: string | null;
+  createdByName: string | null;
+  validatedByUserId: string | null;
+  validatedByName: string | null;
+  validatedAtIso: string | null;
   lines: Array<{
     productId: number;
     productName: string;
@@ -101,6 +108,8 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
         },
       },
       payments: { orderBy: { id: "asc" } },
+      createdBy: { select: { id: true, name: true } },
+      validatedBy: { select: { id: true, name: true } },
     },
   });
 
@@ -109,12 +118,19 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
   return {
     id: order.id,
     deliveryOrderNo: order.deliveryOrderNo,
+    referenceNumber: order.referenceNumber ?? null,
     customerId: order.customerId,
     customerName: order.customer.name,
     vatApplies: order.customer.taxRegime.vatApplies,
     dateIssued: order.dateIssued.toISOString().slice(0, 10),
     orderRef: order.orderRef,
     salesPointId: order.salesPointId,
+    status: order.status,
+    createdByUserId: order.createdByUserId ?? null,
+    createdByName: order.createdBy?.name ?? null,
+    validatedByUserId: order.validatedByUserId ?? null,
+    validatedByName: order.validatedBy?.name ?? null,
+    validatedAtIso: order.validatedAt ? order.validatedAt.toISOString() : null,
     lines: order.details.map((det) => ({
       productId: det.productId,
       productName: det.product.productName,
@@ -147,6 +163,8 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const customerId = String(formData.get("customerId") ?? "").trim();
   const dateIssuedRaw = String(formData.get("dateIssued") ?? "").trim();
   const orderRef = String(formData.get("orderRef") ?? "").trim() || null;
+  const referenceNumber = String(formData.get("referenceNumber") ?? "").trim() || null;
+  const createdByUserId = String(formData.get("createdByUserId") ?? "").trim() || null;
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   let salesPointId: number | null = null;
   if (salesPointRaw) {
@@ -186,15 +204,26 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
       const id = Number.parseInt(idRaw, 10);
       if (!Number.isFinite(id)) return { ok: false, error: "Invalid order." };
 
+      const existing = await prisma.deliveryOrder.findUnique({
+        where: { id },
+        select: { status: true, createdByUserId: true },
+      });
+      if (!existing) return { ok: false, error: "Order not found." };
+      if (existing.status === ValidationStatus.VALIDATED) {
+        return { ok: false, error: "Validated delivery orders cannot be edited." };
+      }
+
       await prisma.deliveryOrder.update({
         where: { id },
         data: {
           customerId,
           dateIssued,
           orderRef,
+          referenceNumber,
           salesPointId,
           financialYear,
           financialMonth,
+          createdByUserId: existing.createdByUserId ?? createdByUserId,
         },
       });
 
@@ -215,9 +244,12 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
         dateIssued,
         customerId,
         orderRef,
+        referenceNumber,
         salesPointId,
         financialYear,
         financialMonth,
+        createdByUserId,
+        status: ValidationStatus.PENDING,
       },
       select: { id: true, deliveryOrderNo: true },
     });
@@ -382,9 +414,38 @@ export async function deleteDeliveryOrder(formData: FormData) {
   const id = Number.parseInt(String(formData.get("id") ?? ""), 10);
   if (!Number.isFinite(id)) throw new Error("Invalid delivery order.");
 
+  const existing = await prisma.deliveryOrder.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) throw new Error("Delivery order not found.");
+  if (existing.status === ValidationStatus.VALIDATED) {
+    throw new Error("Validated delivery orders cannot be deleted.");
+  }
+
   await prisma.deliveryOrder.delete({ where: { id } });
 
   revalidatePath("/delivery-orders");
   revalidatePath(`/delivery-orders/${id}`);
   revalidatePath("/dashboard");
+}
+
+export async function validateDeliveryOrder(formData: FormData): Promise<SaveSectionResult> {
+  const prisma = getPrismaClient();
+  const id = Number.parseInt(String(formData.get("id") ?? ""), 10);
+  const validatorUserId = String(formData.get("validatorUserId") ?? "").trim();
+  const validatorRole = String(formData.get("validatorRole") ?? "").trim() as UserRole;
+  if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
+  if (!validatorUserId) return { ok: false, error: "Logged-in user is required." };
+  if (validatorRole !== UserRole.SUPERVISOR && validatorRole !== UserRole.MANAGER && validatorRole !== UserRole.ADMIN) {
+    return { ok: false, error: "Only supervisor/manager/admin can validate a delivery order." };
+  }
+
+  const existing = await prisma.deliveryOrder.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) return { ok: false, error: "Order not found." };
+  if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
+
+  await prisma.deliveryOrder.update({
+    where: { id },
+    data: { status: ValidationStatus.VALIDATED, validatedAt: new Date(), validatedByUserId: validatorUserId },
+  });
+  revalidateOrderPaths(id);
+  return { ok: true };
 }
