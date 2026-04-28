@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import type {
   LoadedDeliveryOrderView,
   SaveHeaderResult,
@@ -56,6 +57,7 @@ export function DeliveryOrdersClient(props: {
   saveDeliveryOrderHeader: (formData: FormData) => Promise<SaveHeaderResult>;
   saveDeliveryOrderDetails: (formData: FormData) => Promise<SaveSectionResult>;
   saveDeliveryOrderPayments: (formData: FormData) => Promise<SaveSectionResult>;
+  deleteDeliveryOrder: (formData: FormData) => void | Promise<void>;
 }) {
   const {
     customers,
@@ -66,6 +68,7 @@ export function DeliveryOrdersClient(props: {
     saveDeliveryOrderHeader,
     saveDeliveryOrderDetails,
     saveDeliveryOrderPayments,
+    deleteDeliveryOrder,
   } = props;
 
   const wp = useWorkingPeriod();
@@ -103,6 +106,10 @@ export function DeliveryOrdersClient(props: {
     text: string;
   } | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<{
+    id: number;
+    deliveryOrderNo: string;
+  } | null>(null);
 
   function emptyLine(): LineRow {
     return {
@@ -224,6 +231,16 @@ export function DeliveryOrdersClient(props: {
     }
   }
 
+  async function onDeleteOrderConfirmed() {
+    if (orderId == null) return;
+    const fd = new FormData();
+    fd.set("id", String(orderId));
+    await deleteDeliveryOrder(fd);
+    resetNew();
+    setBanner({ type: "ok", text: "Delivery order deleted." });
+    router.refresh();
+  }
+
   async function onSaveLines() {
     if (orderId == null) return;
     setBusy("lines");
@@ -292,9 +309,8 @@ export function DeliveryOrdersClient(props: {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-1">
-        <h1 className="text-4xl font-semibold">PALM OILL SALES</h1>
-        <h1 className="text-xl font-semibold">Delivery order</h1>
+      <div className="space-y-1">      
+        <h1 className="text-2xl font-semibold">Delivery order</h1>
         <p className="text-sm opacity-75">
           Work in three steps: save the header first, then line items (with VAT
           and other taxes), then payments. Open a saved order anytime by
@@ -540,18 +556,35 @@ export function DeliveryOrdersClient(props: {
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void onSaveHeader()}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              {busy === "header"
-                ? "Saving…"
-                : orderId != null
-                  ? "Update header"
-                  : "Save header (create order)"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void onSaveHeader()}
+                className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              >
+                {busy === "header"
+                  ? "Saving…"
+                  : orderId != null
+                    ? "Update header"
+                    : "Save header (create order)"}
+              </button>
+              {orderId != null ? (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    setPendingDelete({
+                      id: orderId,
+                      deliveryOrderNo: deliveryOrderNo || `ID ${orderId}`,
+                    })
+                  }
+                  className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-600/10 disabled:opacity-50"
+                >
+                  Delete order
+                </button>
+              ) : null}
+            </div>
           </section>
 
           {/* Section 2 — DeliveryOrderDetails */}
@@ -958,6 +991,19 @@ export function DeliveryOrdersClient(props: {
           </section>
         </>
       )}
+
+      {pendingDelete ? (
+        <ConfirmDialog
+          title="Delete this delivery order?"
+          description={`“${pendingDelete.deliveryOrderNo}” will be removed permanently. Line items and payments will also be deleted. You cannot undo this action.`}
+          confirmLabel="Delete delivery order"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            setPendingDelete(null);
+            await onDeleteOrderConfirmed();
+          }}
+        />
+      ) : null}
 
       {/* Recent list removed: use "Open existing order" above and "View / print" once loaded. */}
     </div>

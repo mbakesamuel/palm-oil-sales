@@ -2,6 +2,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
 import {
+  deleteDeliveryOrder,
   loadDeliveryOrderByNo,
   saveDeliveryOrderDetails,
   saveDeliveryOrderHeader,
@@ -56,6 +57,7 @@ export default async function DeliveryOrdersPage() {
       saveDeliveryOrderHeader={saveDeliveryOrderHeader}
       saveDeliveryOrderDetails={saveDeliveryOrderDetails}
       saveDeliveryOrderPayments={saveDeliveryOrderPayments}
+      deleteDeliveryOrder={deleteDeliveryOrder}
     />
   );
 }

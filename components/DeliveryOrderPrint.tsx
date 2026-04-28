@@ -65,15 +65,22 @@ export function DeliveryOrderPrint(props: {
   companyAddress: string | null;
   order: DeliveryOrderPrintModel;
 }) {
-  const { companyName, department, companyPhone, companyAddress, order } = props;
+  const { companyName, department, companyPhone, companyAddress, order } =
+    props;
 
   return (
     <article className="delivery-order-print text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
-      <header className="border-b border-black/20 pb-4 mb-6">
+      <header className="border-b border-black/20 pb-4 mb-6 text-center flex flex-col items-center">
+        <h1 className="text-xl font-bold mt-1">
+          CAMEROON DEVELOPMENT CORPORATION
+        </h1>
+        <h1 className="text-xl font-bold mt-1">Palm Oil Sales Service</h1>
         {department ? (
-          <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{department}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest opacity-80">
+            {department}
+          </p>
         ) : null}
-        <h1 className="text-xl font-bold mt-1">{companyName}</h1>
+
         <div className="mt-2 text-sm opacity-90 space-y-0.5">
           {companyAddress ? <p>{companyAddress}</p> : null}
           {companyPhone ? <p>Tel: {companyPhone}</p> : null}
@@ -82,36 +89,50 @@ export function DeliveryOrderPrint(props: {
 
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-lg font-bold uppercase tracking-wide">Delivery order</h2>
+          <h2 className="text-lg font-bold uppercase tracking-wide">
+            Delivery order
+          </h2>
           <p className="text-sm mt-1">
             <span className="opacity-70">No.</span>{" "}
-            <span className="font-semibold tabular-nums">{order.deliveryOrderNo}</span>
+            <span className="font-semibold tabular-nums">
+              {order.deliveryOrderNo}
+            </span>
           </p>
           <p className="text-sm">
             <span className="opacity-70">Date issued</span>{" "}
-            <span className="font-medium">{formatDisplayDate(order.dateIssuedIso)}</span>
+            <span className="font-medium">
+              {formatDisplayDate(order.dateIssuedIso)}
+            </span>
           </p>
           {order.orderRef ? (
             <p className="text-sm">
-              <span className="opacity-70">Your ref</span> <span>{order.orderRef}</span>
+              <span className="opacity-70">Your ref</span>{" "}
+              <span>{order.orderRef}</span>
             </p>
           ) : null}
           {order.collectionPoint ? (
             <p className="text-sm">
-              <span className="opacity-70">Collection</span> <span>{order.collectionPoint}</span>
+              <span className="opacity-70">Collection</span>{" "}
+              <span>{order.collectionPoint}</span>
             </p>
           ) : null}
         </div>
 
         <div className="rounded-lg border border-black/15 p-3 text-sm sm:min-w-[220px]">
-          <p className="text-xs font-semibold uppercase opacity-70 mb-1">Deliver to</p>
+          <p className="text-xs font-semibold uppercase opacity-70 mb-1">
+            Deliver to
+          </p>
           <p className="font-semibold">{order.customer.name}</p>
           {order.customer.taxpayerId ? (
             <p className="opacity-80">Tax ID: {order.customer.taxpayerId}</p>
           ) : null}
-          {order.customer.phone ? <p className="opacity-80">{order.customer.phone}</p> : null}
+          {order.customer.phone ? (
+            <p className="opacity-80">{order.customer.phone}</p>
+          ) : null}
           {order.customer.address ? (
-            <p className="opacity-80 whitespace-pre-line mt-1">{order.customer.address}</p>
+            <p className="opacity-80 whitespace-pre-line mt-1">
+              {order.customer.address}
+            </p>
           ) : null}
         </div>
       </div>
@@ -119,80 +140,55 @@ export function DeliveryOrderPrint(props: {
       <div className="overflow-x-auto mb-6">
         <table className="w-full text-sm border-collapse min-w-[640px]">
           <thead>
-            <tr className="border-b border-black/25">
-              <th className="text-left py-2 pr-2 w-10">#</th>
-              <th className="text-left py-2 pr-2">Product</th>
-              <th className="text-right py-2 pr-2">Qty</th>
-              <th className="text-left py-2 pr-2 w-14">Unit</th>
-              <th className="text-right py-2 pr-2">Unit (ex VAT)</th>
-              <th className="text-right py-2 pr-2">Net</th>
+            <tr>
+              <th className="text-left border border-black/25 py-2 px-2 w-10">
+                #
+              </th>
+              <th className="text-left border border-black/25 py-2 px-2">
+                Product
+              </th>
+              <th className="text-right border border-black/25 py-2 px-2">
+                Qty
+              </th>
+              <th className="text-left border border-black/25 py-2 px-2 w-14">
+                Unit
+              </th>
+              <th className="text-right border border-black/25 py-2 px-2">
+                Unit (ex VAT)
+              </th>
+              <th className="text-right border border-black/25 py-2 px-2">
+                Net
+              </th>
             </tr>
           </thead>
           <tbody>
-            {order.details.map((row) => {
-              const otherTaxVisible =
-                row.otherTaxAmount != null &&
-                row.otherTaxAmount !== "" &&
-                row.otherTaxAmount !== "0";
-              const vatVisible =
-                row.vatAmount != null && row.vatAmount !== "" && row.vatAmount !== "0";
-
-              return (
-                <React.Fragment key={row.lineNo}>
-                  {/* Main line: product + qty + net */}
-                  <tr className="border-b border-black/10">
-                    <td className="py-2 pr-2 tabular-nums opacity-80 align-top">
-                      {row.lineNo}
-                    </td>
-                    <td className="py-2 pr-2 align-top">
-                      <span className="font-medium">{row.productName}</span>
-                      {row.productCode ? (
-                        <span className="block text-xs opacity-70">
-                          Code: {row.productCode}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="py-2 pr-2 text-right tabular-nums align-top">
-                      {row.orderQty}
-                    </td>
-                    <td className="py-2 pr-2 align-top">{row.orderUnit ?? "—"}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums align-top">
-                      {moneyLabel(row.unitPrice)}
-                    </td>
-                    <td className="py-2 pr-2 text-right tabular-nums align-top">
-                      {moneyLabel(row.lineSubtotalExTax)}
-                    </td>
-                  </tr>
-
-                  {/* Taxes line: shown under the main line */}
-                  <tr className="border-b border-black/10">
-                    <td className="py-2 pr-2" />
-                    <td colSpan={5} className="py-2 pr-2">
-                      <div className="text-xs opacity-80 space-y-1">
-                        <div className="flex flex-wrap gap-x-4 gap-y-1">
-                          <span className="opacity-70">Taxes</span>
-                          <span>
-                            VAT:{" "}
-                            <span className="tabular-nums">
-                              {vatVisible ? moneyLabel(row.vatAmount) : "—"}
-                            </span>
-                          </span>
-                          <span>
-                            Other:{" "}
-                            <span className="tabular-nums">
-                              {otherTaxVisible ? moneyLabel(row.otherTaxAmount) : "—"}
-                            </span>
-                            {otherTaxVisible && row.otherTaxLabel ? (
-                              <span className="opacity-80"> ({row.otherTaxLabel})</span>
-                            ) : null}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </React.Fragment>
-              );
-            })}
+            {order.details.map((row) => (
+              <tr key={row.lineNo}>
+                <td className="border border-black/10 py-2 px-2 tabular-nums opacity-80 align-top">
+                  {row.lineNo}
+                </td>
+                <td className="border border-black/10 py-2 px-2 align-top">
+                  <span className="font-medium">{row.productName}</span>
+                  {row.productCode ? (
+                    <span className="block text-xs opacity-70">
+                      Code: {row.productCode}
+                    </span>
+                  ) : null}
+                </td>
+                <td className="border border-black/10 py-2 px-2 text-right tabular-nums align-top">
+                  {row.orderQty}
+                </td>
+                <td className="border border-black/10 py-2 px-2 align-top">
+                  {row.orderUnit ?? "—"}
+                </td>
+                <td className="border border-black/10 py-2 px-2 text-right tabular-nums align-top">
+                  {moneyLabel(row.unitPrice)}
+                </td>
+                <td className="border border-black/10 py-2 px-2 text-right tabular-nums align-top">
+                  {moneyLabel(row.lineSubtotalExTax)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -201,7 +197,9 @@ export function DeliveryOrderPrint(props: {
         <div className="text-sm space-y-1 min-w-[240px]">
           <div className="flex justify-between gap-8">
             <span className="opacity-70">Subtotal (ex VAT)</span>
-            <span className="tabular-nums">{moneyLabel(order.subtotalExTax)}</span>
+            <span className="tabular-nums">
+              {moneyLabel(order.subtotalExTax)}
+            </span>
           </div>
           <div className="flex justify-between gap-8">
             <span className="opacity-70">VAT</span>
@@ -209,7 +207,9 @@ export function DeliveryOrderPrint(props: {
           </div>
           <div className="flex justify-between gap-8">
             <span className="opacity-70">Other taxes</span>
-            <span className="tabular-nums">{moneyLabel(order.totalOtherTax)}</span>
+            <span className="tabular-nums">
+              {moneyLabel(order.totalOtherTax)}
+            </span>
           </div>
           <div className="flex justify-between gap-8 border-t border-black/20 pt-2 font-semibold">
             <span>Grand total</span>
@@ -220,7 +220,9 @@ export function DeliveryOrderPrint(props: {
 
       {order.payments.length > 0 ? (
         <section className="mb-8">
-          <h3 className="text-sm font-bold uppercase tracking-wide mb-2">Payments recorded</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide mb-2">
+            Payments recorded
+          </h3>
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b border-black/25">
@@ -233,12 +235,20 @@ export function DeliveryOrderPrint(props: {
               {order.payments.map((p, i) => (
                 <tr key={i} className="border-b border-black/10">
                   <td className="py-2">{p.method}</td>
-                  <td className="py-2">{formatDisplayDate(p.paymentDateIso)}</td>
+                  <td className="py-2">
+                    {formatDisplayDate(p.paymentDateIso)}
+                  </td>
                   <td className="py-2 text-xs opacity-90">
-                    {[p.chequeNo ? `Chq: ${p.chequeNo}` : null, p.bank ? `Bank: ${p.bank}` : null, p.cashReceiptNo ? `Receipt: ${p.cashReceiptNo}` : null]
+                    {[
+                      p.chequeNo ? `Chq: ${p.chequeNo}` : null,
+                      p.bank ? `Bank: ${p.bank}` : null,
+                      p.cashReceiptNo ? `Receipt: ${p.cashReceiptNo}` : null,
+                    ]
                       .filter(Boolean)
                       .join(" · ") || "—"}
-                    {p.receiptDateIso ? ` (receipt ${formatDisplayDate(p.receiptDateIso)})` : null}
+                    {p.receiptDateIso
+                      ? ` (receipt ${formatDisplayDate(p.receiptDateIso)})`
+                      : null}
                   </td>
                 </tr>
               ))}
@@ -247,10 +257,10 @@ export function DeliveryOrderPrint(props: {
         </section>
       ) : null}
 
-      <footer className="mt-12 pt-8 border-t border-black/15 text-sm flex justify-end print:mt-16">
+      <footer className="mt-16 pt-10 border-black/15 text-sm flex justify-end print:mt-24">
         <div className="text-right">
           <p className="opacity-70 mb-8">Manager, Local Sales</p>
-          <div className="border-b border-black/40 h-px w-[260px]" />
+          {/* <div className="border-b border-black/40 h-px w-[260px]" /> */}
         </div>
       </footer>
     </article>

@@ -1,7 +1,7 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { createSale } from "./actions";
-import { PosForm } from "./PosForm";
+import { createSale, deleteSale, loadSaleByInvoiceNo } from "./actions";
+import { SalesClient } from "./SalesClient";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -69,12 +69,14 @@ export default async function PosPage() {
           </div>
         </div>
       ) : (
-        <PosForm
+        <SalesClient
           customers={customers}
-          grades={grades}
-          users={users}
+          products={grades}
+          users={users.map((u) => ({ id: u.id, name: u.name, role: String(u.role) }))}
           vatRateDecimal={String(settings.vatRate)}
-          action={createSale}
+          saveSaleAction={createSale}
+          loadSaleByInvoiceNo={loadSaleByInvoiceNo}
+          deleteSaleAction={deleteSale}
         />
       )}
     </div>

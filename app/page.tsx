@@ -16,10 +16,12 @@ export default async function Home() {
               {settings.department}
             </div>
           ) : null}
-          <div className="text-sm font-semibold opacity-70">{settings.companyName}</div>
+          <div className="text-sm font-semibold opacity-70">
+            {settings.companyName}
+          </div>
           <h1 className="text-3xl font-semibold">Welcome</h1>
           <p className="opacity-80 max-w-2xl">
-            Manage palm oil products, palm oil stock, sales, and cashier reporting.
+            Manage palm oil products, palm oil stock, sales, and reporting.
           </p>
         </div>
 
