@@ -26,6 +26,9 @@ function formatDisplayDate(iso: string) {
 export type SalePrintModel = {
   invoiceNo: string;
   soldAtIso: string;
+  vehicleNumber?: string | null;
+  dateIssuedIso?: string | null;
+  deliveryOrderNo?: string | null;
   customerName: string;
   taxpayerId: string | null;
   vatApplies: boolean;
@@ -81,6 +84,24 @@ export function SalePrint(props: {
             <span className="opacity-70">Sold at</span>{" "}
             <span className="font-medium">{formatDisplayDate(sale.soldAtIso)}</span>
           </p>
+          {sale.vehicleNumber ? (
+            <p className="text-sm">
+              <span className="opacity-70">Vehicle</span>{" "}
+              <span className="font-medium">{sale.vehicleNumber}</span>
+            </p>
+          ) : null}
+          {sale.dateIssuedIso ? (
+            <p className="text-sm">
+              <span className="opacity-70">Date issued</span>{" "}
+              <span className="font-medium">{formatDisplayDate(sale.dateIssuedIso)}</span>
+            </p>
+          ) : null}
+          {sale.deliveryOrderNo ? (
+            <p className="text-sm">
+              <span className="opacity-70">Delivery order</span>{" "}
+              <span className="font-medium tabular-nums">{sale.deliveryOrderNo}</span>
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-lg border border-black/15 p-3 text-sm sm:min-w-[220px]">

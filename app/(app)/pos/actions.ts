@@ -4,6 +4,12 @@ import { getPrismaClient } from "@/lib/prisma";
 import { allocateInvoiceNo } from "@/lib/invoice";
 import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import {
+  loadDeliveryOrderControl,
+  toDeliveryOrderLookupDto,
+  validateSaleAgainstDeliveryOrder,
+  type DeliveryOrderLookupDto,
+} from "@/lib/delivery-order-sale-control";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -42,6 +48,9 @@ export type LoadedSaleView = {
   validatedByName: string | null;
   financialYear: number | null;
   financialMonth: number | null;
+  vehicleNumber: string;
+  dateIssuedIso: string;
+  deliveryOrderNo: string | null;
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
@@ -84,6 +93,9 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
 
   const lines = JSON.parse(linesJson) as PosLineInput[];
   const payments = JSON.parse(paymentsJson) as PosPaymentInput[];
+  const vehicleNumber = String(formData.get("vehicleNumber") ?? "").trim();
+  const deliveryOrderNoRaw = String(formData.get("deliveryOrderNo") ?? "").trim();
+  const deliveryOrderNo = deliveryOrderNoRaw || null;
 
   const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
   const postingFMRaw = String(formData.get("postingFinancialMonth") ?? "").trim();
@@ -91,6 +103,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const postingFM = Number.parseInt(postingFMRaw, 10);
 
   if (!customerId) return { ok: false, error: "Customer is required." };
+  if (!vehicleNumber) return { ok: false, error: "Vehicle number is required." };
   if (!createdByUserId) return { ok: false, error: "Logged-in user is required." };
   if (salesPointRaw && !Number.isFinite(salesPointId)) {
     return { ok: false, error: "Invalid sales point." };
@@ -138,7 +151,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     productId: number;
     qtyKg: Prisma.Decimal;
     unitPricePerKg: Prisma.Decimal;
-    costPerKgSnapshot: Prisma.Decimal;
     lineNet: Prisma.Decimal;
   }> = [];
   try {
@@ -157,12 +169,29 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         productId,
         qtyKg: qty,
         unitPricePerKg: price,
-        costPerKgSnapshot: d("0.00"),
         lineNet,
       };
     });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid line items." };
+  }
+
+  if (deliveryOrderNo) {
+    const productRows = await prisma.product.findMany({
+      where: { productId: { in: [...new Set(preparedLines.map((l) => l.productId))] } },
+      select: { productId: true, productName: true },
+    });
+    const nameById = new Map(productRows.map((p) => [p.productId, p.productName]));
+    const check = await validateSaleAgainstDeliveryOrder({
+      deliveryOrderNo,
+      customerId,
+      lines: preparedLines.map((l) => ({
+        productId: l.productId,
+        productName: nameById.get(l.productId) ?? `Product ${l.productId}`,
+        qtyKg: l.qtyKg,
+      })),
+    });
+    if (!check.ok) return { ok: false, error: check.error };
   }
 
   const vat = money2(net.mul(vatRate));
@@ -206,6 +235,9 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       createdByUserId,
       referenceNumber,
       salesPointId,
+      vehicleNumber,
+      dateIssued: soldAt,
+      deliveryOrderNo,
       status: ValidationStatus.PENDING,
       customerNameSnapshot: customer.name,
       taxRegimeId: customer.taxRegimeId,
@@ -220,7 +252,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
           productId: l.productId,
           qtyKg: l.qtyKg,
           unitPricePerKg: l.unitPricePerKg,
-          costPerKgSnapshot: l.costPerKgSnapshot,
           lineNet: l.lineNet,
           lineVat: money2(l.lineNet.mul(vatRate)),
           lineGross: money2(l.lineNet.add(money2(l.lineNet.mul(vatRate)))),
@@ -281,6 +312,9 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     validatedByName: row.validatedBy?.name ?? null,
     financialYear: row.financialYear,
     financialMonth: row.financialMonth,
+    vehicleNumber: row.vehicleNumber,
+    dateIssuedIso: (row.dateIssued ?? row.soldAt).toISOString(),
+    deliveryOrderNo: row.deliveryOrderNo ?? null,
     netAmount: row.netAmount.toString(),
     vatAmount: row.vatAmount.toString(),
     grossAmount: row.grossAmount.toString(),
@@ -301,6 +335,27 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       paidAtIso: p.paidAt.toISOString(),
     })),
   };
+}
+
+export async function lookupDeliveryOrderForSale(
+  rawNo: string,
+  selectedCustomerId: string,
+): Promise<
+  | { ok: true; data: DeliveryOrderLookupDto & { customerMatches: boolean } }
+  | { ok: false; error: string }
+> {
+  const deliveryOrderNo = String(rawNo ?? "").trim();
+  if (!deliveryOrderNo) {
+    return { ok: false, error: "Enter a delivery order number." };
+  }
+  const ctx = await loadDeliveryOrderControl(deliveryOrderNo);
+  if (!ctx) {
+    return { ok: false, error: "No delivery order with that number." };
+  }
+  const data = toDeliveryOrderLookupDto(ctx);
+  const customerMatches =
+    !selectedCustomerId || selectedCustomerId === ctx.customerId;
+  return { ok: true, data: { ...data, customerMatches } };
 }
 
 export async function deleteSale(formData: FormData) {

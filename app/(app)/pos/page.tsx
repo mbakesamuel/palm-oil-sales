@@ -1,6 +1,12 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { createSale, deleteSale, loadSaleByInvoiceNo, validateSale } from "./actions";
+import {
+  createSale,
+  deleteSale,
+  loadSaleByInvoiceNo,
+  lookupDeliveryOrderForSale,
+  validateSale,
+} from "./actions";
 import { SalesClient } from "./SalesClient";
 import Link from "next/link";
 
@@ -74,6 +80,7 @@ export default async function PosPage() {
           vatRateDecimal={String(settings.vatRate)}
           saveSaleAction={createSale}
           loadSaleByInvoiceNo={loadSaleByInvoiceNo}
+          lookupDeliveryOrderAction={lookupDeliveryOrderForSale}
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
         />

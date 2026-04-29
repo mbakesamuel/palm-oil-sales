@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRole, ValidationStatus } from "@prisma/client";
+import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import type { LoadedSaleView, SaveSaleResult } from "./actions";
 
 type Customer = {
@@ -38,6 +39,13 @@ export function SalesClient(props: {
   vatRateDecimal: string;
   saveSaleAction: (formData: FormData) => Promise<SaveSaleResult>;
   loadSaleByInvoiceNo: (invoiceNo: string) => Promise<LoadedSaleView | null>;
+  lookupDeliveryOrderAction: (
+    deliveryOrderNo: string,
+    customerId: string,
+  ) => Promise<
+    | { ok: true; data: DeliveryOrderLookupDto & { customerMatches: boolean } }
+    | { ok: false; error: string }
+  >;
   validateSaleAction: (formData: FormData) => Promise<void> | void;
   deleteSaleAction: (formData: FormData) => Promise<void> | void;
 }) {
@@ -48,6 +56,7 @@ export function SalesClient(props: {
     vatRateDecimal,
     saveSaleAction,
     loadSaleByInvoiceNo,
+    lookupDeliveryOrderAction,
     validateSaleAction,
     deleteSaleAction,
   } = props;
@@ -61,6 +70,13 @@ export function SalesClient(props: {
   const [lookupNo, setLookupNo] = React.useState<string>("");
   const [soldAtIso, setSoldAtIso] = React.useState<string>("");
   const [referenceNumber, setReferenceNumber] = React.useState<string>("");
+  const [vehicleNumber, setVehicleNumber] = React.useState("");
+  const [deliveryOrderNo, setDeliveryOrderNo] = React.useState("");
+  const [doLookupData, setDoLookupData] = React.useState<
+    (DeliveryOrderLookupDto & { customerMatches: boolean }) | null
+  >(null);
+  const [doLookupError, setDoLookupError] = React.useState<string | null>(null);
+  const [doLookupBusy, setDoLookupBusy] = React.useState(false);
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [saleStatus, setSaleStatus] = React.useState<ValidationStatus | null>(
     null,
@@ -71,8 +87,8 @@ export function SalesClient(props: {
   const [customerId, setCustomerId] = React.useState("");
   const [lines, setLines] = React.useState<Line[]>(() => [
     {
-      productId: String(products[0]?.productId ?? ""),
-      qtyKg: "1",
+      productId: "",
+      qtyKg: "0",
       unitPricePerKg: "0",
     },
   ]);
@@ -96,6 +112,36 @@ export function SalesClient(props: {
     }
   }, [session?.salesPoint?.id]);
 
+  React.useEffect(() => {
+    const no = deliveryOrderNo.trim();
+    if (!no) {
+      setDoLookupData(null);
+      setDoLookupError(null);
+      setDoLookupBusy(false);
+      return;
+    }
+    setDoLookupBusy(true);
+    setDoLookupError(null);
+    let alive = true;
+    const t = window.setTimeout(() => {
+      void lookupDeliveryOrderAction(no, customerId).then((r) => {
+        if (!alive) return;
+        if (r.ok) {
+          setDoLookupData(r.data);
+          setDoLookupError(null);
+        } else {
+          setDoLookupData(null);
+          setDoLookupError(r.error);
+        }
+        setDoLookupBusy(false);
+      });
+    }, 400);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [deliveryOrderNo, customerId, lookupDeliveryOrderAction]);
+
   const customer = customers.find((c) => c.id === customerId);
   const vatApplicable = customer?.taxRegime.vatApplies ?? false;
   const vatRate = vatApplicable ? Number.parseFloat(vatRateDecimal) : 0;
@@ -107,12 +153,70 @@ export function SalesClient(props: {
   const gross = Math.round((net + vat) * 100) / 100;
   const paid = payments.reduce((sum, p) => sum + parseDec(p.amount), 0);
 
+  const deliveryOrderSaveBlock = React.useMemo(() => {
+    const trimmed = deliveryOrderNo.trim();
+    if (!trimmed) {
+      return { block: false as boolean, hint: null as string | null };
+    }
+    if (doLookupBusy) {
+      return { block: true, hint: "Checking delivery order…" };
+    }
+    if (doLookupError) {
+      return { block: true, hint: doLookupError };
+    }
+    if (!doLookupData) {
+      return { block: true, hint: "Loading delivery order…" };
+    }
+    if (customerId && !doLookupData.customerMatches) {
+      return {
+        block: true,
+        hint: "Selected customer must match the delivery order customer.",
+      };
+    }
+    const saleQtyByProduct = new Map<number, number>();
+    for (const l of lines) {
+      const pid = Number.parseInt(l.productId, 10);
+      if (!l.productId || !Number.isFinite(pid)) continue;
+      const qty = parseDec(l.qtyKg);
+      if (qty <= 0) continue;
+      saleQtyByProduct.set(pid, (saleQtyByProduct.get(pid) ?? 0) + qty);
+    }
+    for (const [pid, saleQty] of saleQtyByProduct) {
+      const row = doLookupData.perProduct.find((p) => p.productId === pid);
+      if (!row) {
+        return {
+          block: true,
+          hint: "Every invoiced product must appear on the delivery order.",
+        };
+      }
+      if (saleQty > parseDec(row.balanceKg) + 1e-9) {
+        return {
+          block: true,
+          hint: `Total qty for ${row.productName} on this invoice (${saleQty}) exceeds remaining balance (${row.balanceKg} kg).`,
+        };
+      }
+    }
+    return { block: false, hint: null };
+  }, [
+    deliveryOrderNo,
+    doLookupBusy,
+    doLookupError,
+    doLookupData,
+    customerId,
+    lines,
+  ]);
+
   function resetNew() {
     setSaleId(null);
     setInvoiceNo("");
     setLookupNo("");
     setSoldAtIso("");
     setReferenceNumber("");
+    setVehicleNumber("");
+    setDeliveryOrderNo("");
+    setDoLookupData(null);
+    setDoLookupError(null);
+    setDoLookupBusy(false);
     setSalesPointId(session?.salesPoint ? String(session.salesPoint.id) : "");
     setSaleStatus(null);
     setValidatedByName("");
@@ -120,8 +224,8 @@ export function SalesClient(props: {
     setCustomerId("");
     setLines([
       {
-        productId: String(products[0]?.productId ?? ""),
-        qtyKg: "1",
+        productId: "",
+        qtyKg: "0",
         unitPricePerKg: "0",
       },
     ]);
@@ -135,6 +239,8 @@ export function SalesClient(props: {
     setLookupNo(s.invoiceNo);
     setSoldAtIso(s.soldAtIso);
     setReferenceNumber(s.referenceNumber ?? "");
+    setVehicleNumber(s.vehicleNumber ?? "");
+    setDeliveryOrderNo(s.deliveryOrderNo ?? "");
     setSalesPointId(s.salesPointId != null ? String(s.salesPointId) : "");
     setSaleStatus(s.status);
     setValidatedByName(s.validatedByName ?? "");
@@ -149,8 +255,8 @@ export function SalesClient(props: {
           }))
         : [
             {
-              productId: String(products[0]?.productId ?? ""),
-              qtyKg: "1",
+              productId: "",
+              qtyKg: "0",
               unitPricePerKg: "0",
             },
           ],
@@ -194,11 +300,38 @@ export function SalesClient(props: {
         setBanner({ type: "error", text: "Login required." });
         return;
       }
+      if (lines.some((l) => !String(l.productId ?? "").trim())) {
+        setBanner({
+          type: "error",
+          text: "Select a product on every line.",
+        });
+        return;
+      }
+      if (!vehicleNumber.trim()) {
+        setBanner({ type: "error", text: "Vehicle number is required." });
+        return;
+      }
+      if (deliveryOrderSaveBlock.block) {
+        setBanner({
+          type: "error",
+          text:
+            deliveryOrderSaveBlock.hint ??
+            "Fix delivery order details before saving.",
+        });
+        return;
+      }
       const fd = new FormData();
       fd.set("customerId", customerId);
       fd.set("createdByUserId", session.userId);
       fd.set("referenceNumber", referenceNumber);
-      fd.set("salesPointId", salesPointId);
+      fd.set("vehicleNumber", vehicleNumber);
+      fd.set("deliveryOrderNo", deliveryOrderNo.trim());
+      fd.set(
+        "salesPointId",
+        session?.salesPoint?.id != null
+          ? String(session.salesPoint.id)
+          : salesPointId,
+      );
       fd.set("lines", JSON.stringify(lines));
       fd.set("payments", JSON.stringify(payments));
       fd.set(
@@ -375,7 +508,7 @@ export function SalesClient(props: {
           <div className="grid gap-2">
             <label className="text-sm font-medium">Customer</label>
             <select
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
               disabled={saleId != null}
@@ -401,7 +534,7 @@ export function SalesClient(props: {
               Reference no. (optional)
             </label>
             <input
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
               placeholder="Voucher / customer ref"
@@ -411,27 +544,163 @@ export function SalesClient(props: {
               Printed as reference number.
             </div>
           </div>
-        </div>
 
-        <div className="grid gap-2 sm:max-w-xl">
-          <label className="text-sm font-medium">Sales point (optional)</label>
-          <select
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-            value={salesPointId}
-            onChange={(e) => setSalesPointId(e.target.value)}
-            disabled={saleId != null}
-          >
-            <option value="">— None —</option>
-            {salesPoints.map((sp) => (
-              <option key={sp.id} value={String(sp.id)}>
-                {sp.name}
-              </option>
-            ))}
-          </select>
-          {session?.salesPoint ? (
-            <div className="text-xs opacity-70">
-              Defaulted from login:{" "}
-              <span className="font-medium">{session.salesPoint.name}</span>
+          <div className="grid gap-2 sm:col-start-1">
+            <label className="text-sm font-medium">Sales point</label>
+            {session?.salesPoint ? (
+              <>
+                <input
+                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                  value={session.salesPoint.name}
+                  readOnly
+                />
+                <div className="text-xs opacity-70">
+                  This comes from your login session and cannot be changed here.
+                </div>
+              </>
+            ) : (
+              <>
+                <select
+                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  value={salesPointId}
+                  onChange={(e) => setSalesPointId(e.target.value)}
+                  disabled={saleId != null}
+                >
+                  <option value="">select Sales Point</option>
+                  {salesPoints.map((sp) => (
+                    <option key={sp.id} value={String(sp.id)}>
+                      {sp.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-xs opacity-70">
+                  Optional for manager/admin sessions without a fixed sales point.
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Vehicle number</label>
+              <input
+                className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                value={vehicleNumber}
+                onChange={(e) => setVehicleNumber(e.target.value)}
+                placeholder="Registration / fleet id"
+                disabled={saleId != null}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">
+                Delivery order no.{" "}
+                <span className="font-normal opacity-70">(optional)</span>
+              </label>
+              <input
+                className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                value={deliveryOrderNo}
+                onChange={(e) => setDeliveryOrderNo(e.target.value)}
+                placeholder="Link to delivery order for qty control"
+                disabled={saleId != null}
+              />
+            </div>
+          </div>
+
+          {deliveryOrderNo.trim() ? (
+            <div className="rounded-lg border border-black/10 dark:border-white/10 p-3 text-sm space-y-2 sm:col-span-2">
+              <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                Delivery order control
+              </div>
+              {doLookupBusy ? (
+                <p className="text-xs opacity-70">Loading delivery order…</p>
+              ) : null}
+              {doLookupError ? (
+                <p className="text-xs text-red-700 dark:text-red-400">
+                  {doLookupError}
+                </p>
+              ) : null}
+              {doLookupData ? (
+                <>
+                  <div className="grid gap-1 text-xs sm:text-sm">
+                    <p>
+                      <span className="opacity-70">Date issued</span>{" "}
+                      <span className="font-medium tabular-nums">
+                        {new Date(doLookupData.dateIssuedIso)
+                          .toISOString()
+                          .slice(0, 10)}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="opacity-70">Customer on D.O.</span>{" "}
+                      <span className="font-medium">{doLookupData.customerName}</span>
+                    </p>
+                    <p>
+                      <span className="opacity-70">Ordered (total)</span>{" "}
+                      <span className="font-medium tabular-nums">
+                        {doLookupData.totalOrderedKg} kg
+                      </span>
+                      {" · "}
+                      <span className="opacity-70">Already invoiced</span>{" "}
+                      <span className="font-medium tabular-nums">
+                        {doLookupData.totalInvoicedKg} kg
+                      </span>
+                      {" · "}
+                      <span className="opacity-70">Balance</span>{" "}
+                      <span className="font-medium tabular-nums">
+                        {doLookupData.totalBalanceKg} kg
+                      </span>
+                    </p>
+                    {customerId && !doLookupData.customerMatches ? (
+                      <p className="text-amber-800 dark:text-amber-300 text-xs">
+                        Warning: selected customer does not match this delivery
+                        order. Saving will be blocked until they match.
+                      </p>
+                    ) : null}
+                  </div>
+                  {doLookupData.perProduct.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse min-w-[320px]">
+                        <thead>
+                          <tr className="border-b border-black/15 dark:border-white/15">
+                            <th className="text-left py-1.5 pr-2 font-medium">
+                              Product
+                            </th>
+                            <th className="text-right py-1.5 px-1 font-medium tabular-nums">
+                              Ordered
+                            </th>
+                            <th className="text-right py-1.5 px-1 font-medium tabular-nums">
+                              Invoiced
+                            </th>
+                            <th className="text-right py-1.5 pl-2 font-medium tabular-nums">
+                              Balance
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {doLookupData.perProduct.map((r) => (
+                            <tr
+                              key={r.productId}
+                              className="border-b border-black/10 dark:border-white/10"
+                            >
+                              <td className="py-1.5 pr-2">{r.productName}</td>
+                              <td className="text-right tabular-nums py-1.5 px-1">
+                                {r.orderedKg}
+                              </td>
+                              <td className="text-right tabular-nums py-1.5 px-1">
+                                {r.invoicedKg}
+                              </td>
+                              <td className="text-right tabular-nums py-1.5 pl-2">
+                                {r.balanceKg}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -448,8 +717,8 @@ export function SalesClient(props: {
                 setLines((prev) => [
                   ...prev,
                   {
-                    productId: String(products[0]?.productId ?? ""),
-                    qtyKg: "1",
+                    productId: "",
+                    qtyKg: "0",
                     unitPricePerKg: "0",
                   },
                 ])
@@ -483,6 +752,9 @@ export function SalesClient(props: {
                       )
                     }
                   >
+                    <option value="" disabled>
+                      Select Product
+                    </option>
                     {products.map((g) => (
                       <option key={g.productId} value={String(g.productId)}>
                         {g.productName} ({g.productCat.productCat})
@@ -653,10 +925,25 @@ export function SalesClient(props: {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2">
+          {saleId == null &&
+          (deliveryOrderSaveBlock.block || !vehicleNumber.trim()) ? (
+            <p className="text-xs text-amber-800 dark:text-amber-300 max-w-xl">
+              {!vehicleNumber.trim()
+                ? "Enter a vehicle number before saving."
+                : (deliveryOrderSaveBlock.hint ??
+                  "Fix delivery order validation before saving.")}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={busy !== null || saleId != null}
+            disabled={
+              busy !== null ||
+              saleId != null ||
+              !vehicleNumber.trim() ||
+              deliveryOrderSaveBlock.block
+            }
             onClick={() => void onSaveSale()}
             className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
@@ -695,6 +982,7 @@ export function SalesClient(props: {
               Delete invoice
             </button>
           ) : null}
+          </div>
         </div>
       </section>
 

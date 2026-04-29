@@ -53,6 +53,9 @@ export default async function SaleDetailPage(props: { params: Promise<{ id: stri
         sale={{
           invoiceNo: sale.invoiceNo,
           soldAtIso: sale.soldAt.toISOString(),
+          vehicleNumber: sale.vehicleNumber,
+          dateIssuedIso: (sale.dateIssued ?? sale.soldAt).toISOString(),
+          deliveryOrderNo: sale.deliveryOrderNo,
           customerName: sale.customer.name,
           taxpayerId: sale.customer.taxpayerId,
           vatApplies: sale.customer.taxRegime.vatApplies,
