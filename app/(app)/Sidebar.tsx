@@ -206,7 +206,7 @@ export function Sidebar(props: {
   return (
     <aside
       className={[
-        "rounded-2xl border border-black/10 dark:border-white/10 p-3 h-fit",
+        "rounded-2xl border border-black/10 dark:border-white/10 p-3 h-full flex flex-col",
         "transition-[width] duration-200",
         collapsed ? "lg:w-[72px]" : "lg:w-[260px]",
       ].join(" ")}
@@ -231,7 +231,7 @@ export function Sidebar(props: {
         </button>
       </div>
 
-      <nav className="mt-3 flex flex-col gap-1">
+      <nav className="mt-3 flex flex-col gap-1 flex-1 overflow-y-auto pr-1">
         {dashboardNav.map((item) => (
           <Link
             key={item.href}

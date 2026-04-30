@@ -50,9 +50,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         openFinancialYear={openPeriod?.financialYear ?? null}
         fiscalYearStartMonth={settings.fiscalYearStartMonth}
       >
-        <div className="min-h-[calc(100vh-41px)] print:min-h-0">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
-            <div className="print:hidden shrink-0">
+        <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 h-full flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
+            <div className="print:hidden shrink-0 h-full overflow-y-auto">
               <Sidebar
                 brand={settings.companyName}
                 department={settings.department}
@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               />
             </div>
 
-            <section className="min-w-0 flex-1 print:w-full">
+            <section className="min-w-0 flex-1 overflow-y-auto print:w-full print:overflow-visible">
               <WorkingPeriodBanner />
               <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 sm:p-6 print:border-0 print:shadow-none print:p-0 print:rounded-none">
                 {children}
