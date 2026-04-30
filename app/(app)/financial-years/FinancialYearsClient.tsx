@@ -1,16 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { UserRole } from "@prisma/client";
-import type { FinancialYearPeriod } from "@prisma/client";
-import { FinancialYearStatus } from "@prisma/client";
+import { FinancialYearStatus, UserRole } from "@/lib/domain";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 export function FinancialYearsClient(props: {
-  periods: FinancialYearPeriod[];
+  periods: Array<{
+    id: string;
+    financialYear: number;
+    startDate: Date;
+    endDate: Date;
+    status: FinancialYearStatus;
+    openedAt: Date;
+    closedAt: Date | null;
+  }>;
   openFinancialYearPeriodAction: (formData: FormData) => void;
   closeFinancialYearPeriodAction: (formData: FormData) => void;
 }) {

@@ -7,7 +7,7 @@ import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeri
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
-import { UserRole, ValidationStatus } from "@prisma/client";
+import { UserRole, ValidationStatus } from "@/lib/domain";
 import type {
   LoadedDeliveryOrderView,
   SaveHeaderResult,

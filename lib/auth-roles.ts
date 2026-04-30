@@ -1,4 +1,4 @@
-import { UserRole } from "@prisma/client";
+import { UserRole } from "@/lib/domain";
 
 /** Roles that must have a fixed sales point on the user record (assigned by admin). */
 export function roleRequiresSalesPoint(role: UserRole): boolean {

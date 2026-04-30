@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import * as React from "react";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "@/lib/domain";
 import type { AuthSession } from "@/lib/auth-session";
 import { AUTH_STORAGE_KEY, LEGACY_DUMMY_USER_KEY, parseAuthSession } from "@/lib/auth-session";
 

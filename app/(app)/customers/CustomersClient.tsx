@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { CustomerType } from "@prisma/client";
+import type { CustomerType } from "@/lib/domain";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { UserRole } from "@prisma/client";
+import { UserRole } from "@/lib/domain";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { firstDayOfCalendarMonth } from "@/lib/posting-calendar";
 

@@ -8,7 +8,7 @@ import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeri
 import { utcIsoDateToday } from "@/lib/posting-calendar";
 import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
-import { UserRole, ValidationStatus } from "@prisma/client";
+import { UserRole, ValidationStatus } from "@/lib/domain";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import type { LoadedSaleView, SaveSaleResult } from "./actions";
 

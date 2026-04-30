@@ -1,4 +1,4 @@
-import type { UserRole } from "@prisma/client";
+import type { UserRole } from "@/lib/domain";
 
 export const AUTH_STORAGE_KEY = "po_auth_session";
 
