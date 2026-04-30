@@ -73,6 +73,14 @@ export function FinancialYearsClient(props: {
             </span>
           )}
         </p>
+        {wp.workingMonthStartIso && wp.workingMonthEndIso ? (
+          <p className="text-xs opacity-70">
+            Working month window:{" "}
+            <span className="font-medium tabular-nums">
+              {wp.workingMonthStartIso}–{wp.workingMonthEndIso}
+            </span>
+          </p>
+        ) : null}
         {wp.openFinancialYear != null && wp.selectableMonths.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {wp.selectableMonths.map((row) => {

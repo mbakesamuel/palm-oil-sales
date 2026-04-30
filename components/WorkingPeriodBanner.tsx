@@ -26,6 +26,12 @@ export function WorkingPeriodBanner() {
         <span className="font-medium tabular-nums">{wp.fyLabel}</span>
         <span className="opacity-70"> · </span>
         <span className="font-medium">{wp.workingMonthLabel}</span>
+        {wp.workingMonthStartIso && wp.workingMonthEndIso ? (
+          <span className="opacity-70">
+            {" "}
+            ({wp.workingMonthStartIso}–{wp.workingMonthEndIso})
+          </span>
+        ) : null}
       </div>
       <Link
         href="/financial-years"

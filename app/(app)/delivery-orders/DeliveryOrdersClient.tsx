@@ -975,29 +975,57 @@ export function DeliveryOrdersClient(props: {
                       <label className="text-xs font-medium opacity-70">
                         Method
                       </label>
-                      <select
-                        className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
-                        value={p.method}
-                        onChange={(e) =>
-                          setPayments((prev) =>
-                            prev.map((x, i) =>
-                              i === idx
-                                ? {
-                                    ...x,
-                                    method: e.target.value as Payment["method"],
-                                  }
-                                : x,
-                            ),
-                          )
-                        }
-                      >
-                        <option value="CASH">Cash</option>
-                        <option value="CHEQUE">Cheque</option>
-                      </select>
+                      <div className="flex flex-wrap items-center gap-3 rounded-md border border-black/10 dark:border-white/10 px-3 py-2 text-sm">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`do-payment-method-${idx}`}
+                            value="CASH"
+                            checked={p.method === "CASH"}
+                            onChange={() =>
+                              setPayments((prev) =>
+                                prev.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        method: "CASH",
+                                        chequeNo: "",
+                                        bank: "",
+                                      }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                          Cash
+                        </label>
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`do-payment-method-${idx}`}
+                            value="CHEQUE"
+                            checked={p.method === "CHEQUE"}
+                            onChange={() =>
+                              setPayments((prev) =>
+                                prev.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        method: "CHEQUE",
+                                        cashReceiptNo: "",
+                                      }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                          Cheque
+                        </label>
+                      </div>
                     </div>
                     <div className="grid gap-1">
                       <label className="text-xs font-medium opacity-70">
-                        Payment date
+                        Date issued
                       </label>
                       <input
                         type="date"
@@ -1016,39 +1044,41 @@ export function DeliveryOrdersClient(props: {
                     </div>
                     <div className="grid gap-1 sm:col-span-2 lg:col-span-1">
                       <label className="text-xs font-medium opacity-70">
-                        Cheque / bank / receipt
+                        Details
                       </label>
-                      <div className="flex flex-col gap-1">
+                      {p.method === "CHEQUE" ? (
+                        <div className="flex flex-col gap-2">
+                          <input
+                            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                            placeholder="Cheque no."
+                            value={p.chequeNo}
+                            onChange={(e) =>
+                              setPayments((prev) =>
+                                prev.map((x, i) =>
+                                  i === idx
+                                    ? { ...x, chequeNo: e.target.value }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                          <input
+                            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                            placeholder="Bank"
+                            value={p.bank}
+                            onChange={(e) =>
+                              setPayments((prev) =>
+                                prev.map((x, i) =>
+                                  i === idx ? { ...x, bank: e.target.value } : x,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ) : (
                         <input
-                          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-sm"
-                          placeholder="Cheque no."
-                          value={p.chequeNo}
-                          disabled={p.method !== "CHEQUE"}
-                          onChange={(e) =>
-                            setPayments((prev) =>
-                              prev.map((x, i) =>
-                                i === idx
-                                  ? { ...x, chequeNo: e.target.value }
-                                  : x,
-                              ),
-                            )
-                          }
-                        />
-                        <input
-                          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-sm"
-                          placeholder="Bank"
-                          value={p.bank}
-                          onChange={(e) =>
-                            setPayments((prev) =>
-                              prev.map((x, i) =>
-                                i === idx ? { ...x, bank: e.target.value } : x,
-                              ),
-                            )
-                          }
-                        />
-                        <input
-                          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-sm"
-                          placeholder="Cash receipt no."
+                          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                          placeholder="CDC receipt no."
                           value={p.cashReceiptNo}
                           onChange={(e) =>
                             setPayments((prev) =>
@@ -1060,21 +1090,7 @@ export function DeliveryOrdersClient(props: {
                             )
                           }
                         />
-                        <input
-                          type="date"
-                          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-sm"
-                          value={p.receiptDate}
-                          onChange={(e) =>
-                            setPayments((prev) =>
-                              prev.map((x, i) =>
-                                i === idx
-                                  ? { ...x, receiptDate: e.target.value }
-                                  : x,
-                              ),
-                            )
-                          }
-                        />
-                      </div>
+                      )}
                     </div>
                     <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
                       <button

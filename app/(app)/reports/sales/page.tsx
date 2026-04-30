@@ -1,5 +1,6 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
 import { Prisma } from "@prisma/client";
 
@@ -17,7 +18,8 @@ function xaf(d: Prisma.Decimal) {
 export default async function SalesReportPage() {
   const [settings, prisma] = await Promise.all([getOrInitCompanySettings(), getPrismaClient()]);
 
-  const sales = await prisma.sale.findMany({
+  const sales = await prismaRetry(() =>
+    prisma.sale.findMany({
     orderBy: { soldAt: "desc" },
     take: 400,
     select: {
@@ -32,7 +34,8 @@ export default async function SalesReportPage() {
       postingCalendarYear: true,
       createdBy: { select: { name: true } },
     },
-  });
+    }),
+  );
 
   const totals = sales.reduce(
     (acc, s) => ({

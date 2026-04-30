@@ -18,6 +18,8 @@ export type WorkingPeriodContextValue = {
   selectableMonths: SelectableMonth[];
   workingCalendarYear: number;
   workingCalendarMonth: number;
+  workingMonthStartIso: string | null;
+  workingMonthEndIso: string | null;
   setWorkingCalendarMonth: (year: number, month: number) => void;
   fyLabel: string;
   workingMonthLabel: string;
@@ -125,6 +127,14 @@ export function WorkingPeriodProvider(props: {
       ? `${openFinancialYear} (${openPeriodStartIso} → ${openPeriodEndIso})`
       : "—";
 
+  const workingMonthStartEnd = React.useMemo(() => {
+    if (openFinancialYear == null || selectableMonths.length === 0) {
+      return { startIso: null as string | null, endIso: null as string | null };
+    }
+    const { minIso, maxIso } = workingMonthDateBounds(workingCalYear, workingCalMonth);
+    return { startIso: minIso, endIso: maxIso };
+  }, [openFinancialYear, selectableMonths.length, workingCalYear, workingCalMonth]);
+
   const workingMonthLabel =
     openFinancialYear != null && selectableMonths.length > 0
       ? (() => {
@@ -143,6 +153,8 @@ export function WorkingPeriodProvider(props: {
       selectableMonths,
       workingCalendarYear: workingCalYear,
       workingCalendarMonth: workingCalMonth,
+      workingMonthStartIso: workingMonthStartEnd.startIso,
+      workingMonthEndIso: workingMonthStartEnd.endIso,
       setWorkingCalendarMonth,
       fyLabel,
       workingMonthLabel,
@@ -154,6 +166,8 @@ export function WorkingPeriodProvider(props: {
       selectableMonths,
       workingCalYear,
       workingCalMonth,
+      workingMonthStartEnd.startIso,
+      workingMonthStartEnd.endIso,
       fyLabel,
       workingMonthLabel,
     ],

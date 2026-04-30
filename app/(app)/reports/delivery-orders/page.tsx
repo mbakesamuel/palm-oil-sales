@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
 import { Prisma } from "@prisma/client";
 
@@ -18,7 +19,8 @@ function xaf(d: Prisma.Decimal) {
 export default async function DeliveryOrdersReportPage() {
   const [settings, prisma] = await Promise.all([getOrInitCompanySettings(), getPrismaClient()]);
 
-  const orders = await prisma.deliveryOrder.findMany({
+  const orders = await prismaRetry(() =>
+    prisma.deliveryOrder.findMany({
     orderBy: { dateIssued: "desc" },
     take: 400,
     select: {
@@ -33,7 +35,8 @@ export default async function DeliveryOrdersReportPage() {
       salesPoint: { select: { name: true } },
       details: { select: { amount: true } },
     },
-  });
+    }),
+  );
 
   const rows = orders.map((o) => {
     const total = o.details.reduce(

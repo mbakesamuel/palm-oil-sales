@@ -1,5 +1,6 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { prismaRetry } from "@/lib/prisma-retry";
 import {
   createSale,
   deleteSale,
@@ -18,30 +19,36 @@ export default async function PosPage() {
   const prisma = getPrismaClient();
 
   const [customers, grades, salesPoints] = await Promise.all([
-    prisma.customer.findMany({
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        taxRegime: { select: { name: true, vatApplies: true } },
-        taxRegimeId: true,
-      },
-      take: 200,
-    }),
-    prisma.product.findMany({
-      orderBy: [{ productName: "asc" }],
-      select: {
-        productId: true,
-        productName: true,
-        productCat: { select: { productCat: true } },
-      },
-      take: 50,
-    }),
-    prisma.salesPoint.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-      take: 200,
-    }),
+    prismaRetry(() =>
+      prisma.customer.findMany({
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          taxRegime: { select: { name: true, vatApplies: true } },
+          taxRegimeId: true,
+        },
+        take: 200,
+      }),
+    ),
+    prismaRetry(() =>
+      prisma.product.findMany({
+        orderBy: [{ productName: "asc" }],
+        select: {
+          productId: true,
+          productName: true,
+          productCat: { select: { productCat: true } },
+        },
+        take: 50,
+      }),
+    ),
+    prismaRetry(() =>
+      prisma.salesPoint.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+        take: 200,
+      }),
+    ),
   ]);
 
   return (
