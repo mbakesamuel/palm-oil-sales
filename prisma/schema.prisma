@@ -14,7 +14,9 @@ enum PaymentMethod {
 
 enum UserRole {
   ADMIN
+  DIRECTOR
   MANAGER
+  SENIOR_SUPERVISOR
   SUPERVISOR
   CLERK
 }
@@ -78,8 +80,16 @@ model DeliveryOrderSequence {
 
 model User {
   id        String   @id @default(cuid())
+  /// Login id (unique, stored lowercased in app logic).
+  username  String   @unique
+  /// Shown on invoices/reports (e.g. full name).
   name      String
+  /// DEV / dummy only — replace with a proper password hash before production.
+  passwordPlain String
   role      UserRole @default(CLERK)
+  /// Required for roles tied to a single sales point (e.g. clerk, sales supervisor).
+  salesPointId Int?
+  salesPoint   SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -246,6 +256,7 @@ model SalesPoint {
   id   Int    @id @default(autoincrement())
   name String
 
+  users          User[]
   deliveryOrders DeliveryOrder[]
   sales Sale[]
 
@@ -256,11 +267,10 @@ model DeliveryOrder {
   id               Int      @id @default(autoincrement())
   deliveryOrderNo  String   @unique
   dateIssued       DateTime
-  referenceNumber  String?
   customerId       String
   orderRef         String?
-  salesPointId     Int?
-  salesPoint       SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  salesPointId     Int
+  salesPoint       SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   financialYear    Int?
   financialMonth   Int?
   createdByUserId  String?

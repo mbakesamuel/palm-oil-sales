@@ -10,8 +10,8 @@ type SalesPointRow = {
 
 export function SalesPointsClient(props: {
   points: SalesPointRow[];
-  saveSalesPointAction: (formData: FormData) => void;
-  deleteSalesPointAction: (formData: FormData) => void;
+  saveSalesPointAction: (formData: FormData) => void | Promise<void>;
+  deleteSalesPointAction: (formData: FormData) => void | Promise<void>;
 }) {
   const { points, saveSalesPointAction, deleteSalesPointAction } = props;
 
@@ -42,7 +42,14 @@ export function SalesPointsClient(props: {
         </p>
       </div>
 
-      <form action={saveSalesPointAction} className="space-y-4 max-w-xl">
+      <form
+        action={async (formData) => {
+          await saveSalesPointAction(formData);
+          const isCreate = !String(formData.get("id") ?? "").trim();
+          if (isCreate) reset();
+        }}
+        className="space-y-4 max-w-xl"
+      >
         {editingId != null ? (
           <input type="hidden" name="id" value={String(editingId)} />
         ) : null}

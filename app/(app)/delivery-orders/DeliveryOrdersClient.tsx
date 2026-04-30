@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { canValidateDocuments } from "@/lib/auth-roles";
 import { UserRole, ValidationStatus } from "@prisma/client";
 import type {
   LoadedDeliveryOrderView,
@@ -85,10 +86,9 @@ export function DeliveryOrdersClient(props: {
 
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [deliveryOrderNo, setDeliveryOrderNo] = React.useState("");
-  const [customerId, setCustomerId] = React.useState(customers[0]?.id ?? "");
+  const [customerId, setCustomerId] = React.useState("");
   const [dateIssued, setDateIssued] = React.useState(todayIsoDate);
   const [orderRef, setOrderRef] = React.useState("");
-  const [referenceNumber, setReferenceNumber] = React.useState("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [lookupNo, setLookupNo] = React.useState("");
   const [docStatus, setDocStatus] = React.useState<ValidationStatus | null>(null);
@@ -140,9 +140,8 @@ export function DeliveryOrdersClient(props: {
     setCustomerId(data.customerId);
     setDateIssued(data.dateIssued);
     setOrderRef(data.orderRef ?? "");
-    setSalesPointId(data.salesPointId != null ? String(data.salesPointId) : "");
+    setSalesPointId(String(data.salesPointId));
     setLookupNo(data.deliveryOrderNo);
-    setReferenceNumber(data.referenceNumber ?? "");
     setDocStatus(data.status);
     setValidatedByName(data.validatedByName ?? "");
     setValidatedAtIso(data.validatedAtIso ?? "");
@@ -177,10 +176,9 @@ export function DeliveryOrdersClient(props: {
   function resetNew() {
     setOrderId(null);
     setDeliveryOrderNo("");
-    setCustomerId(customers[0]?.id ?? "");
+    setCustomerId("");
     setDateIssued(todayIsoDate());
     setOrderRef("");
-    setReferenceNumber("");
     setSalesPointId("");
     setLookupNo("");
     setDocStatus(null);
@@ -218,12 +216,19 @@ export function DeliveryOrdersClient(props: {
         setBanner({ type: "error", text: "Login required." });
         return;
       }
+      if (!customerId.trim()) {
+        setBanner({ type: "error", text: "Select a customer." });
+        return;
+      }
+      if (!salesPointId.trim()) {
+        setBanner({ type: "error", text: "Select a collection point." });
+        return;
+      }
       const fd = new FormData();
       if (orderId != null) fd.set("id", String(orderId));
       fd.set("customerId", customerId);
       fd.set("dateIssued", dateIssued);
       fd.set("orderRef", orderRef);
-      fd.set("referenceNumber", referenceNumber);
       fd.set("salesPointId", salesPointId);
       fd.set("createdByUserId", session.userId);
       fd.set(
@@ -430,7 +435,7 @@ export function DeliveryOrdersClient(props: {
         ) : null}
       </div>
 
-      {customers.length === 0 || products.length === 0 ? (
+      {customers.length === 0 || products.length === 0 || salesPoints.length === 0 ? (
         <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
@@ -438,6 +443,9 @@ export function DeliveryOrdersClient(props: {
               <li>Add at least one customer.</li>
             ) : null}
             {products.length === 0 ? <li>Add at least one product.</li> : null}
+            {salesPoints.length === 0 ? (
+              <li>Add at least one sales / collection point.</li>
+            ) : null}
           </ul>
           <div className="mt-3 flex gap-3">
             <Link className="underline underline-offset-4" href="/customers">
@@ -445,6 +453,9 @@ export function DeliveryOrdersClient(props: {
             </Link>
             <Link className="underline underline-offset-4" href="/products">
               Products
+            </Link>
+            <Link className="underline underline-offset-4" href="/sales-points">
+              Sales points
             </Link>
           </div>
         </div>
@@ -536,7 +547,11 @@ export function DeliveryOrdersClient(props: {
                     className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
+                    required
                   >
+                    <option value="" disabled>
+                      Select Customer
+                    </option>
                     {customers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -559,22 +574,6 @@ export function DeliveryOrdersClient(props: {
                     onChange={(e) => setDateIssued(e.target.value)}
                   />
                 </div>
-              </div>
-              <div className="grid gap-2 sm:max-w-xl">
-                <label
-                  className="text-sm font-medium leading-none"
-                  htmlFor="do-reference"
-                >
-                  Reference no. (optional)
-                </label>
-                <input
-                  id="do-reference"
-                  className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
-                  value={referenceNumber}
-                  onChange={(e) => setReferenceNumber(e.target.value)}
-                  placeholder="Voucher / customer ref"
-                  disabled={orderId != null && docStatus === ValidationStatus.VALIDATED}
-                />
               </div>
               <p className="text-xs opacity-70 -mt-1">
                 VAT on lines follows this customer’s regime:{" "}
@@ -611,32 +610,27 @@ export function DeliveryOrdersClient(props: {
                     className="text-sm font-medium leading-none"
                     htmlFor="do-sales-point"
                   >
-                    Collection point (optional)
+                    Collection point
                   </label>
                   <select
                     id="do-sales-point"
                     className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
                     value={salesPointId}
                     onChange={(e) => setSalesPointId(e.target.value)}
+                    required
+                    disabled={
+                      orderId != null && docStatus === ValidationStatus.VALIDATED
+                    }
                   >
-                    <option value="">— None —</option>
+                    <option value="" disabled>
+                      Select collection point
+                    </option>
                     {salesPoints.map((sp) => (
                       <option key={sp.id} value={String(sp.id)}>
                         {sp.name}
                       </option>
                     ))}
                   </select>
-                  {salesPoints.length === 0 ? (
-                    <p className="text-xs opacity-80">
-                      No sales points yet.{" "}
-                      <Link
-                        className="underline underline-offset-4"
-                        href="/sales-points"
-                      >
-                        Add sales points
-                      </Link>
-                    </p>
-                  ) : null}
                 </div>
               </div>
             </div>
@@ -657,9 +651,7 @@ export function DeliveryOrdersClient(props: {
               {orderId != null &&
               docStatus === ValidationStatus.PENDING &&
               session &&
-              (session.role === UserRole.SUPERVISOR ||
-                session.role === UserRole.MANAGER ||
-                session.role === UserRole.ADMIN) ? (
+              canValidateDocuments(session.role) ? (
                 <button
                   type="button"
                   disabled={busy !== null}

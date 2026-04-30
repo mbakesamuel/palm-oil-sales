@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { canValidateDocuments } from "@/lib/auth-roles";
 import { UserRole, ValidationStatus } from "@prisma/client";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import type { LoadedSaleView, SaveSaleResult } from "./actions";
@@ -954,9 +955,7 @@ export function SalesClient(props: {
                 : "Save sale (create invoice)"}
           </button>
           {saleId && saleStatus === ValidationStatus.PENDING && session ? (
-            session.role === UserRole.SUPERVISOR ||
-            session.role === UserRole.MANAGER ||
-            session.role === UserRole.ADMIN ? (
+            canValidateDocuments(session.role) ? (
               <button
                 type="button"
                 disabled={busy !== null}

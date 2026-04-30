@@ -13,12 +13,13 @@ const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
   { href: "/setup", label: "Setup" },
+  { href: "/users", label: "Users" },
+  { href: "/customers", label: "Customers" },
   { href: "/financial-years", label: "Financial years" },
   { href: "/sales-points", label: "Sales points" },
   { href: "/tax-regimes", label: "Tax regimes" },
   { href: "/product-categories", label: "Product categories" },
   { href: "/products", label: "Products" },
-  { href: "/customers", label: "Customers" },
 ] as const;
 
 const operationsNav = [

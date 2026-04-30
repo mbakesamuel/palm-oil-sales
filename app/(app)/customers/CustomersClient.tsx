@@ -21,8 +21,8 @@ type CustomerRow = {
 export function CustomersClient(props: {
   taxRegimes: TaxRegime[];
   customers: CustomerRow[];
-  saveCustomerAction: (formData: FormData) => void;
-  deleteCustomerAction: (formData: FormData) => void;
+  saveCustomerAction: (formData: FormData) => void | Promise<void>;
+  deleteCustomerAction: (formData: FormData) => void | Promise<void>;
 }) {
   const { taxRegimes, customers, saveCustomerAction, deleteCustomerAction } = props;
 
@@ -93,7 +93,14 @@ export function CustomersClient(props: {
         </div>
       ) : null}
 
-      <form action={saveCustomerAction} className="space-y-4">
+      <form
+        action={async (formData) => {
+          await saveCustomerAction(formData);
+          const isCreate = !String(formData.get("id") ?? "").trim();
+          if (isCreate) resetToCreate();
+        }}
+        className="space-y-4"
+      >
         {editingId ? <input type="hidden" name="id" value={editingId} /> : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -99,7 +99,7 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
     deliveryOrderNo: order.deliveryOrderNo,
     dateIssuedIso: order.dateIssued.toISOString(),
     orderRef: order.orderRef,
-    collectionPoint: order.salesPoint?.name ?? null,
+    collectionPoint: order.salesPoint.name,
     customer: order.customer,
     details: order.details.map((d, i) => ({
       lineNo: i + 1,

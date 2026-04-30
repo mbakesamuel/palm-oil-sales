@@ -155,7 +155,8 @@ export function Sidebar(props: {
       items: setupNav,
       collapsedHref: "/setup",
       collapsedAbbrev: "SU",
-      collapsedTitle: "Setup — company, sales points, tax, products, customers",
+      collapsedTitle:
+        "Setup — company, users, customers, financial years, sales points, tax, products",
     }),
     [setupNav],
   );
@@ -265,8 +266,11 @@ export function Sidebar(props: {
               collapsed ? "lg:hidden" : "",
             ].join(" ")}
           >
-            <div className="font-medium truncate" title={session.username}>
-              {session.username}
+            <div className="font-medium truncate" title={session.displayName}>
+              {session.displayName}
+            </div>
+            <div className="opacity-60 truncate text-[11px]" title={session.username}>
+              @{session.username}
             </div>
             <div className="opacity-70 truncate" title={roleLabel(session.role)}>
               {roleLabel(session.role)}

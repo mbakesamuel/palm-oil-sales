@@ -12,8 +12,8 @@ type ProductCatRow = {
 
 export function ProductCategoriesClient(props: {
   categories: ProductCatRow[];
-  saveProductCatAction: (formData: FormData) => void;
-  deleteProductCatAction: (formData: FormData) => void;
+  saveProductCatAction: (formData: FormData) => void | Promise<void>;
+  deleteProductCatAction: (formData: FormData) => void | Promise<void>;
 }) {
   const { categories, saveProductCatAction, deleteProductCatAction } = props;
 
@@ -51,7 +51,14 @@ export function ProductCategoriesClient(props: {
         </p>
       </div>
 
-      <form action={saveProductCatAction} className="space-y-4 max-w-xl">
+      <form
+        action={async (formData) => {
+          await saveProductCatAction(formData);
+          const isCreate = !String(formData.get("productCatId") ?? "").trim();
+          if (isCreate) reset();
+        }}
+        className="space-y-4 max-w-xl"
+      >
         {editingId != null ? (
           <input type="hidden" name="productCatId" value={String(editingId)} />
         ) : null}

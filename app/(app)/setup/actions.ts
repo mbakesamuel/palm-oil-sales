@@ -66,8 +66,27 @@ export async function saveCompanySettings(formData: FormData) {
   // Ensure there is at least one admin and one clerk user for per-user cash tracking.
   const userCount = await prisma.user.count();
   if (userCount === 0) {
+    const firstSp = await prisma.salesPoint.findFirst({
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
     await prisma.user.createMany({
-      data: [{ name: "Admin", role: "ADMIN" }, { name: "Clerk", role: "CLERK" }],
+      data: [
+        {
+          username: "admin",
+          name: "Administrator",
+          passwordPlain: "admin",
+          role: "ADMIN",
+          salesPointId: null,
+        },
+        {
+          username: "clerk",
+          name: "Clerk",
+          passwordPlain: "clerk",
+          role: "CLERK",
+          salesPointId: firstSp?.id ?? null,
+        },
+      ],
     });
   }
 

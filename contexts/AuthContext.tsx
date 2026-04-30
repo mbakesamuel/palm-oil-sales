@@ -25,9 +25,11 @@ function readSessionFromStorage(): AuthSession | null {
     if (next) return next;
     const legacy = localStorage.getItem(LEGACY_DUMMY_USER_KEY);
     if (legacy?.trim()) {
+      const u = legacy.trim();
       return {
         userId: "legacy",
-        username: legacy.trim(),
+        username: u,
+        displayName: u,
         role: UserRole.ADMIN,
         salesPoint: null,
       };

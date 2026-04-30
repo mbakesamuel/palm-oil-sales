@@ -13,8 +13,8 @@ export default async function SetupPage() {
   const currentFy = fiscalPeriodForDate(today, settings.fiscalYearStartMonth);
   const users = await prisma.user.findMany({
     where: { isActive: true },
-    orderBy: [{ role: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, role: true },
+    orderBy: [{ role: "asc" }, { username: "asc" }],
+    select: { id: true, username: true, name: true, role: true },
   });
 
   return (
@@ -153,21 +153,33 @@ export default async function SetupPage() {
       </form>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Cashiers (users)</h2>
+        <h2 className="text-lg font-semibold">User accounts</h2>
         <p className="text-sm opacity-75">
-          POS sales are recorded per user to support per-user cash totals.
+          Administrators manage usernames, passwords, roles, and sales points under{" "}
+          <a className="underline underline-offset-4" href="/users">
+            Users
+          </a>
+          . Saving settings here with no users yet will create default accounts{" "}
+          <span className="font-mono text-xs">admin</span> /{" "}
+          <span className="font-mono text-xs">admin</span> and{" "}
+          <span className="font-mono text-xs">clerk</span> /{" "}
+          <span className="font-mono text-xs">clerk</span> (clerk is tied to the first sales point if
+          one exists).
         </p>
         <div className="rounded-lg border border-black/10 dark:border-white/10 p-4">
           {users.length === 0 ? (
             <div className="text-sm opacity-75">
-              No users yet. Saving settings will create default Admin and Clerk
-              users.
+              No users yet. Saving settings will create default Admin and Clerk users.
             </div>
           ) : (
             <ul className="text-sm space-y-1">
               {users.map((u) => (
                 <li key={u.id} className="flex items-center justify-between gap-3">
-                  <span>{u.name}</span>
+                  <span>
+                    <span className="font-mono text-xs opacity-80">{u.username}</span>
+                    <span className="mx-1 opacity-40">·</span>
+                    {u.name}
+                  </span>
                   <span className="opacity-70">{u.role}</span>
                 </li>
               ))}

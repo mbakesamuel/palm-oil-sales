@@ -21,8 +21,8 @@ type ProductRow = {
 export function ProductsClient(props: {
   categories: ProductCatOption[];
   products: ProductRow[];
-  saveProductAction: (formData: FormData) => void;
-  deleteProductAction: (formData: FormData) => void;
+  saveProductAction: (formData: FormData) => void | Promise<void>;
+  deleteProductAction: (formData: FormData) => void | Promise<void>;
 }) {
   const { categories, products, saveProductAction, deleteProductAction } = props;
 
@@ -86,7 +86,14 @@ export function ProductsClient(props: {
           </Link>
         </div>
       ) : (
-        <form action={saveProductAction} className="space-y-4 max-w-xl">
+        <form
+          action={async (formData) => {
+            await saveProductAction(formData);
+            const isCreate = !String(formData.get("productId") ?? "").trim();
+            if (isCreate) reset();
+          }}
+          className="space-y-4 max-w-xl"
+        >
           {editingId != null ? (
             <input type="hidden" name="productId" value={String(editingId)} />
           ) : null}

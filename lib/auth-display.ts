@@ -1,16 +1,16 @@
 import { UserRole } from "@prisma/client";
 
+export { roleRequiresSalesPoint } from "./auth-roles";
+
 const LABELS: Record<UserRole, string> = {
   [UserRole.ADMIN]: "Admin",
+  [UserRole.DIRECTOR]: "Director",
   [UserRole.MANAGER]: "Manager",
-  [UserRole.SUPERVISOR]: "Supervisor",
-  [UserRole.CLERK]: "Clerk",
+  [UserRole.SENIOR_SUPERVISOR]: "Senior sales supervisor",
+  [UserRole.SUPERVISOR]: "Sales supervisor",
+  [UserRole.CLERK]: "Sales clerk",
 };
 
 export function roleLabel(role: UserRole): string {
   return LABELS[role] ?? role;
-}
-
-export function roleRequiresSalesPoint(role: UserRole): boolean {
-  return role === UserRole.CLERK || role === UserRole.SUPERVISOR;
 }

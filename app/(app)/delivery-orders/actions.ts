@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
 import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { canValidateDocuments } from "@/lib/auth-roles";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -16,13 +17,12 @@ export type SaveSectionResult = { ok: true } | { ok: false; error: string };
 export type LoadedDeliveryOrderView = {
   id: number;
   deliveryOrderNo: string;
-  referenceNumber: string | null;
   customerId: string;
   customerName: string;
   vatApplies: boolean;
   dateIssued: string;
   orderRef: string | null;
-  salesPointId: number | null;
+  salesPointId: number;
   status: ValidationStatus;
   createdByUserId: string | null;
   createdByName: string | null;
@@ -118,7 +118,6 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
   return {
     id: order.id,
     deliveryOrderNo: order.deliveryOrderNo,
-    referenceNumber: order.referenceNumber ?? null,
     customerId: order.customerId,
     customerName: order.customer.name,
     vatApplies: order.customer.taxRegime.vatApplies,
@@ -163,14 +162,11 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const customerId = String(formData.get("customerId") ?? "").trim();
   const dateIssuedRaw = String(formData.get("dateIssued") ?? "").trim();
   const orderRef = String(formData.get("orderRef") ?? "").trim() || null;
-  const referenceNumber = String(formData.get("referenceNumber") ?? "").trim() || null;
   const createdByUserId = String(formData.get("createdByUserId") ?? "").trim() || null;
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
-  let salesPointId: number | null = null;
-  if (salesPointRaw) {
-    const sp = Number.parseInt(salesPointRaw, 10);
-    if (!Number.isFinite(sp)) return { ok: false, error: "Invalid sales point." };
-    salesPointId = sp;
+  const salesPointId = Number.parseInt(salesPointRaw, 10);
+  if (!salesPointRaw || !Number.isFinite(salesPointId)) {
+    return { ok: false, error: "Collection point (sales point) is required." };
   }
 
   if (!customerId) return { ok: false, error: "Customer is required." };
@@ -219,7 +215,6 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
           customerId,
           dateIssued,
           orderRef,
-          referenceNumber,
           salesPointId,
           financialYear,
           financialMonth,
@@ -244,7 +239,6 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
         dateIssued,
         customerId,
         orderRef,
-        referenceNumber,
         salesPointId,
         financialYear,
         financialMonth,
@@ -434,8 +428,8 @@ export async function validateDeliveryOrder(formData: FormData): Promise<SaveSec
   const validatorRole = String(formData.get("validatorRole") ?? "").trim() as UserRole;
   if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
   if (!validatorUserId) return { ok: false, error: "Logged-in user is required." };
-  if (validatorRole !== UserRole.SUPERVISOR && validatorRole !== UserRole.MANAGER && validatorRole !== UserRole.ADMIN) {
-    return { ok: false, error: "Only supervisor/manager/admin can validate a delivery order." };
+  if (!canValidateDocuments(validatorRole)) {
+    return { ok: false, error: "Only authorized supervisors/managers can validate a delivery order." };
   }
 
   const existing = await prisma.deliveryOrder.findUnique({ where: { id }, select: { status: true } });

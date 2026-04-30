@@ -89,8 +89,8 @@ export default async function DeliveryOrdersReportPage() {
                 <td className="px-3 py-2 max-w-[200px] truncate" title={r.customer.name}>
                   {r.customer.name}
                 </td>
-                <td className="px-3 py-2 max-w-[140px] truncate" title={r.salesPoint?.name ?? ""}>
-                  {r.salesPoint?.name ?? "—"}
+                <td className="px-3 py-2 max-w-[140px] truncate" title={r.salesPoint.name}>
+                  {r.salesPoint.name}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.lineCount}</td>
                 <td className="px-3 py-2 text-right tabular-nums font-medium">{xaf(r.total)}</td>

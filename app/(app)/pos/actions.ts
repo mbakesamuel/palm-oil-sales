@@ -10,6 +10,7 @@ import {
   validateSaleAgainstDeliveryOrder,
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
+import { canValidateDocuments } from "@/lib/auth-roles";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -384,8 +385,8 @@ export async function validateSale(formData: FormData) {
   const validatorRole = String(formData.get("validatorRole") ?? "").trim() as UserRole;
   if (!id) throw new Error("Invalid sale.");
   if (!validatorUserId) throw new Error("Logged-in user is required.");
-  if (validatorRole !== UserRole.SUPERVISOR && validatorRole !== UserRole.MANAGER && validatorRole !== UserRole.ADMIN) {
-    throw new Error("Only supervisor/manager/admin can validate a sale.");
+  if (!canValidateDocuments(validatorRole)) {
+    throw new Error("Only authorized supervisors/managers can validate a sale.");
   }
 
   const existing = await prisma.sale.findUnique({ where: { id }, select: { status: true } });

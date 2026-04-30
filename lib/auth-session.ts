@@ -13,6 +13,8 @@ export type AuthSalesPoint = {
 export type AuthSession = {
   userId: string;
   username: string;
+  /** Shown in the shell (from `User.name` at login). */
+  displayName: string;
   role: UserRole;
   salesPoint: AuthSalesPoint | null;
 };
@@ -26,6 +28,10 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
     if (typeof o.userId !== "string" || !o.userId.trim()) return null;
     if (typeof o.username !== "string" || !o.username.trim()) return null;
     if (typeof o.role !== "string") return null;
+    const displayName =
+      typeof o.displayName === "string" && o.displayName.trim()
+        ? o.displayName.trim()
+        : o.username.trim();
     let salesPoint: AuthSalesPoint | null = null;
     if (o.salesPoint != null && typeof o.salesPoint === "object") {
       const sp = o.salesPoint as Record<string, unknown>;
@@ -36,6 +42,7 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
     return {
       userId: o.userId.trim(),
       username: o.username.trim(),
+      displayName,
       role: o.role as UserRole,
       salesPoint,
     };

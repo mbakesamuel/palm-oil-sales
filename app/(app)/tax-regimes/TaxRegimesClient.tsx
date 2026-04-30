@@ -13,8 +13,8 @@ type RegimeRow = {
 
 export function TaxRegimesClient(props: {
   regimes: RegimeRow[];
-  saveTaxRegimeAction: (formData: FormData) => void;
-  deleteTaxRegimeAction: (formData: FormData) => void;
+  saveTaxRegimeAction: (formData: FormData) => void | Promise<void>;
+  deleteTaxRegimeAction: (formData: FormData) => void | Promise<void>;
 }) {
   const { regimes, saveTaxRegimeAction, deleteTaxRegimeAction } = props;
 
@@ -48,7 +48,14 @@ export function TaxRegimesClient(props: {
         </p>
       </div>
 
-      <form action={saveTaxRegimeAction} className="space-y-4 max-w-xl">
+      <form
+        action={async (formData) => {
+          await saveTaxRegimeAction(formData);
+          const isCreate = !String(formData.get("id") ?? "").trim();
+          if (isCreate) reset();
+        }}
+        className="space-y-4 max-w-xl"
+      >
         {editingId ? <input type="hidden" name="id" value={editingId} /> : null}
 
         <div className="grid gap-2">
