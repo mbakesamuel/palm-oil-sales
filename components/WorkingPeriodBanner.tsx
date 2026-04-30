@@ -23,7 +23,7 @@ export function WorkingPeriodBanner() {
     <div className="mb-4 flex flex-col gap-2 rounded-lg border border-black/10 dark:border-white/10 px-4 py-3 text-sm print:hidden sm:flex-row sm:items-center sm:justify-between">
       <div>
         <span className="opacity-70">Your posting period</span>{" "}
-        <span className="font-medium tabular-nums">FY {wp.fyLabel}</span>
+        <span className="font-medium tabular-nums">{wp.fyLabel}</span>
         <span className="opacity-70"> · </span>
         <span className="font-medium">{wp.workingMonthLabel}</span>
       </div>

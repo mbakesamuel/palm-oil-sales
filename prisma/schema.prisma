@@ -39,10 +39,14 @@ enum ValidationStatus {
   REJECTED
 }
 
-/// One row per financial year value (calendar year in which the FY starts). Only one row may be OPEN at a time (enforced in application code).
+/// One row per financial year label. Inclusive calendar bounds define posting; only one row may be OPEN at a time (application code).
 model FinancialYearPeriod {
   id            String               @id @default(cuid())
   financialYear Int
+  /// First calendar day of the financial year (inclusive).
+  startDate     DateTime             @db.Date
+  /// Last calendar day of the financial year (inclusive).
+  endDate       DateTime             @db.Date
   status        FinancialYearStatus  @default(OPEN)
   openedAt      DateTime             @default(now())
   closedAt      DateTime?
@@ -197,10 +201,12 @@ model Sale {
   netAmount           Decimal   @db.Decimal(14, 2)
   vatAmount           Decimal   @db.Decimal(14, 2)
   grossAmount         Decimal   @db.Decimal(14, 2)
-  /// Calendar year in which the financial year started (see CompanySettings.fiscalYearStartMonth)
+  /// Financial year label (FinancialYearPeriod.financialYear)
   financialYear       Int?
-  /// 1 = first month of that financial year
+  /// Calendar month 1–12 of the working posting period
   financialMonth      Int?
+  /// Calendar year of the working posting period (with financialMonth)
+  postingCalendarYear Int?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -215,7 +221,7 @@ model Sale {
   @@index([customerId, soldAt])
   @@index([createdByUserId, soldAt])
   @@index([taxRegimeId, soldAt])
-  @@index([financialYear, financialMonth])
+  @@index([financialYear, postingCalendarYear, financialMonth])
   @@index([status, soldAt])
   @@index([deliveryOrderNo])
 }
@@ -271,8 +277,10 @@ model DeliveryOrder {
   orderRef         String?
   salesPointId     Int
   salesPoint       SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  financialYear    Int?
-  financialMonth   Int?
+  financialYear         Int?
+  /// Calendar month 1–12 of the working posting period
+  financialMonth        Int?
+  postingCalendarYear   Int?
   createdByUserId  String?
   status           ValidationStatus @default(PENDING)
   validatedAt      DateTime?
@@ -286,7 +294,7 @@ model DeliveryOrder {
 
   @@index([customerId])
   @@index([salesPointId])
-  @@index([financialYear, financialMonth])
+  @@index([financialYear, postingCalendarYear, financialMonth])
   @@index([status, dateIssued])
   @@map("DeliveryOrder")
 }

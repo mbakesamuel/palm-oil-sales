@@ -3,6 +3,7 @@
 import * as React from "react";
 import { UserRole } from "@prisma/client";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
+import { firstDayOfCalendarMonth } from "@/lib/posting-calendar";
 
 type Customer = {
   id: string;
@@ -66,8 +67,22 @@ export function PosForm(props: {
       />
       <input
         type="hidden"
-        name="postingFinancialMonth"
-        value={wp.openFinancialYear != null ? String(wp.workingMonth) : ""}
+        name="postingCalendarYear"
+        value={wp.openFinancialYear != null ? String(wp.workingCalendarYear) : ""}
+      />
+      <input
+        type="hidden"
+        name="postingCalendarMonth"
+        value={wp.openFinancialYear != null ? String(wp.workingCalendarMonth) : ""}
+      />
+      <input
+        type="hidden"
+        name="transactionDate"
+        value={
+          wp.openFinancialYear != null
+            ? firstDayOfCalendarMonth(wp.workingCalendarYear, wp.workingCalendarMonth)
+            : ""
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2">

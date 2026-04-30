@@ -29,6 +29,7 @@ export default async function SalesReportPage() {
       grossAmount: true,
       financialYear: true,
       financialMonth: true,
+      postingCalendarYear: true,
       createdBy: { select: { name: true } },
     },
   });
@@ -75,7 +76,7 @@ export default async function SalesReportPage() {
               <th className="px-3 py-2 font-medium text-right">Net (XAF)</th>
               <th className="px-3 py-2 font-medium text-right">VAT</th>
               <th className="px-3 py-2 font-medium text-right">Gross</th>
-              <th className="px-3 py-2 font-medium">FY / Mo</th>
+              <th className="px-3 py-2 font-medium">FY / calendar</th>
             </tr>
           </thead>
           <tbody>
@@ -96,8 +97,10 @@ export default async function SalesReportPage() {
                 <td className="px-3 py-2 text-right tabular-nums">{xaf(s.vatAmount)}</td>
                 <td className="px-3 py-2 text-right tabular-nums font-medium">{xaf(s.grossAmount)}</td>
                 <td className="px-3 py-2 tabular-nums text-xs opacity-80">
-                  {s.financialYear != null && s.financialMonth != null
-                    ? `${s.financialYear} / ${s.financialMonth}`
+                  {s.financialYear != null &&
+                  s.postingCalendarYear != null &&
+                  s.financialMonth != null
+                    ? `${s.financialYear} · ${s.postingCalendarYear}-${String(s.financialMonth).padStart(2, "0")}`
                     : "—"}
                 </td>
               </tr>

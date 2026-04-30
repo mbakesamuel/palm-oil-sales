@@ -28,6 +28,7 @@ export default async function DeliveryOrdersReportPage() {
       orderRef: true,
       financialYear: true,
       financialMonth: true,
+      postingCalendarYear: true,
       customer: { select: { name: true } },
       salesPoint: { select: { name: true } },
       details: { select: { amount: true } },
@@ -72,7 +73,7 @@ export default async function DeliveryOrdersReportPage() {
               <th className="px-3 py-2 font-medium">Sales point</th>
               <th className="px-3 py-2 font-medium text-right">Lines</th>
               <th className="px-3 py-2 font-medium text-right">Total (XAF)</th>
-              <th className="px-3 py-2 font-medium">FY / Mo</th>
+              <th className="px-3 py-2 font-medium">FY / calendar</th>
               <th className="px-3 py-2 font-medium print:hidden">Open</th>
             </tr>
           </thead>
@@ -95,8 +96,10 @@ export default async function DeliveryOrdersReportPage() {
                 <td className="px-3 py-2 text-right tabular-nums">{r.lineCount}</td>
                 <td className="px-3 py-2 text-right tabular-nums font-medium">{xaf(r.total)}</td>
                 <td className="px-3 py-2 tabular-nums text-xs opacity-80">
-                  {r.financialYear != null && r.financialMonth != null
-                    ? `${r.financialYear} / ${r.financialMonth}`
+                  {r.financialYear != null &&
+                  r.postingCalendarYear != null &&
+                  r.financialMonth != null
+                    ? `${r.financialYear} · ${r.postingCalendarYear}-${String(r.financialMonth).padStart(2, "0")}`
                     : "—"}
                 </td>
                 <td className="px-3 py-2 print:hidden">

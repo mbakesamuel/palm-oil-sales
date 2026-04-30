@@ -6,25 +6,15 @@ import type { FinancialYearPeriod } from "@prisma/client";
 import { FinancialYearStatus } from "@prisma/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
-import {
-  formatFinancialYearLabel,
-  formatFiscalMonthCalendarLabel,
-  monthName,
-} from "@/lib/fiscal";
+import { prismaDateToIso } from "@/lib/posting-calendar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 export function FinancialYearsClient(props: {
   periods: FinancialYearPeriod[];
-  fiscalYearStartMonth: number;
   openFinancialYearPeriodAction: (formData: FormData) => void;
   closeFinancialYearPeriodAction: (formData: FormData) => void;
 }) {
-  const {
-    periods,
-    fiscalYearStartMonth,
-    openFinancialYearPeriodAction,
-    closeFinancialYearPeriodAction,
-  } = props;
+  const { periods, openFinancialYearPeriodAction, closeFinancialYearPeriodAction } = props;
 
   const { status, session } = useAuth();
   const wp = useWorkingPeriod();
@@ -35,6 +25,23 @@ export function FinancialYearsClient(props: {
     (session.role === UserRole.ADMIN || session.role === UserRole.MANAGER);
 
   const [yearToOpen, setYearToOpen] = React.useState(() => String(new Date().getFullYear()));
+  const [startDate, setStartDate] = React.useState(() => {
+    const y = new Date().getFullYear();
+    return `${y}-01-01`;
+  });
+  const [endDate, setEndDate] = React.useState(() => {
+    const y = new Date().getFullYear();
+    return `${y}-12-31`;
+  });
+
+  React.useEffect(() => {
+    const y = Number.parseInt(yearToOpen, 10);
+    if (Number.isFinite(y)) {
+      setStartDate(`${y}-01-01`);
+      setEndDate(`${y}-12-31`);
+    }
+  }, [yearToOpen]);
+
   const [pendingClose, setPendingClose] = React.useState<{
     id: string;
     financialYear: number;
@@ -47,10 +54,10 @@ export function FinancialYearsClient(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Financial years</h1>
         <p className="text-sm opacity-75">
-          Only one financial year can be <span className="font-medium">open</span> at a time.
-          <span className="font-medium"> Admin and manager</span> open and close the year (global
-          calendar). Everyone chooses a <span className="font-medium">working month</span> (1–12
-          within that year) for posting sales and delivery orders.
+          Only one financial year can be <span className="font-medium">open</span> at a time. Each
+          year has explicit <span className="font-medium">start and end dates</span>. Everyone
+          chooses a <span className="font-medium">working calendar month</span> that falls fully
+          inside those dates; transaction dates must stay within that month.
         </p>
       </div>
 
@@ -59,28 +66,23 @@ export function FinancialYearsClient(props: {
         <p className="text-sm opacity-80">
           Open year:{" "}
           {wp.openFinancialYear != null ? (
-            <span className="font-medium tabular-nums">
-              FY {wp.fyLabel} (fiscal month 1 starts in{" "}
-              <span className="font-medium">{monthName(fiscalYearStartMonth)}</span> per company setup)
-            </span>
+            <span className="font-medium tabular-nums">{wp.fyLabel}</span>
           ) : (
-            <span className="font-medium text-amber-800 dark:text-amber-200/90">None — open a year below</span>
+            <span className="font-medium text-amber-800 dark:text-amber-200/90">
+              None — open a year below
+            </span>
           )}
         </p>
-        {wp.openFinancialYear != null ? (
+        {wp.openFinancialYear != null && wp.selectableMonths.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-              const active = m === wp.workingMonth;
-              const label = formatFiscalMonthCalendarLabel(
-                wp.openFinancialYear!,
-                m,
-                fiscalYearStartMonth,
-              );
+            {wp.selectableMonths.map((row) => {
+              const active =
+                row.year === wp.workingCalendarYear && row.month === wp.workingCalendarMonth;
               return (
                 <button
-                  key={m}
+                  key={`${row.year}-${row.month}`}
                   type="button"
-                  onClick={() => wp.setWorkingMonth(m)}
+                  onClick={() => wp.setWorkingCalendarMonth(row.year, row.month)}
                   className={[
                     "rounded-md border px-3 py-2 text-left text-sm transition-colors",
                     active
@@ -88,8 +90,7 @@ export function FinancialYearsClient(props: {
                       : "border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5",
                   ].join(" ")}
                 >
-                  <div className="font-medium tabular-nums">Month {m}</div>
-                  <div className="text-xs opacity-80">{label}</div>
+                  <div className="font-medium tabular-nums">{row.label}</div>
                 </button>
               );
             })}
@@ -101,16 +102,19 @@ export function FinancialYearsClient(props: {
         <section className="space-y-4 rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6">
           <h2 className="text-lg font-semibold">Financial year calendar (admin / manager)</h2>
           <p className="text-sm opacity-75">
-            <span className="font-medium">Financial year</span> is the calendar year in which the
-            period <span className="font-medium">starts</span> (same rule as elsewhere in the app).
-            Close the current year before opening another.
+            Close the current year before opening another. For a <span className="font-medium">new</span>{" "}
+            year label, set inclusive start and end dates. Re-opening a previously closed year keeps
+            its stored dates.
           </p>
 
-          <form action={openFinancialYearPeriodAction} className="flex flex-wrap items-end gap-3 max-w-xl">
+          <form
+            action={openFinancialYearPeriodAction}
+            className="flex flex-col gap-3 max-w-xl"
+          >
             <input type="hidden" name="userRole" value={session!.role} />
-            <div className="grid gap-1 flex-1 min-w-[140px]">
+            <div className="grid gap-1">
               <label className="text-sm font-medium" htmlFor="fy-open-year">
-                Open financial year (start year)
+                Financial year label
               </label>
               <input
                 id="fy-open-year"
@@ -124,10 +128,40 @@ export function FinancialYearsClient(props: {
                 required
               />
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-1">
+                <label className="text-sm font-medium" htmlFor="fy-start">
+                  Start date (new year only)
+                </label>
+                <input
+                  id="fy-start"
+                  name="startDate"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  disabled={openRow != null}
+                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 disabled:opacity-50"
+                />
+              </div>
+              <div className="grid gap-1">
+                <label className="text-sm font-medium" htmlFor="fy-end">
+                  End date (new year only)
+                </label>
+                <input
+                  id="fy-end"
+                  name="endDate"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  disabled={openRow != null}
+                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 disabled:opacity-50"
+                />
+              </div>
+            </div>
             <button
               type="submit"
               disabled={openRow != null}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50 w-fit"
             >
               Open year
             </button>
@@ -150,11 +184,12 @@ export function FinancialYearsClient(props: {
         <h2 className="text-lg font-semibold">All periods</h2>
         <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
           <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
-            <div className="col-span-2">FY start</div>
-            <div className="col-span-2">Label</div>
+            <div className="col-span-1">FY</div>
+            <div className="col-span-2">From</div>
+            <div className="col-span-2">To</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-3">Opened</div>
-            <div className="col-span-3">Actions</div>
+            <div className="col-span-2">Actions</div>
           </div>
           {periods.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No financial years recorded yet.</div>
@@ -165,9 +200,12 @@ export function FinancialYearsClient(props: {
                   key={p.id}
                   className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
                 >
-                  <div className="col-span-2 font-mono tabular-nums">{p.financialYear}</div>
-                  <div className="col-span-2 truncate">
-                    {formatFinancialYearLabel(p.financialYear, fiscalYearStartMonth)}
+                  <div className="col-span-1 font-mono tabular-nums">{p.financialYear}</div>
+                  <div className="col-span-2 text-xs tabular-nums">
+                    {prismaDateToIso(p.startDate)}
+                  </div>
+                  <div className="col-span-2 text-xs tabular-nums">
+                    {prismaDateToIso(p.endDate)}
                   </div>
                   <div className="col-span-2">
                     <span
@@ -184,7 +222,7 @@ export function FinancialYearsClient(props: {
                     {p.openedAt.toISOString().slice(0, 10)}
                     {p.closedAt ? ` → ${p.closedAt.toISOString().slice(0, 10)}` : ""}
                   </div>
-                  <div className="col-span-3 flex justify-end">
+                  <div className="col-span-2 flex justify-end">
                     {canManage && p.status === FinancialYearStatus.OPEN ? (
                       <button
                         type="button"

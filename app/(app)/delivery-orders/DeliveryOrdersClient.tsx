@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
+import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
@@ -134,6 +134,24 @@ export function DeliveryOrdersClient(props: {
   const customerVatApplies =
     customers.find((c) => c.id === customerId)?.vatApplies ?? false;
 
+  React.useEffect(() => {
+    if (wp.openFinancialYear == null) return;
+    const { minIso, maxIso } = workingMonthDateBounds(
+      wp.workingCalendarYear,
+      wp.workingCalendarMonth,
+    );
+    setDateIssued((prev) => {
+      if (prev < minIso) return minIso;
+      if (prev > maxIso) return maxIso;
+      return prev;
+    });
+  }, [wp.openFinancialYear, wp.workingCalendarYear, wp.workingCalendarMonth]);
+
+  const dateIssuedBounds =
+    wp.openFinancialYear != null
+      ? workingMonthDateBounds(wp.workingCalendarYear, wp.workingCalendarMonth)
+      : null;
+
   function applyLoaded(data: LoadedDeliveryOrderView) {
     setOrderId(data.id);
     setDeliveryOrderNo(data.deliveryOrderNo);
@@ -170,6 +188,9 @@ export function DeliveryOrdersClient(props: {
         : [],
     );
     setBanner(null);
+    if (data.postingCalendarYear != null && data.financialMonth != null) {
+      wp.setWorkingCalendarMonth(data.postingCalendarYear, data.financialMonth);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -235,10 +256,8 @@ export function DeliveryOrdersClient(props: {
         "postingFinancialYear",
         wp.openFinancialYear != null ? String(wp.openFinancialYear) : "",
       );
-      fd.set(
-        "postingFinancialMonth",
-        wp.openFinancialYear != null ? String(wp.workingMonth) : "",
-      );
+      fd.set("postingCalendarYear", String(wp.workingCalendarYear));
+      fd.set("postingCalendarMonth", String(wp.workingCalendarMonth));
       const r = await saveDeliveryOrderHeader(fd);
       if (r.ok) {
         setOrderId(r.id);
@@ -571,7 +590,10 @@ export function DeliveryOrdersClient(props: {
                     type="date"
                     className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
                     value={dateIssued}
+                    min={dateIssuedBounds?.minIso}
+                    max={dateIssuedBounds?.maxIso}
                     onChange={(e) => setDateIssued(e.target.value)}
+                    disabled={wp.openFinancialYear == null}
                   />
                 </div>
               </div>

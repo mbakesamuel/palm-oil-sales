@@ -16,13 +16,21 @@ function assertCanManageCalendar(role: UserRole | null) {
   }
 }
 
+function parseFormIsoDate(raw: string, label: string): Date {
+  const s = String(raw ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    throw new Error(`${label} must be YYYY-MM-DD.`);
+  }
+  return new Date(`${s}T12:00:00.000Z`);
+}
+
 export async function openFinancialYearPeriod(formData: FormData) {
   assertCanManageCalendar(parseRole(formData));
 
   const yRaw = String(formData.get("financialYear") ?? "").trim();
   const y = Number.parseInt(yRaw, 10);
   if (!Number.isFinite(y) || y < 1900 || y > 2100) {
-    throw new Error("Enter a valid financial year (calendar year in which the period starts).");
+    throw new Error("Enter a valid financial year label (number).");
   }
 
   const prisma = getPrismaClient();
@@ -52,8 +60,25 @@ export async function openFinancialYearPeriod(formData: FormData) {
       },
     });
   } else {
+    const startRaw = String(formData.get("startDate") ?? "").trim();
+    const endRaw = String(formData.get("endDate") ?? "").trim();
+    if (!startRaw || !endRaw) {
+      throw new Error(
+        "Start date and end date are required when creating a new financial year record.",
+      );
+    }
+    const startDate = parseFormIsoDate(startRaw, "Start date");
+    const endDate = parseFormIsoDate(endRaw, "End date");
+    if (startDate.getTime() > endDate.getTime()) {
+      throw new Error("Financial year start date must be on or before the end date.");
+    }
     await prisma.financialYearPeriod.create({
-      data: { financialYear: y, status: FinancialYearStatus.OPEN },
+      data: {
+        financialYear: y,
+        startDate,
+        endDate,
+        status: FinancialYearStatus.OPEN,
+      },
     });
   }
 

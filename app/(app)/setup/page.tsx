@@ -135,15 +135,22 @@ export default async function SetupPage() {
         </div>
 
         <div className="rounded-lg border border-black/10 dark:border-white/10 bg-black/2 dark:bg-white/3 px-4 py-3 text-sm space-y-1">
-          <div className="font-medium">Today’s financial period (preview)</div>
+          <div className="font-medium">Today’s fiscal period (preview, from start month)</div>
           <p className="opacity-90">
             FY <span className="font-semibold tabular-nums">{formatFinancialYearLabel(currentFy.financialYear, settings.fiscalYearStartMonth)}</span>
             {" · "}
-            Financial month{" "}
+            Fiscal month{" "}
             <span className="font-semibold tabular-nums">
               {currentFy.financialMonth}
             </span>
             /12
+          </p>
+          <p className="text-xs opacity-75">
+            Posting uses explicit financial year dates and calendar working months under{" "}
+            <a className="underline underline-offset-4" href="/financial-years">
+              Financial years
+            </a>
+            .
           </p>
         </div>
 

@@ -4,7 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
+import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeriodContext";
+import { utcIsoDateToday } from "@/lib/posting-calendar";
 import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
 import { UserRole, ValidationStatus } from "@prisma/client";
@@ -96,6 +97,7 @@ export function SalesClient(props: {
   const [payments, setPayments] = React.useState<Payment[]>(() => [
     { method: "CASH", amount: "0" },
   ]);
+  const [transactionDate, setTransactionDate] = React.useState(utcIsoDateToday);
 
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
@@ -112,6 +114,19 @@ export function SalesClient(props: {
       setSalesPointId(String(session.salesPoint.id));
     }
   }, [session?.salesPoint?.id]);
+
+  React.useEffect(() => {
+    if (wp.openFinancialYear == null) return;
+    const { minIso, maxIso } = workingMonthDateBounds(
+      wp.workingCalendarYear,
+      wp.workingCalendarMonth,
+    );
+    setTransactionDate((prev) => {
+      if (prev < minIso) return minIso;
+      if (prev > maxIso) return maxIso;
+      return prev;
+    });
+  }, [wp.openFinancialYear, wp.workingCalendarYear, wp.workingCalendarMonth]);
 
   React.useEffect(() => {
     const no = deliveryOrderNo.trim();
@@ -153,6 +168,11 @@ export function SalesClient(props: {
   const vat = Math.round(net * vatRate * 100) / 100;
   const gross = Math.round((net + vat) * 100) / 100;
   const paid = payments.reduce((sum, p) => sum + parseDec(p.amount), 0);
+
+  const transactionDateBounds =
+    wp.openFinancialYear != null
+      ? workingMonthDateBounds(wp.workingCalendarYear, wp.workingCalendarMonth)
+      : null;
 
   const deliveryOrderSaveBlock = React.useMemo(() => {
     const trimmed = deliveryOrderNo.trim();
@@ -231,6 +251,7 @@ export function SalesClient(props: {
       },
     ]);
     setPayments([{ method: "CASH", amount: "0" }]);
+    setTransactionDate(utcIsoDateToday());
     setBanner(null);
   }
 
@@ -239,6 +260,10 @@ export function SalesClient(props: {
     setInvoiceNo(s.invoiceNo);
     setLookupNo(s.invoiceNo);
     setSoldAtIso(s.soldAtIso);
+    setTransactionDate(
+      (s.dateIssuedIso ? s.dateIssuedIso.slice(0, 10) : s.soldAtIso.slice(0, 10)) ||
+        utcIsoDateToday(),
+    );
     setReferenceNumber(s.referenceNumber ?? "");
     setVehicleNumber(s.vehicleNumber ?? "");
     setDeliveryOrderNo(s.deliveryOrderNo ?? "");
@@ -339,10 +364,9 @@ export function SalesClient(props: {
         "postingFinancialYear",
         wp.openFinancialYear != null ? String(wp.openFinancialYear) : "",
       );
-      fd.set(
-        "postingFinancialMonth",
-        wp.openFinancialYear != null ? String(wp.workingMonth) : "",
-      );
+      fd.set("postingCalendarYear", String(wp.workingCalendarYear));
+      fd.set("postingCalendarMonth", String(wp.workingCalendarMonth));
+      fd.set("transactionDate", transactionDate);
 
       const r = await saveSaleAction(fd);
       if (r.ok) {
@@ -579,6 +603,27 @@ export function SalesClient(props: {
                 </div>
               </>
             )}
+          </div>
+
+          <div className="grid gap-2 sm:col-span-2">
+            <label className="text-sm font-medium">Sale date</label>
+            <input
+              type="date"
+              className="w-full max-w-xs rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              value={transactionDate}
+              min={transactionDateBounds?.minIso}
+              max={transactionDateBounds?.maxIso}
+              onChange={(e) => setTransactionDate(e.target.value)}
+              disabled={saleId != null || wp.openFinancialYear == null}
+              required
+            />
+            <p className="text-xs opacity-70">
+              Must fall within your working calendar month (
+              {transactionDateBounds
+                ? `${transactionDateBounds.minIso}–${transactionDateBounds.maxIso}`
+                : "—"}
+              ).
+            </p>
           </div>
 
           <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 sm:gap-4">

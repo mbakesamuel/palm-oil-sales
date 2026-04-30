@@ -2,7 +2,13 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
-import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
+import {
+  assertPostingPeriod,
+  assertTransactionDateInWorkingMonth,
+  getOpenFinancialYearPeriod,
+  toOpenFinancialYearForPosting,
+} from "@/lib/financial-year";
+import { firstDayOfCalendarMonth, noonUtcFromIsoDate } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { canValidateDocuments } from "@/lib/auth-roles";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
@@ -52,6 +58,7 @@ export type LoadedDeliveryOrderView = {
   }>;
   financialYear: number | null;
   financialMonth: number | null;
+  postingCalendarYear: number | null;
 };
 
 type LineInput = {
@@ -153,6 +160,7 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
     })),
     financialYear: order.financialYear,
     financialMonth: order.financialMonth,
+    postingCalendarYear: order.postingCalendarYear,
   };
 }
 
@@ -171,15 +179,14 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
 
   if (!customerId) return { ok: false, error: "Customer is required." };
 
-  const dateIssued = dateIssuedRaw ? new Date(`${dateIssuedRaw}T12:00:00`) : new Date();
-  if (Number.isNaN(dateIssued.getTime())) return { ok: false, error: "Invalid date." };
-
   const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
-  const postingFMRaw = String(formData.get("postingFinancialMonth") ?? "").trim();
+  const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
+  const postingCMRaw = String(formData.get("postingCalendarMonth") ?? "").trim();
   const postingFY = Number.parseInt(postingFYRaw, 10);
-  const postingFM = Number.parseInt(postingFMRaw, 10);
+  const postingCalendarYear = Number.parseInt(postingCYRaw, 10);
+  const postingCalendarMonth = Number.parseInt(postingCMRaw, 10);
 
-  if (!Number.isFinite(postingFY) || !Number.isFinite(postingFM)) {
+  if (!Number.isFinite(postingFY) || !Number.isFinite(postingCalendarYear) || !Number.isFinite(postingCalendarMonth)) {
     return {
       ok: false,
       error:
@@ -187,14 +194,23 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
     };
   }
 
+  const dateIssued = dateIssuedRaw
+    ? new Date(`${dateIssuedRaw}T12:00:00.000Z`)
+    : noonUtcFromIsoDate(
+        firstDayOfCalendarMonth(postingCalendarYear, postingCalendarMonth),
+      );
+  if (Number.isNaN(dateIssued.getTime())) return { ok: false, error: "Invalid date." };
+
   try {
-    const [settings, openPeriod] = await Promise.all([
-      getOrInitCompanySettings(),
-      getOpenFinancialYearPeriod(),
-    ]);
-    assertPostingPeriod(openPeriod, postingFY, postingFM);
+    const openPeriod = await getOpenFinancialYearPeriod();
+    if (!openPeriod) {
+      return { ok: false, error: "No financial year is open." };
+    }
+    const open = toOpenFinancialYearForPosting(openPeriod);
+    assertPostingPeriod(open, postingFY, postingCalendarYear, postingCalendarMonth);
+    assertTransactionDateInWorkingMonth(open, dateIssued, postingCalendarYear, postingCalendarMonth);
     const financialYear = postingFY;
-    const financialMonth = postingFM;
+    const financialMonth = postingCalendarMonth;
 
     if (idRaw) {
       const id = Number.parseInt(idRaw, 10);
@@ -218,6 +234,7 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
           salesPointId,
           financialYear,
           financialMonth,
+          postingCalendarYear,
           createdByUserId: existing.createdByUserId ?? createdByUserId,
         },
       });
@@ -242,6 +259,7 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
         salesPointId,
         financialYear,
         financialMonth,
+        postingCalendarYear,
         createdByUserId,
         status: ValidationStatus.PENDING,
       },

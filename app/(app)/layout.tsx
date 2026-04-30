@@ -6,6 +6,7 @@ import { BrandingProvider } from "@/components/BrandingProvider";
 import { WorkingPeriodBanner } from "@/components/WorkingPeriodBanner";
 import { WorkingPeriodProvider } from "@/contexts/WorkingPeriodContext";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
+import { prismaDateToIso } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { Sidebar } from "./Sidebar";
 
@@ -49,7 +50,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     >
       <WorkingPeriodProvider
         openFinancialYear={openPeriod?.financialYear ?? null}
-        fiscalYearStartMonth={settings.fiscalYearStartMonth}
+        openPeriodStartIso={openPeriod ? prismaDateToIso(openPeriod.startDate) : null}
+        openPeriodEndIso={openPeriod ? prismaDateToIso(openPeriod.endDate) : null}
       >
         <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-6xl px-4 py-6 h-full flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">

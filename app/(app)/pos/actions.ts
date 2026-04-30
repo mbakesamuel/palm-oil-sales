@@ -2,7 +2,13 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateInvoiceNo } from "@/lib/invoice";
-import { assertPostingPeriod, getOpenFinancialYearPeriod } from "@/lib/financial-year";
+import {
+  assertPostingPeriod,
+  assertTransactionDateInWorkingMonth,
+  getOpenFinancialYearPeriod,
+  toOpenFinancialYearForPosting,
+} from "@/lib/financial-year";
+import { noonUtcFromIsoDate, normalizeIsoDateInput, utcIsoDateToday } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import {
   loadDeliveryOrderControl,
@@ -49,6 +55,7 @@ export type LoadedSaleView = {
   validatedByName: string | null;
   financialYear: number | null;
   financialMonth: number | null;
+  postingCalendarYear: number | null;
   vehicleNumber: string;
   dateIssuedIso: string;
   deliveryOrderNo: string | null;
@@ -83,7 +90,6 @@ function money2(value: Prisma.Decimal) {
 
 export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const prisma = getPrismaClient();
-  const soldAt = new Date();
   const customerId = String(formData.get("customerId") ?? "");
   const createdByUserId = String(formData.get("createdByUserId") ?? "").trim();
   const referenceNumber = String(formData.get("referenceNumber") ?? "").trim() || null;
@@ -99,9 +105,15 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const deliveryOrderNo = deliveryOrderNoRaw || null;
 
   const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
-  const postingFMRaw = String(formData.get("postingFinancialMonth") ?? "").trim();
+  const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
+  const postingCMRaw = String(formData.get("postingCalendarMonth") ?? "").trim();
   const postingFY = Number.parseInt(postingFYRaw, 10);
-  const postingFM = Number.parseInt(postingFMRaw, 10);
+  const postingCalendarYear = Number.parseInt(postingCYRaw, 10);
+  const postingCalendarMonth = Number.parseInt(postingCMRaw, 10);
+
+  const transactionDateRaw = String(formData.get("transactionDate") ?? "").trim();
+  const transactionIso = normalizeIsoDateInput(transactionDateRaw) ?? utcIsoDateToday();
+  const soldAt = noonUtcFromIsoDate(transactionIso);
 
   if (!customerId) return { ok: false, error: "Customer is required." };
   if (!vehicleNumber) return { ok: false, error: "Vehicle number is required." };
@@ -130,17 +142,29 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
 
   if (!customer) return { ok: false, error: "Customer not found." };
 
-  if (!Number.isFinite(postingFY) || !Number.isFinite(postingFM)) {
+  if (!Number.isFinite(postingFY) || !Number.isFinite(postingCalendarYear) || !Number.isFinite(postingCalendarMonth)) {
     return {
       ok: false,
       error:
         "Working financial period is missing. Set your working month under Financial years before posting.",
     };
   }
+  if (!openPeriod) {
+    return { ok: false, error: "No financial year is open." };
+  }
+  const open = toOpenFinancialYearForPosting(openPeriod);
   try {
-    assertPostingPeriod(openPeriod, postingFY, postingFM);
+    assertPostingPeriod(open, postingFY, postingCalendarYear, postingCalendarMonth);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid posting period." };
+  }
+  try {
+    assertTransactionDateInWorkingMonth(open, soldAt, postingCalendarYear, postingCalendarMonth);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Transaction date is outside the working month.",
+    };
   }
 
   const vatRate = customer.taxRegime.vatApplies
@@ -247,7 +271,8 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       vatAmount: vat,
       grossAmount: gross,
       financialYear: postingFY,
-      financialMonth: postingFM,
+      financialMonth: postingCalendarMonth,
+      postingCalendarYear,
       lines: {
         create: preparedLines.map((l) => ({
           productId: l.productId,
@@ -313,6 +338,7 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     validatedByName: row.validatedBy?.name ?? null,
     financialYear: row.financialYear,
     financialMonth: row.financialMonth,
+    postingCalendarYear: row.postingCalendarYear,
     vehicleNumber: row.vehicleNumber,
     dateIssuedIso: (row.dateIssued ?? row.soldAt).toISOString(),
     deliveryOrderNo: row.deliveryOrderNo ?? null,

@@ -2,6 +2,18 @@ import "server-only";
 
 import { FinancialYearStatus } from "@prisma/client";
 import { getPrismaClient } from "@/lib/prisma";
+import {
+  assertIsoDateWithinWorkingCalendarMonth,
+  isCalendarMonthFullyInsideFy,
+  prismaDateToIso,
+  type IsoDate,
+} from "@/lib/posting-calendar";
+
+export type OpenFinancialYearForPosting = {
+  financialYear: number;
+  startDate: Date;
+  endDate: Date;
+};
 
 export async function getOpenFinancialYearPeriod() {
   const prisma = getPrismaClient();
@@ -11,10 +23,23 @@ export async function getOpenFinancialYearPeriod() {
   });
 }
 
+export function toOpenFinancialYearForPosting(row: {
+  financialYear: number;
+  startDate: Date;
+  endDate: Date;
+}): OpenFinancialYearForPosting {
+  return {
+    financialYear: row.financialYear,
+    startDate: row.startDate,
+    endDate: row.endDate,
+  };
+}
+
 export function assertPostingPeriod(
-  open: { financialYear: number } | null,
+  open: OpenFinancialYearForPosting | null,
   postingFY: number,
-  postingFM: number,
+  postingCalendarYear: number,
+  postingCalendarMonth: number,
 ): void {
   if (!open) {
     throw new Error(
@@ -26,7 +51,37 @@ export function assertPostingPeriod(
       "Your working financial year does not match the open period. Update it under Financial years.",
     );
   }
-  if (!Number.isFinite(postingFM) || postingFM < 1 || postingFM > 12) {
-    throw new Error("Working financial month must be between 1 and 12.");
+  if (
+    !Number.isFinite(postingCalendarYear) ||
+    !Number.isFinite(postingCalendarMonth) ||
+    postingCalendarMonth < 1 ||
+    postingCalendarMonth > 12
+  ) {
+    throw new Error("Working calendar month is invalid.");
   }
+  const fyStart = prismaDateToIso(open.startDate);
+  const fyEnd = prismaDateToIso(open.endDate);
+  if (!isCalendarMonthFullyInsideFy(postingCalendarYear, postingCalendarMonth, fyStart, fyEnd)) {
+    throw new Error(
+      "The working calendar month must lie fully inside the open financial year dates.",
+    );
+  }
+}
+
+export function assertTransactionDateInWorkingMonth(
+  open: OpenFinancialYearForPosting,
+  transactionDate: Date,
+  postingCalendarYear: number,
+  postingCalendarMonth: number,
+): void {
+  const fyStart = prismaDateToIso(open.startDate);
+  const fyEnd = prismaDateToIso(open.endDate);
+  const docIso = prismaDateToIso(transactionDate) as IsoDate;
+  assertIsoDateWithinWorkingCalendarMonth(
+    docIso,
+    fyStart,
+    fyEnd,
+    postingCalendarYear,
+    postingCalendarMonth,
+  );
 }
