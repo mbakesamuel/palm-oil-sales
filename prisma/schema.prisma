@@ -39,6 +39,20 @@ enum ValidationStatus {
   REJECTED
 }
 
+model RolePermission {
+  id        String   @id @default(cuid())
+  role      UserRole
+  /// Permission key like `route:/pos` or `ui:validate`.
+  key       String
+  allowed   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([role, key])
+  @@index([key])
+  @@map("RolePermission")
+}
+
 /// One row per financial year label. Inclusive calendar bounds define posting; only one row may be OPEN at a time (application code).
 model FinancialYearPeriod {
   id            String               @id @default(cuid())
@@ -89,7 +103,8 @@ model User {
   /// Shown on invoices/reports (e.g. full name).
   name      String
   /// DEV / dummy only — replace with a proper password hash before production.
-  passwordPlain String
+  passwordPlain String?
+  passwordHash  String?
   role      UserRole @default(CLERK)
   /// Required for roles tied to a single sales point (e.g. clerk, sales supervisor).
   salesPointId Int?
@@ -102,6 +117,23 @@ model User {
   validatedSales Sale[] @relation("SalesValidatedBy")
   deliveryOrdersCreated DeliveryOrder[] @relation("DeliveryOrdersCreatedBy")
   deliveryOrdersValidated DeliveryOrder[] @relation("DeliveryOrdersValidatedBy")
+
+  sessions AuthSession[]
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  /// SHA-256 hash of the raw session token stored in the cookie.
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("AuthSession")
 }
 
 model Customer {

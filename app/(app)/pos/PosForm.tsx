@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { UserRole } from "@/lib/domain";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
 import { firstDayOfCalendarMonth } from "@/lib/posting-calendar";
 
@@ -12,27 +11,19 @@ type Customer = {
   taxRegime: { name: string; vatApplies: boolean };
 };
 type Product = { productId: number; productName: string; productCat: { productCat: string } };
-type User = {
-  id: string;
-  name: string;
-  role: UserRole;
-};
-
 type Line = { productId: string; qtyKg: string; unitPricePerKg: string };
 type Payment = { method: "CASH" | "CHEQUE"; amount: string; chequeNo?: string };
 
 export function PosForm(props: {
   customers: Customer[];
   grades: Product[];
-  users: User[];
   vatRateDecimal: string;
   action: (formData: FormData) => void;
 }) {
-  const { customers, grades, users, vatRateDecimal, action } = props;
+  const { customers, grades, vatRateDecimal, action } = props;
   const wp = useWorkingPeriod();
 
   const [customerId, setCustomerId] = React.useState(customers[0]?.id ?? "");
-  const [cashierId, setCashierId] = React.useState(users[0]?.id ?? "");
   const [lines, setLines] = React.useState<Line[]>([
     { productId: String(grades[0]?.productId ?? ""), qtyKg: "1", unitPricePerKg: "0" },
   ]);
@@ -57,7 +48,6 @@ export function PosForm(props: {
   return (
     <form action={action} className="space-y-6">
       <input type="hidden" name="customerId" value={customerId} />
-      <input type="hidden" name="createdByUserId" value={cashierId} />
       <input type="hidden" name="lines" value={JSON.stringify(lines)} />
       <input type="hidden" name="payments" value={JSON.stringify(payments)} />
       <input
@@ -85,39 +75,21 @@ export function PosForm(props: {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Customer</label>
-          <select
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          >          
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <div className="text-xs opacity-70">
-            VAT: {vatApplicable ? "applies" : "exempt"} · Regime: {customer?.taxRegime.name ?? "-"}
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Cashier</label>
-          <select
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-            value={cashierId}
-            onChange={(e) => setCashierId(e.target.value)}
-          >
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.role})
-              </option>
-            ))}
-          </select>
-          <div className="text-xs opacity-70 min-h-4">&nbsp;</div>
+      <div className="grid gap-2 max-w-xl">
+        <label className="text-sm font-medium">Customer</label>
+        <select
+          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
+        >
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <div className="text-xs opacity-70">
+          VAT: {vatApplicable ? "applies" : "exempt"} · Regime: {customer?.taxRegime.name ?? "-"}
         </div>
       </div>
 

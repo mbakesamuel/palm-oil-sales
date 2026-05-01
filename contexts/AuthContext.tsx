@@ -3,9 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import * as React from "react";
-import { UserRole } from "@/lib/domain";
 import type { AuthSession } from "@/lib/auth-session";
-import { AUTH_STORAGE_KEY, LEGACY_DUMMY_USER_KEY, parseAuthSession } from "@/lib/auth-session";
 
 type AuthStatus = "loading" | "ready";
 
@@ -18,26 +16,11 @@ type AuthContextValue = {
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
 
-function readSessionFromStorage(): AuthSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const next = parseAuthSession(localStorage.getItem(AUTH_STORAGE_KEY));
-    if (next) return next;
-    const legacy = localStorage.getItem(LEGACY_DUMMY_USER_KEY);
-    if (legacy?.trim()) {
-      const u = legacy.trim();
-      return {
-        userId: "legacy",
-        username: u,
-        displayName: u,
-        role: UserRole.ADMIN,
-        salesPoint: null,
-      };
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
+async function fetchSession(): Promise<AuthSession | null> {
+  const r = await fetch("/api/auth/session", { cache: "no-store" });
+  if (!r.ok) return null;
+  const data = (await r.json()) as { session: AuthSession | null };
+  return data.session ?? null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -46,27 +29,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<AuthSession | null>(null);
 
   React.useEffect(() => {
-    setSession(readSessionFromStorage());
-    setStatus("ready");
+    void fetchSession()
+      .then((s) => setSession(s))
+      .finally(() => setStatus("ready"));
   }, []);
 
   const signIn = React.useCallback((next: AuthSession) => {
-    try {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
-      localStorage.removeItem(LEGACY_DUMMY_USER_KEY);
-    } catch {
-      /* ignore */
-    }
     setSession(next);
   }, []);
 
   const signOut = React.useCallback(() => {
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      localStorage.removeItem(LEGACY_DUMMY_USER_KEY);
-    } catch {
-      /* ignore */
-    }
+    void fetch("/api/auth/logout", { method: "POST" });
     setSession(null);
   }, []);
 

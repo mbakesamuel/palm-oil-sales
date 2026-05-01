@@ -1,6 +1,9 @@
 import { UserRole } from "@/lib/domain";
 
-/** Roles that must have a fixed sales point on the user record (assigned by admin). */
+/**
+ * Roles that must have a fixed sales point on the user record (assigned by admin).
+ * Server actions enforce posting scope for these roles via `lib/auth-sales-point-scope`.
+ */
 export function roleRequiresSalesPoint(role: UserRole): boolean {
   return role === UserRole.CLERK || role === UserRole.SUPERVISOR;
 }

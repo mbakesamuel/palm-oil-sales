@@ -1,16 +1,14 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/prisma";
+import { getServerSession } from "@/lib/auth-server";
 import { FinancialYearStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-function parseRole(formData: FormData): UserRole | null {
-  const r = String(formData.get("userRole") ?? "").trim();
-  if (r === UserRole.ADMIN || r === UserRole.MANAGER) return r;
-  return null;
-}
-
-function assertCanManageCalendar(role: UserRole | null) {
+async function assertCanManageCalendarFromSession() {
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  const role = session.role as UserRole;
   if (role !== UserRole.ADMIN && role !== UserRole.MANAGER) {
     throw new Error("Only admin or manager can manage the financial year calendar (open / close).");
   }
@@ -25,7 +23,7 @@ function parseFormIsoDate(raw: string, label: string): Date {
 }
 
 export async function openFinancialYearPeriod(formData: FormData) {
-  assertCanManageCalendar(parseRole(formData));
+  await assertCanManageCalendarFromSession();
 
   const yRaw = String(formData.get("financialYear") ?? "").trim();
   const y = Number.parseInt(yRaw, 10);
@@ -89,7 +87,7 @@ export async function openFinancialYearPeriod(formData: FormData) {
 }
 
 export async function closeFinancialYearPeriod(formData: FormData) {
-  assertCanManageCalendar(parseRole(formData));
+  await assertCanManageCalendarFromSession();
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) throw new Error("Missing period.");

@@ -125,7 +125,6 @@ export function FinancialYearsClient(props: {
             action={openFinancialYearPeriodAction}
             className="flex flex-col gap-3 max-w-xl"
           >
-            <input type="hidden" name="userRole" value={session!.role} />
             <div className="grid gap-1">
               <label className="text-sm font-medium" htmlFor="fy-open-year">
                 Financial year label
@@ -267,7 +266,6 @@ export function FinancialYearsClient(props: {
           onConfirm={async () => {
             const fd = new FormData();
             fd.set("id", pendingClose.id);
-            fd.set("userRole", session.role);
             await closeFinancialYearPeriodAction(fd);
             setPendingClose(null);
           }}

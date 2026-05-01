@@ -60,7 +60,7 @@ export function DeliveryOrdersClient(props: {
   saveDeliveryOrderHeader: (formData: FormData) => Promise<SaveHeaderResult>;
   saveDeliveryOrderDetails: (formData: FormData) => Promise<SaveSectionResult>;
   saveDeliveryOrderPayments: (formData: FormData) => Promise<SaveSectionResult>;
-  deleteDeliveryOrder: (formData: FormData) => void | Promise<void>;
+  deleteDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
 }) {
   const {
@@ -147,6 +147,12 @@ export function DeliveryOrdersClient(props: {
     });
   }, [wp.openFinancialYear, wp.workingCalendarYear, wp.workingCalendarMonth]);
 
+  React.useEffect(() => {
+    if (session?.salesPoint?.id != null) {
+      setSalesPointId(String(session.salesPoint.id));
+    }
+  }, [session?.salesPoint?.id]);
+
   const dateIssuedBounds =
     wp.openFinancialYear != null
       ? workingMonthDateBounds(wp.workingCalendarYear, wp.workingCalendarMonth)
@@ -200,7 +206,9 @@ export function DeliveryOrdersClient(props: {
     setCustomerId("");
     setDateIssued(todayIsoDate());
     setOrderRef("");
-    setSalesPointId("");
+    setSalesPointId(
+      session?.salesPoint?.id != null ? String(session.salesPoint.id) : "",
+    );
     setLookupNo("");
     setDocStatus(null);
     setValidatedByName("");
@@ -214,11 +222,15 @@ export function DeliveryOrdersClient(props: {
     setBusy("load");
     setBanner(null);
     try {
+      if (authStatus !== "ready" || !session?.userId) {
+        setBanner({ type: "error", text: "Login required." });
+        return;
+      }
       const data = await loadDeliveryOrderByNo(lookupNo);
       if (!data) {
         setBanner({
           type: "error",
-          text: "No delivery order matches that number.",
+          text: "No delivery order matches that number, or you cannot access it.",
         });
         return;
       }
@@ -241,7 +253,11 @@ export function DeliveryOrdersClient(props: {
         setBanner({ type: "error", text: "Select a customer." });
         return;
       }
-      if (!salesPointId.trim()) {
+      const effectiveSalesPointId =
+        session?.salesPoint?.id != null
+          ? String(session.salesPoint.id)
+          : salesPointId;
+      if (!effectiveSalesPointId.trim()) {
         setBanner({ type: "error", text: "Select a collection point." });
         return;
       }
@@ -250,8 +266,7 @@ export function DeliveryOrdersClient(props: {
       fd.set("customerId", customerId);
       fd.set("dateIssued", dateIssued);
       fd.set("orderRef", orderRef);
-      fd.set("salesPointId", salesPointId);
-      fd.set("createdByUserId", session.userId);
+      fd.set("salesPointId", effectiveSalesPointId);
       fd.set(
         "postingFinancialYear",
         wp.openFinancialYear != null ? String(wp.openFinancialYear) : "",
@@ -283,7 +298,11 @@ export function DeliveryOrdersClient(props: {
     if (orderId == null) return;
     const fd = new FormData();
     fd.set("id", String(orderId));
-    await deleteDeliveryOrder(fd);
+    const r = await deleteDeliveryOrder(fd);
+    if (!r.ok) {
+      setBanner({ type: "error", text: r.error });
+      return;
+    }
     resetNew();
     setBanner({ type: "ok", text: "Delivery order deleted." });
     router.refresh();
@@ -300,8 +319,6 @@ export function DeliveryOrdersClient(props: {
     try {
       const fd = new FormData();
       fd.set("id", String(orderId));
-      fd.set("validatorUserId", session.userId);
-      fd.set("validatorRole", session.role);
       const r = await validateDeliveryOrder(fd);
       if (r.ok) {
         setDocStatus(ValidationStatus.VALIDATED);
@@ -317,6 +334,10 @@ export function DeliveryOrdersClient(props: {
 
   async function onSaveLines() {
     if (orderId == null) return;
+    if (authStatus !== "ready" || !session?.userId) {
+      setBanner({ type: "error", text: "Login required." });
+      return;
+    }
     setBusy("lines");
     setBanner(null);
     try {
@@ -337,6 +358,10 @@ export function DeliveryOrdersClient(props: {
 
   async function onSavePayments() {
     if (orderId == null) return;
+    if (authStatus !== "ready" || !session?.userId) {
+      setBanner({ type: "error", text: "Login required." });
+      return;
+    }
     setBusy("payments");
     setBanner(null);
     try {
@@ -634,25 +659,40 @@ export function DeliveryOrdersClient(props: {
                   >
                     Collection point
                   </label>
-                  <select
-                    id="do-sales-point"
-                    className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
-                    value={salesPointId}
-                    onChange={(e) => setSalesPointId(e.target.value)}
-                    required
-                    disabled={
-                      orderId != null && docStatus === ValidationStatus.VALIDATED
-                    }
-                  >
-                    <option value="" disabled>
-                      Select collection point
-                    </option>
-                    {salesPoints.map((sp) => (
-                      <option key={sp.id} value={String(sp.id)}>
-                        {sp.name}
+                  {session?.salesPoint ? (
+                    <>
+                      <input
+                        id="do-sales-point"
+                        className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                        value={session.salesPoint.name}
+                        readOnly
+                      />
+                      <p className="text-xs opacity-70">
+                        Tied to your login; you cannot post to another collection
+                        point.
+                      </p>
+                    </>
+                  ) : (
+                    <select
+                      id="do-sales-point"
+                      className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                      value={salesPointId}
+                      onChange={(e) => setSalesPointId(e.target.value)}
+                      required
+                      disabled={
+                        orderId != null && docStatus === ValidationStatus.VALIDATED
+                      }
+                    >
+                      <option value="" disabled>
+                        Select collection point
                       </option>
-                    ))}
-                  </select>
+                      {salesPoints.map((sp) => (
+                        <option key={sp.id} value={String(sp.id)}>
+                          {sp.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
             </div>

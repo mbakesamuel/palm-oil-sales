@@ -1,12 +1,18 @@
 import "server-only";
 
+import { Prisma } from "@prisma/client";
+
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function isTransientDbNetworkError(e: unknown): boolean {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P1001") {
+    return true;
+  }
   const msg = e instanceof Error ? e.message : String(e ?? "");
   return (
+    /Can't reach database server/i.test(msg) ||
     /Client network socket disconnected before secure TLS connection was established/i.test(
       msg,
     ) ||

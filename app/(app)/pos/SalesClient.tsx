@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
 import { UserRole, ValidationStatus } from "@/lib/domain";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
-import type { LoadedSaleView, SaveSaleResult } from "./actions";
+import type { LoadedSaleView, SaleMutationResult, SaveSaleResult } from "./actions";
 
 type Customer = {
   id: string;
@@ -48,8 +48,8 @@ export function SalesClient(props: {
     | { ok: true; data: DeliveryOrderLookupDto & { customerMatches: boolean } }
     | { ok: false; error: string }
   >;
-  validateSaleAction: (formData: FormData) => Promise<void> | void;
-  deleteSaleAction: (formData: FormData) => Promise<void> | void;
+  validateSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
+  deleteSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
 }) {
   const {
     customers,
@@ -139,6 +139,23 @@ export function SalesClient(props: {
     setDoLookupBusy(true);
     setDoLookupError(null);
     let alive = true;
+    if (authStatus !== "ready") {
+      setDoLookupBusy(false);
+      setDoLookupData(null);
+      setDoLookupError(null);
+      return () => {
+        alive = false;
+      };
+    }
+    const actorId = session?.userId?.trim() ?? "";
+    if (!actorId) {
+      setDoLookupBusy(false);
+      setDoLookupData(null);
+      setDoLookupError("Login required to check delivery orders.");
+      return () => {
+        alive = false;
+      };
+    }
     const t = window.setTimeout(() => {
       void lookupDeliveryOrderAction(no, customerId).then((r) => {
         if (!alive) return;
@@ -156,7 +173,13 @@ export function SalesClient(props: {
       alive = false;
       window.clearTimeout(t);
     };
-  }, [deliveryOrderNo, customerId, lookupDeliveryOrderAction]);
+  }, [
+    authStatus,
+    deliveryOrderNo,
+    customerId,
+    lookupDeliveryOrderAction,
+    session?.userId,
+  ]);
 
   const customer = customers.find((c) => c.id === customerId);
   const vatApplicable = customer?.taxRegime.vatApplies ?? false;
@@ -304,11 +327,15 @@ export function SalesClient(props: {
     setBusy("load");
     setBanner(null);
     try {
+      if (authStatus !== "ready" || !session?.userId) {
+        setBanner({ type: "error", text: "Login required." });
+        return;
+      }
       const data = await loadSaleByInvoiceNo(lookupNo);
       if (!data) {
         setBanner({
           type: "error",
-          text: "No sale matches that invoice number.",
+          text: "No sale matches that invoice number, or you cannot access it.",
         });
         return;
       }
@@ -348,7 +375,6 @@ export function SalesClient(props: {
       }
       const fd = new FormData();
       fd.set("customerId", customerId);
-      fd.set("createdByUserId", session.userId);
       fd.set("referenceNumber", referenceNumber);
       fd.set("vehicleNumber", vehicleNumber);
       fd.set("deliveryOrderNo", deliveryOrderNo.trim());
@@ -389,7 +415,11 @@ export function SalesClient(props: {
     if (!saleId) return;
     const fd = new FormData();
     fd.set("id", saleId);
-    await deleteSaleAction(fd);
+    const r = await deleteSaleAction(fd);
+    if (!r.ok) {
+      setBanner({ type: "error", text: r.error });
+      return;
+    }
     resetNew();
     setBanner({ type: "ok", text: "Sale deleted." });
     router.refresh();
@@ -406,16 +436,13 @@ export function SalesClient(props: {
     try {
       const fd = new FormData();
       fd.set("id", saleId);
-      fd.set("validatorUserId", session.userId);
-      fd.set("validatorRole", session.role);
-      await validateSaleAction(fd);
-      setBanner({ type: "ok", text: "Invoice validated." });
-      router.refresh();
-    } catch (e) {
-      setBanner({
-        type: "error",
-        text: e instanceof Error ? e.message : "Could not validate.",
-      });
+      const r = await validateSaleAction(fd);
+      if (r.ok) {
+        setBanner({ type: "ok", text: "Invoice validated." });
+        router.refresh();
+      } else {
+        setBanner({ type: "error", text: r.error });
+      }
     } finally {
       setBusy(null);
     }

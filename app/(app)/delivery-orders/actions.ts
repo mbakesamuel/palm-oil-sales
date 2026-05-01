@@ -11,8 +11,63 @@ import {
 import { firstDayOfCalendarMonth, noonUtcFromIsoDate } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { canValidateDocuments } from "@/lib/auth-roles";
+import { getServerSession } from "@/lib/auth-server";
+import {
+  salesPointErrorForResource,
+  salesPointErrorForSubmitted,
+} from "@/lib/auth-sales-point-scope";
+import type { DeliveryOrderPrintModel } from "@/components/DeliveryOrderPrint";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+
+function money2Print(value: Prisma.Decimal) {
+  return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+}
+
+function totalsFromDetailsForPrint(
+  details: Array<{
+    orderQty: number;
+    unitPrice: Prisma.Decimal | null;
+    lineSubtotalExTax: Prisma.Decimal | null;
+    vatAmount: Prisma.Decimal | null;
+    otherTaxAmount: Prisma.Decimal | null;
+    amount: Prisma.Decimal | null;
+  }>,
+) {
+  const z = new Prisma.Decimal(0);
+  let subEx = z;
+  let totVat = z;
+  let totOther = z;
+  let grand = z;
+
+  for (const d of details) {
+    const net =
+      d.lineSubtotalExTax != null
+        ? d.lineSubtotalExTax
+        : d.unitPrice != null
+          ? money2Print(d.unitPrice.mul(d.orderQty))
+          : z;
+    subEx = subEx.add(net);
+
+    if (d.vatAmount != null) totVat = totVat.add(d.vatAmount);
+    if (d.otherTaxAmount != null) totOther = totOther.add(d.otherTaxAmount);
+
+    if (d.amount != null) {
+      grand = grand.add(d.amount);
+    } else {
+      const v = d.vatAmount ?? z;
+      const o = d.otherTaxAmount ?? z;
+      grand = grand.add(money2Print(net.add(v).add(o)));
+    }
+  }
+
+  return {
+    subtotalExTax: money2Print(subEx).toString(),
+    totalVat: money2Print(totVat).toString(),
+    totalOtherTax: money2Print(totOther).toString(),
+    grandTotal: money2Print(grand).toString(),
+  };
+}
 
 export type SaveHeaderResult =
   | { ok: true; id: number; deliveryOrderNo: string }
@@ -87,6 +142,19 @@ function money2(value: Prisma.Decimal) {
   return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
+async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
+  const session = await getServerSession();
+  if (!session?.userId) {
+    throw new Error("Login required.");
+  }
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, role: true, salesPointId: true, isActive: true },
+  });
+  if (!actor?.isActive) throw new Error("Login required.");
+  return { session, actor };
+}
+
 function revalidateOrderPaths(id: number) {
   revalidatePath("/delivery-orders");
   revalidatePath(`/delivery-orders/${id}`);
@@ -98,6 +166,13 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
   if (!deliveryOrderNo) return null;
 
   const prisma = getPrismaClient();
+  let actor;
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch {
+    return null;
+  }
+
   const order = await prisma.deliveryOrder.findUnique({
     where: { deliveryOrderNo },
     include: {
@@ -121,6 +196,9 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
   });
 
   if (!order) return null;
+
+  const accessErr = salesPointErrorForResource(actor, order.salesPointId);
+  if (accessErr) return null;
 
   return {
     id: order.id,
@@ -170,7 +248,6 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const customerId = String(formData.get("customerId") ?? "").trim();
   const dateIssuedRaw = String(formData.get("dateIssued") ?? "").trim();
   const orderRef = String(formData.get("orderRef") ?? "").trim() || null;
-  const createdByUserId = String(formData.get("createdByUserId") ?? "").trim() || null;
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = Number.parseInt(salesPointRaw, 10);
   if (!salesPointRaw || !Number.isFinite(salesPointId)) {
@@ -178,6 +255,18 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   }
 
   if (!customerId) return { ok: false, error: "Customer is required." };
+
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ session, actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const effectiveSalesPointId = session.salesPoint?.id ?? salesPointId;
+  const spSubmitErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
+  if (spSubmitErr) return { ok: false, error: spSubmitErr };
 
   const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
   const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
@@ -218,12 +307,14 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
 
       const existing = await prisma.deliveryOrder.findUnique({
         where: { id },
-        select: { status: true, createdByUserId: true },
+        select: { status: true, createdByUserId: true, salesPointId: true },
       });
       if (!existing) return { ok: false, error: "Order not found." };
       if (existing.status === ValidationStatus.VALIDATED) {
         return { ok: false, error: "Validated delivery orders cannot be edited." };
       }
+      const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
+      if (accessErr) return { ok: false, error: accessErr };
 
       await prisma.deliveryOrder.update({
         where: { id },
@@ -231,11 +322,11 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
           customerId,
           dateIssued,
           orderRef,
-          salesPointId,
+          salesPointId: effectiveSalesPointId,
           financialYear,
           financialMonth,
           postingCalendarYear,
-          createdByUserId: existing.createdByUserId ?? createdByUserId,
+          createdByUserId: existing.createdByUserId ?? session.userId,
         },
       });
 
@@ -256,11 +347,11 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
         dateIssued,
         customerId,
         orderRef,
-        salesPointId,
+        salesPointId: effectiveSalesPointId,
         financialYear,
         financialMonth,
         postingCalendarYear,
-        createdByUserId,
+        createdByUserId: session.userId,
         status: ValidationStatus.PENDING,
       },
       select: { id: true, deliveryOrderNo: true },
@@ -280,6 +371,12 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
   if (!Number.isFinite(deliveryOrderId)) {
     return { ok: false, error: "Save the delivery order header first." };
   }
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
 
   let lines: LineInput[];
   try {
@@ -298,6 +395,8 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
       include: { customer: { include: { taxRegime: true } } },
     });
     if (!order) return { ok: false, error: "Order not found." };
+    const accessErr = salesPointErrorForResource(actor, order.salesPointId);
+    if (accessErr) return { ok: false, error: accessErr };
 
     const settings = await getOrInitCompanySettings();
     const companyVatRate = settings.vatRate;
@@ -366,6 +465,12 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
   if (!Number.isFinite(deliveryOrderId)) {
     return { ok: false, error: "Save the delivery order header first." };
   }
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
 
   let payments: PaymentInput[];
   try {
@@ -377,9 +482,11 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
   try {
     const order = await prisma.deliveryOrder.findUnique({
       where: { id: deliveryOrderId },
-      select: { id: true, dateIssued: true },
+      select: { id: true, dateIssued: true, salesPointId: true },
     });
     if (!order) return { ok: false, error: "Order not found." };
+    const accessErr = salesPointErrorForResource(actor, order.salesPointId);
+    if (accessErr) return { ok: false, error: accessErr };
 
     const dateIssued = order.dateIssued;
 
@@ -421,15 +528,27 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
   }
 }
 
-export async function deleteDeliveryOrder(formData: FormData) {
+export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSectionResult> {
   const prisma = getPrismaClient();
   const id = Number.parseInt(String(formData.get("id") ?? ""), 10);
-  if (!Number.isFinite(id)) throw new Error("Invalid delivery order.");
+  if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
 
-  const existing = await prisma.deliveryOrder.findUnique({ where: { id }, select: { status: true } });
-  if (!existing) throw new Error("Delivery order not found.");
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const existing = await prisma.deliveryOrder.findUnique({
+    where: { id },
+    select: { status: true, salesPointId: true },
+  });
+  if (!existing) return { ok: false, error: "Delivery order not found." };
+  const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
+  if (accessErr) return { ok: false, error: accessErr };
   if (existing.status === ValidationStatus.VALIDATED) {
-    throw new Error("Validated delivery orders cannot be deleted.");
+    return { ok: false, error: "Validated delivery orders cannot be deleted." };
   }
 
   await prisma.deliveryOrder.delete({ where: { id } });
@@ -437,27 +556,137 @@ export async function deleteDeliveryOrder(formData: FormData) {
   revalidatePath("/delivery-orders");
   revalidatePath(`/delivery-orders/${id}`);
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function validateDeliveryOrder(formData: FormData): Promise<SaveSectionResult> {
   const prisma = getPrismaClient();
   const id = Number.parseInt(String(formData.get("id") ?? ""), 10);
-  const validatorUserId = String(formData.get("validatorUserId") ?? "").trim();
-  const validatorRole = String(formData.get("validatorRole") ?? "").trim() as UserRole;
   if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
-  if (!validatorUserId) return { ok: false, error: "Logged-in user is required." };
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ session, actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+  const validatorRole = session.role as UserRole;
   if (!canValidateDocuments(validatorRole)) {
     return { ok: false, error: "Only authorized supervisors/managers can validate a delivery order." };
   }
 
-  const existing = await prisma.deliveryOrder.findUnique({ where: { id }, select: { status: true } });
+  const existing = await prisma.deliveryOrder.findUnique({
+    where: { id },
+    select: { status: true, salesPointId: true },
+  });
   if (!existing) return { ok: false, error: "Order not found." };
+  const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
+  if (accessErr) return { ok: false, error: accessErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
   await prisma.deliveryOrder.update({
     where: { id },
-    data: { status: ValidationStatus.VALIDATED, validatedAt: new Date(), validatedByUserId: validatorUserId },
+    data: { status: ValidationStatus.VALIDATED, validatedAt: new Date(), validatedByUserId: session.userId },
   });
   revalidateOrderPaths(id);
   return { ok: true };
+}
+
+export type DeliveryOrderPrintPayload = {
+  companyName: string;
+  department: string | null;
+  companyPhone: string | null;
+  companyAddress: string | null;
+  order: DeliveryOrderPrintModel;
+};
+
+export async function loadDeliveryOrderPrintById(
+  id: number,
+): Promise<
+  { ok: true; data: DeliveryOrderPrintPayload } | { ok: false; reason: "auth" | "missing" }
+> {
+  const prisma = getPrismaClient();
+  let actor;
+  let settings;
+  try {
+    const r = await requireActor(prisma);
+    actor = r.actor;
+    settings = await getOrInitCompanySettings();
+  } catch {
+    return { ok: false, reason: "auth" };
+  }
+
+  const order = await prisma.deliveryOrder.findUnique({
+    where: { id },
+    include: {
+      salesPoint: { select: { name: true } },
+      customer: {
+        select: {
+          name: true,
+          phone: true,
+          address: true,
+          taxpayerId: true,
+        },
+      },
+      details: {
+        orderBy: { id: "asc" },
+        include: {
+          product: {
+            select: { productName: true, productCode: true },
+          },
+        },
+      },
+      payments: { orderBy: { id: "asc" } },
+    },
+  });
+  if (!order) return { ok: false, reason: "missing" };
+
+  if (salesPointErrorForResource(actor, order.salesPointId)) {
+    return { ok: false, reason: "missing" };
+  }
+
+  const t = totalsFromDetailsForPrint(order.details);
+  const orderModel: DeliveryOrderPrintModel = {
+    deliveryOrderNo: order.deliveryOrderNo,
+    dateIssuedIso: order.dateIssued.toISOString(),
+    orderRef: order.orderRef,
+    collectionPoint: order.salesPoint.name,
+    customer: order.customer,
+    details: order.details.map((d, i) => ({
+      lineNo: i + 1,
+      productName: d.product.productName,
+      productCode: d.product.productCode,
+      orderQty: d.orderQty,
+      orderUnit: d.orderUnit,
+      unitPrice: d.unitPrice != null ? d.unitPrice.toString() : null,
+      lineSubtotalExTax: d.lineSubtotalExTax != null ? d.lineSubtotalExTax.toString() : null,
+      vatAmount: d.vatAmount != null ? d.vatAmount.toString() : null,
+      otherTaxLabel: d.otherTaxLabel,
+      otherTaxAmount: d.otherTaxAmount != null ? d.otherTaxAmount.toString() : null,
+      amount: d.amount != null ? d.amount.toString() : null,
+    })),
+    payments: order.payments.map((p) => ({
+      method: p.method,
+      paymentDateIso: p.paymentDate.toISOString(),
+      chequeNo: p.chequeNo,
+      bank: p.bank,
+      cashReceiptNo: p.cashReceiptNo,
+      receiptDateIso: p.receiptDate ? p.receiptDate.toISOString() : null,
+    })),
+    subtotalExTax: t.subtotalExTax,
+    totalVat: t.totalVat,
+    totalOtherTax: t.totalOtherTax,
+    grandTotal: t.grandTotal,
+  };
+
+  return {
+    ok: true,
+    data: {
+      companyName: settings.companyName,
+      department: settings.department ?? null,
+      companyPhone: settings.phone ?? null,
+      companyAddress: settings.address ?? null,
+      order: orderModel,
+    },
+  };
 }

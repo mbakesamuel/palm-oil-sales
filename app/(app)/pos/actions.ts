@@ -17,6 +17,12 @@ import {
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
 import { canValidateDocuments } from "@/lib/auth-roles";
+import { getServerSession } from "@/lib/auth-server";
+import {
+  salesPointErrorForResource,
+  salesPointErrorForSubmitted,
+} from "@/lib/auth-sales-point-scope";
+import type { SalePrintModel } from "@/components/SalePrint";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -35,6 +41,8 @@ type PosPaymentInput = {
 export type SaveSaleResult =
   | { ok: true; id: string; invoiceNo: string; soldAtIso: string }
   | { ok: false; error: string };
+
+export type SaleMutationResult = { ok: true } | { ok: false; error: string };
 
 export type LoadedSaleView = {
   id: string;
@@ -88,10 +96,24 @@ function money2(value: Prisma.Decimal) {
   return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
+async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
+  const session = await getServerSession();
+  if (!session?.userId) {
+    throw new Error("Login required.");
+  }
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, role: true, salesPointId: true, isActive: true },
+  });
+  if (!actor?.isActive) {
+    throw new Error("Login required.");
+  }
+  return { session, actor };
+}
+
 export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const prisma = getPrismaClient();
   const customerId = String(formData.get("customerId") ?? "");
-  const createdByUserId = String(formData.get("createdByUserId") ?? "").trim();
   const referenceNumber = String(formData.get("referenceNumber") ?? "").trim() || null;
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
@@ -117,10 +139,21 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
 
   if (!customerId) return { ok: false, error: "Customer is required." };
   if (!vehicleNumber) return { ok: false, error: "Vehicle number is required." };
-  if (!createdByUserId) return { ok: false, error: "Logged-in user is required." };
   if (salesPointRaw && !Number.isFinite(salesPointId)) {
     return { ok: false, error: "Invalid sales point." };
   }
+
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ session, actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const effectiveSalesPointId = session.salesPoint?.id ?? salesPointId;
+  const spErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
+  if (spErr) return { ok: false, error: spErr };
   if (!Array.isArray(lines) || lines.length === 0) return { ok: false, error: "Add at least one line." };
   if (!Array.isArray(payments) || payments.length === 0)
     return { ok: false, error: "Add at least one payment." };
@@ -257,9 +290,9 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       invoiceNo,
       soldAt,
       customerId: customer.id,
-      createdByUserId,
+      createdByUserId: session.userId,
       referenceNumber,
-      salesPointId,
+      salesPointId: effectiveSalesPointId,
       vehicleNumber,
       dateIssued: soldAt,
       deliveryOrderNo,
@@ -306,6 +339,13 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
   if (!invoiceNo) return null;
 
   const prisma = getPrismaClient();
+  let actor;
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch {
+    return null;
+  }
+
   const row = await prisma.sale.findUnique({
     where: { invoiceNo },
     include: {
@@ -318,6 +358,9 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     },
   });
   if (!row) return null;
+
+  const accessErr = salesPointErrorForResource(actor, row.salesPointId ?? null);
+  if (accessErr) return null;
 
   return {
     id: row.id,
@@ -375,61 +418,189 @@ export async function lookupDeliveryOrderForSale(
   if (!deliveryOrderNo) {
     return { ok: false, error: "Enter a delivery order number." };
   }
+  const prisma = getPrismaClient();
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
   const ctx = await loadDeliveryOrderControl(deliveryOrderNo);
   if (!ctx) {
     return { ok: false, error: "No delivery order with that number." };
   }
+
+  const orderSp = await prisma.deliveryOrder.findUnique({
+    where: { deliveryOrderNo },
+    select: { salesPointId: true },
+  });
+  const accessErr = salesPointErrorForResource(actor, orderSp?.salesPointId ?? null);
+  if (accessErr) {
+    return { ok: false, error: accessErr };
+  }
+
   const data = toDeliveryOrderLookupDto(ctx);
   const customerMatches =
     !selectedCustomerId || selectedCustomerId === ctx.customerId;
   return { ok: true, data: { ...data, customerMatches } };
 }
 
-export async function deleteSale(formData: FormData) {
+export async function deleteSale(formData: FormData): Promise<SaleMutationResult> {
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "").trim();
-  if (!id) throw new Error("Invalid sale.");
+  if (!id) return { ok: false, error: "Invalid sale." };
+
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
 
   const existing = await prisma.sale.findUnique({
     where: { id },
-    select: { invoiceNo: true, status: true },
+    select: { invoiceNo: true, status: true, salesPointId: true },
   });
-  if (!existing) throw new Error("Sale not found.");
+  if (!existing) return { ok: false, error: "Sale not found." };
+  const accessErr = salesPointErrorForResource(actor, existing.salesPointId ?? null);
+  if (accessErr) return { ok: false, error: accessErr };
   if (existing.status === ValidationStatus.VALIDATED) {
-    throw new Error("Validated invoices cannot be deleted.");
+    return { ok: false, error: "Validated invoices cannot be deleted." };
   }
 
   await prisma.sale.delete({ where: { id } });
   revalidatePath("/pos");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
-export async function validateSale(formData: FormData) {
+export async function validateSale(formData: FormData): Promise<SaleMutationResult> {
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "").trim();
-  const validatorUserId = String(formData.get("validatorUserId") ?? "").trim();
-  const validatorRole = String(formData.get("validatorRole") ?? "").trim() as UserRole;
-  if (!id) throw new Error("Invalid sale.");
-  if (!validatorUserId) throw new Error("Logged-in user is required.");
-  if (!canValidateDocuments(validatorRole)) {
-    throw new Error("Only authorized supervisors/managers can validate a sale.");
+  if (!id) return { ok: false, error: "Invalid sale." };
+
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    ({ session, actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
 
-  const existing = await prisma.sale.findUnique({ where: { id }, select: { status: true } });
-  if (!existing) throw new Error("Sale not found.");
-  if (existing.status === ValidationStatus.VALIDATED) return;
+  const validatorRole = session.role as UserRole;
+  if (!canValidateDocuments(validatorRole)) {
+    return { ok: false, error: "Only authorized supervisors/managers can validate a sale." };
+  }
+
+  const existing = await prisma.sale.findUnique({
+    where: { id },
+    select: { status: true, salesPointId: true },
+  });
+  if (!existing) return { ok: false, error: "Sale not found." };
+  const accessErr = salesPointErrorForResource(actor, existing.salesPointId ?? null);
+  if (accessErr) return { ok: false, error: accessErr };
+  if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
   await prisma.sale.update({
     where: { id },
     data: {
       status: ValidationStatus.VALIDATED,
       validatedAt: new Date(),
-      validatedByUserId: validatorUserId,
+      validatedByUserId: session.userId,
     },
   });
 
   revalidatePath("/pos");
   revalidatePath(`/sales/${id}`);
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
+export type SalePrintPayload = {
+  companyName: string;
+  department: string | null;
+  companyPhone: string | null;
+  companyAddress: string | null;
+  sale: SalePrintModel;
+};
+
+export async function loadSalePrintById(
+  saleId: string,
+): Promise<{ ok: true; data: SalePrintPayload } | { ok: false; reason: "auth" | "missing" }> {
+  const sid = String(saleId ?? "").trim();
+  if (!sid) return { ok: false, reason: "missing" };
+
+  const prisma = getPrismaClient();
+  let actor;
+  let settings;
+  try {
+    const r = await requireActor(prisma);
+    actor = r.actor;
+    settings = await getOrInitCompanySettings();
+  } catch {
+    return { ok: false, reason: "auth" };
+  }
+
+  const sale = await prisma.sale.findUnique({
+    where: { id: sid },
+    include: {
+      customer: {
+        select: {
+          name: true,
+          taxpayerId: true,
+          taxRegime: { select: { vatApplies: true } },
+        },
+      },
+      lines: {
+        orderBy: { id: "asc" },
+        include: { product: { include: { productCat: true } } },
+      },
+      payments: { orderBy: { id: "asc" } },
+    },
+  });
+  if (!sale) return { ok: false, reason: "missing" };
+
+  if (salesPointErrorForResource(actor, sale.salesPointId ?? null)) {
+    return { ok: false, reason: "missing" };
+  }
+
+  const saleModel: SalePrintModel = {
+    invoiceNo: sale.invoiceNo,
+    soldAtIso: sale.soldAt.toISOString(),
+    vehicleNumber: sale.vehicleNumber,
+    dateIssuedIso: (sale.dateIssued ?? sale.soldAt).toISOString(),
+    deliveryOrderNo: sale.deliveryOrderNo,
+    customerName: sale.customer.name,
+    taxpayerId: sale.customer.taxpayerId,
+    vatApplies: sale.customer.taxRegime.vatApplies,
+    lines: sale.lines.map((l, idx) => ({
+      lineNo: idx + 1,
+      productName: l.product.productName,
+      productCat: l.product.productCat.productCat,
+      qtyKg: l.qtyKg.toString(),
+      unitPricePerKg: l.unitPricePerKg.toString(),
+      lineNet: l.lineNet.toString(),
+    })),
+    netAmount: sale.netAmount.toString(),
+    vatAmount: sale.vatAmount.toString(),
+    grossAmount: sale.grossAmount.toString(),
+    payments: sale.payments.map((p) => ({
+      method: p.method,
+      amount: p.amount.toString(),
+      chequeNo: p.chequeNo ?? null,
+      paidAtIso: p.paidAt.toISOString(),
+    })),
+  };
+
+  return {
+    ok: true,
+    data: {
+      companyName: settings.companyName,
+      department: settings.department ?? null,
+      companyPhone: settings.phone ?? null,
+      companyAddress: settings.address ?? null,
+      sale: saleModel,
+    },
+  };
+}

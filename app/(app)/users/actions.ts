@@ -2,16 +2,14 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-async function assertActorIsAdmin(actorUserId: string) {
-  const prisma = getPrismaClient();
-  const actor = await prisma.user.findUnique({
-    where: { id: actorUserId },
-    select: { role: true, isActive: true },
-  });
-  if (!actor?.isActive || actor.role !== UserRole.ADMIN) {
+async function assertActorIsAdmin() {
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  if (session.role !== UserRole.ADMIN) {
     throw new Error("Only administrators can manage user accounts.");
   }
 }
@@ -37,8 +35,7 @@ function parseRole(raw: string): UserRole | null {
 
 export async function saveUser(formData: FormData) {
   const prisma = getPrismaClient();
-  const actorUserId = String(formData.get("actorUserId") ?? "").trim();
-  await assertActorIsAdmin(actorUserId);
+  await assertActorIsAdmin();
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const username = normalizeUsername(String(formData.get("username") ?? ""));
@@ -110,13 +107,14 @@ export async function saveUser(formData: FormData) {
 
 export async function setUserActive(formData: FormData) {
   const prisma = getPrismaClient();
-  const actorUserId = String(formData.get("actorUserId") ?? "").trim();
-  await assertActorIsAdmin(actorUserId);
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  await assertActorIsAdmin();
 
   const id = String(formData.get("id") ?? "").trim();
   const active = String(formData.get("active") ?? "") === "1";
   if (!id) throw new Error("Invalid user.");
-  if (id === actorUserId && !active) {
+  if (id === session.userId && !active) {
     throw new Error("You cannot deactivate your own account while signed in.");
   }
 

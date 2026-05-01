@@ -84,7 +84,6 @@ export function UsersClient(props: {
     }
     setBanner(null);
     const fd = new FormData(e.currentTarget);
-    fd.set("actorUserId", session.userId);
     const wasEdit = editingId != null;
     try {
       await saveUserAction(fd);
@@ -102,7 +101,6 @@ export function UsersClient(props: {
   async function confirmDeactivate() {
     if (!pendingDeactivate || status !== "ready" || !session?.userId) return;
     const fd = new FormData();
-    fd.set("actorUserId", session.userId);
     fd.set("id", pendingDeactivate.id);
     fd.set("active", "0");
     try {
@@ -324,7 +322,6 @@ export function UsersClient(props: {
                           e.preventDefault();
                           if (!session?.userId) return;
                           const fd = new FormData();
-                          fd.set("actorUserId", session.userId);
                           fd.set("id", u.id);
                           fd.set("active", "1");
                           try {

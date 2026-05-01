@@ -2,7 +2,9 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { createAuthSessionCookie } from "@/lib/auth-server";
 import type { AuthSalesPoint, AuthSession } from "@/lib/auth-session";
+import bcrypt from "bcryptjs";
 
 export type LoginResult =
   | { ok: true; session: AuthSession }
@@ -25,8 +27,21 @@ export async function loginWithCredentials(
   if (!user || !user.isActive) {
     return { ok: false, error: "Invalid username or password." };
   }
-  if (user.passwordPlain !== password) {
-    return { ok: false, error: "Invalid username or password." };
+
+  const hasHash = typeof user.passwordHash === "string" && user.passwordHash.length > 0;
+  if (hasHash) {
+    const ok = await bcrypt.compare(password, user.passwordHash as string);
+    if (!ok) return { ok: false, error: "Invalid username or password." };
+  } else {
+    if (!user.passwordPlain || user.passwordPlain !== password) {
+      return { ok: false, error: "Invalid username or password." };
+    }
+    // Upgrade legacy plain password to hash.
+    const nextHash = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: nextHash },
+    });
   }
 
   let salesPoint: AuthSalesPoint | null = null;
@@ -48,5 +63,6 @@ export async function loginWithCredentials(
     role: user.role,
     salesPoint,
   };
+  await createAuthSessionCookie(user.id);
   return { ok: true, session };
 }

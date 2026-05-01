@@ -7,6 +7,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/auth-display";
+import { PERMISSION_KEYS } from "@/lib/access-control-keys";
+import { getRolePermissionsAction } from "@/app/(app)/setup/permissions/actions";
 
 type NavItem = { href: string; label: string };
 
@@ -147,44 +149,85 @@ export function Sidebar(props: {
   const pathname = usePathname();
   const { status, session, signOut } = useAuth();
   const [collapsed, setCollapsed] = React.useState(false);
+  const [perm, setPerm] = React.useState<Record<string, boolean> | null>(null);
+
+  React.useEffect(() => {
+    if (status !== "ready") return;
+    if (!session?.role) return;
+    let alive = true;
+    setPerm(null);
+    void getRolePermissionsAction(session.role as unknown as any).then((m) => {
+      if (!alive) return;
+      setPerm(m as unknown as Record<string, boolean>);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [status, session?.role]);
+
+  function canRoute(href: string): boolean {
+    // If permissions haven't loaded yet, keep nav visible to avoid confusing blank sidebar.
+    if (!perm) return true;
+    const keys = PERMISSION_KEYS as readonly string[];
+    const key = `route:${href}`;
+    if (keys.includes(key)) return Boolean(perm[key]);
+    // Fallback: allow by default for unknown routes.
+    return true;
+  }
+
+  const filteredSetupNav = React.useMemo(
+    () => setupNav.filter((i) => canRoute(i.href)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setupNav, perm],
+  );
+  const filteredOpsNav = React.useMemo(
+    () => operationsNav.filter((i) => canRoute(i.href)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [operationsNav, perm],
+  );
+  const filteredReportNav = React.useMemo(
+    () => reportNav.filter((i) => canRoute(i.href)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reportNav, perm],
+  );
 
   const setupGroup: NavGroupConfig = React.useMemo(
     () => ({
       id: "setup",
-      label: "Setup",
-      items: setupNav,
+      label: "Settings",
+      items: filteredSetupNav,
       collapsedHref: "/setup",
       collapsedAbbrev: "SU",
       collapsedTitle:
         "Setup — company, users, customers, financial years, sales points, tax, products",
     }),
-    [setupNav],
+    [filteredSetupNav],
   );
 
   const operationsGroup: NavGroupConfig = React.useMemo(
     () => ({
       id: "operations",
       label: "Operations",
-      items: operationsNav,
+      items: filteredOpsNav,
       collapsedHref: "/delivery-orders",
       collapsedAbbrev: "OP",
       collapsedTitle: "Operations — delivery orders, sales",
     }),
-    [operationsNav],
+    [filteredOpsNav],
   );
 
   const reportsGroup: NavGroupConfig | null = React.useMemo(() => {
-    if (reportNav.length === 0) return null;
+    if (filteredReportNav.length === 0) return null;
     return {
       id: "reports",
       label: "Reports",
-      items: reportNav,
+      items: filteredReportNav,
       collapsedHref: "/reports",
       collapsedAbbrev: "RP",
       collapsedTitle: "Reports — printable lists",
       overview: { href: "/reports", label: "Overview" },
     };
-  }, [reportNav]);
+  }, [filteredReportNav]);
 
   React.useEffect(() => {
     try {

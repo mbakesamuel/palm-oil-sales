@@ -5,15 +5,18 @@ import { Prisma } from "@prisma/client";
 import { BrandingProvider } from "@/components/BrandingProvider";
 import { WorkingPeriodBanner } from "@/components/WorkingPeriodBanner";
 import { WorkingPeriodProvider } from "@/contexts/WorkingPeriodContext";
+import { getServerSession } from "@/lib/auth-server";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { redirect } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 
 const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
   { href: "/setup", label: "Setup" },
+  { href: "/setup/permissions", label: "Access control" },
   { href: "/users", label: "Users" },
   { href: "/customers", label: "Customers" },
   { href: "/financial-years", label: "Financial years" },
@@ -34,6 +37,9 @@ const reportNav = [
 ] as const;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const session = await getServerSession();
+  if (!session) redirect("/login");
+
   const [settings, openPeriod] = await Promise.all([
     getOrInitCompanySettings(),
     getOpenFinancialYearPeriod(),
