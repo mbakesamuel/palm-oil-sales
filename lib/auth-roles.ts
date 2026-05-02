@@ -8,7 +8,10 @@ export function roleRequiresSalesPoint(role: UserRole): boolean {
   return role === UserRole.CLERK || role === UserRole.SUPERVISOR;
 }
 
-/** Roles allowed to validate sales invoices and delivery orders (dummy ACL until real auth). */
+/**
+ * Roles allowed to validate **sales invoices** (and similar). Delivery orders use
+ * {@link canValidateDeliveryOrder} (managers only).
+ */
 export function canValidateDocuments(role: UserRole): boolean {
   return (
     role === UserRole.ADMIN ||
@@ -17,4 +20,14 @@ export function canValidateDocuments(role: UserRole): boolean {
     role === UserRole.SENIOR_SUPERVISOR ||
     role === UserRole.SUPERVISOR
   );
+}
+
+/** Draft delivery orders: created / edited / deleted while still pending. */
+export function canCreateOrEditDeliveryOrderDraft(role: UserRole): boolean {
+  return role === UserRole.SENIOR_SUPERVISOR || role === UserRole.ADMIN;
+}
+
+/** Validate a pending delivery order after a senior supervisor has prepared it. */
+export function canValidateDeliveryOrder(role: UserRole): boolean {
+  return role === UserRole.MANAGER || role === UserRole.ADMIN;
 }

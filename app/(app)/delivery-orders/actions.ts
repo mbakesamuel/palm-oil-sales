@@ -10,14 +10,17 @@ import {
 } from "@/lib/financial-year";
 import { firstDayOfCalendarMonth, noonUtcFromIsoDate } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { canValidateDocuments } from "@/lib/auth-roles";
+import {
+  canCreateOrEditDeliveryOrderDraft,
+  canValidateDeliveryOrder,
+} from "@/lib/auth-roles";
 import { getServerSession } from "@/lib/auth-server";
 import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
 import type { DeliveryOrderPrintModel } from "@/components/DeliveryOrderPrint";
-import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
+import { PaymentMethod, Prisma, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 function money2Print(value: Prisma.Decimal) {
@@ -268,6 +271,14 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const spSubmitErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
   if (spSubmitErr) return { ok: false, error: spSubmitErr };
 
+  if (!canCreateOrEditDeliveryOrderDraft(session.role)) {
+    return {
+      ok: false,
+      error:
+        "Only senior sales supervisors can create or edit delivery order drafts. Managers validate pending orders once they are ready.",
+    };
+  }
+
   const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
   const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
   const postingCMRaw = String(formData.get("postingCalendarMonth") ?? "").trim();
@@ -378,6 +389,14 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
 
+  if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
+    return {
+      ok: false,
+      error:
+        "Only senior sales supervisors can edit line items on a delivery order draft.",
+    };
+  }
+
   let lines: LineInput[];
   try {
     lines = JSON.parse(String(formData.get("lines") ?? "[]")) as LineInput[];
@@ -395,6 +414,9 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
       include: { customer: { include: { taxRegime: true } } },
     });
     if (!order) return { ok: false, error: "Order not found." };
+    if (order.status === ValidationStatus.VALIDATED) {
+      return { ok: false, error: "Validated delivery orders cannot be edited." };
+    }
     const accessErr = salesPointErrorForResource(actor, order.salesPointId);
     if (accessErr) return { ok: false, error: accessErr };
 
@@ -472,6 +494,13 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
 
+  if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
+    return {
+      ok: false,
+      error: "Only senior sales supervisors can edit payments on a delivery order draft.",
+    };
+  }
+
   let payments: PaymentInput[];
   try {
     payments = JSON.parse(String(formData.get("payments") ?? "[]")) as PaymentInput[];
@@ -482,9 +511,12 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
   try {
     const order = await prisma.deliveryOrder.findUnique({
       where: { id: deliveryOrderId },
-      select: { id: true, dateIssued: true, salesPointId: true },
+      select: { id: true, dateIssued: true, salesPointId: true, status: true },
     });
     if (!order) return { ok: false, error: "Order not found." };
+    if (order.status === ValidationStatus.VALIDATED) {
+      return { ok: false, error: "Validated delivery orders cannot be edited." };
+    }
     const accessErr = salesPointErrorForResource(actor, order.salesPointId);
     if (accessErr) return { ok: false, error: accessErr };
 
@@ -550,6 +582,12 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
   if (existing.status === ValidationStatus.VALIDATED) {
     return { ok: false, error: "Validated delivery orders cannot be deleted." };
   }
+  if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
+    return {
+      ok: false,
+      error: "Only senior sales supervisors can delete a pending delivery order.",
+    };
+  }
 
   await prisma.deliveryOrder.delete({ where: { id } });
 
@@ -570,9 +608,11 @@ export async function validateDeliveryOrder(formData: FormData): Promise<SaveSec
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-  const validatorRole = session.role as UserRole;
-  if (!canValidateDocuments(validatorRole)) {
-    return { ok: false, error: "Only authorized supervisors/managers can validate a delivery order." };
+  if (!canValidateDeliveryOrder(session.role)) {
+    return {
+      ok: false,
+      error: "Only managers can validate a delivery order.",
+    };
   }
 
   const existing = await prisma.deliveryOrder.findUnique({

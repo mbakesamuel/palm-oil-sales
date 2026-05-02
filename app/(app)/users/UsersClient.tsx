@@ -43,7 +43,10 @@ export function UsersClient(props: {
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [role, setRole] = React.useState<UserRole | "">("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
-  const [banner, setBanner] = React.useState<{ type: "error" | "ok"; text: string } | null>(null);
+  const [banner, setBanner] = React.useState<{
+    type: "error" | "ok";
+    text: string;
+  } | null>(null);
   const [pendingDeactivate, setPendingDeactivate] = React.useState<{
     id: string;
     username: string;
@@ -75,7 +78,10 @@ export function UsersClient(props: {
   async function onSaveForm(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (status !== "ready" || !session?.userId) {
-      setBanner({ type: "error", text: "You must be signed in as an administrator." });
+      setBanner({
+        type: "error",
+        text: "You must be signed in as an administrator.",
+      });
       return;
     }
     setBanner(null);
@@ -89,11 +95,17 @@ export function UsersClient(props: {
     }
     if (!editingId) {
       if (password !== confirmPassword) {
-        setBanner({ type: "error", text: "Password and confirmation do not match." });
+        setBanner({
+          type: "error",
+          text: "Password and confirmation do not match.",
+        });
         return;
       }
     } else if (password.length > 0 && password !== confirmPassword) {
-      setBanner({ type: "error", text: "Password and confirmation do not match." });
+      setBanner({
+        type: "error",
+        text: "Password and confirmation do not match.",
+      });
       return;
     }
 
@@ -101,7 +113,10 @@ export function UsersClient(props: {
     const wasEdit = editingId != null;
     try {
       await saveUserAction(fd);
-      setBanner({ type: "ok", text: wasEdit ? "User updated." : "User created." });
+      setBanner({
+        type: "ok",
+        text: wasEdit ? "User updated." : "User created.",
+      });
       reset();
       router.refresh();
     } catch (err) {
@@ -137,8 +152,9 @@ export function UsersClient(props: {
   if (!isAdmin) {
     return (
       <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200">
-        User accounts can only be managed by an <span className="font-medium">Administrator</span>.
-        Sign in as an admin user to access this page.
+        User accounts can only be managed by an{" "}
+        <span className="font-medium">Administrator</span>. Sign in as an admin
+        user to access this page.
       </div>
     );
   }
@@ -148,8 +164,9 @@ export function UsersClient(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Users</h1>
         <p className="text-sm opacity-75">
-          Create accounts with username, password, role, and (for field roles) a sales point.
-          Give each person their credentials; they sign in with username and password only.
+          Create accounts with username, password, role, and (for field roles) a
+          sales point. Give each person their credentials; they sign in with
+          username and password only.
         </p>
       </div>
 
@@ -181,7 +198,9 @@ export function UsersClient(props: {
             autoComplete="off"
             required
           />
-          <div className="text-xs opacity-70">Stored in lowercase; used only to sign in.</div>
+          <div className="text-xs opacity-70">
+            Stored in lowercase; used only to sign in.
+          </div>
         </div>
 
         <div className="grid gap-2">
@@ -196,12 +215,19 @@ export function UsersClient(props: {
             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
             required
           />
-          <div className="text-xs opacity-70">Shown on invoices and reports (e.g. full name).</div>
+          <div className="text-xs opacity-70">
+            Shown on invoices and reports (e.g. full name).
+          </div>
         </div>
 
         <div className="grid gap-2">
           <label className="text-sm font-medium" htmlFor="password">
-            Password {editingId ? <span className="font-normal opacity-70">(leave blank to keep)</span> : null}
+            Password{" "}
+            {editingId ? (
+              <span className="font-normal opacity-70">
+                (leave blank to keep)
+              </span>
+            ) : null}
           </label>
           <input
             id="password"
@@ -219,7 +245,9 @@ export function UsersClient(props: {
           <label className="text-sm font-medium" htmlFor="confirmPassword">
             Confirm password{" "}
             {editingId ? (
-              <span className="font-normal opacity-70">(required if changing password)</span>
+              <span className="font-normal opacity-70">
+                (required if changing password)
+              </span>
             ) : null}
           </label>
           <input
@@ -252,7 +280,7 @@ export function UsersClient(props: {
             }}
             required
           >
-            <option value="">Select role</option>
+            <option value="">select a role</option>
             {ROLE_OPTIONS.map((r) => (
               <option key={r} value={r}>
                 {roleLabel(r)}
@@ -278,7 +306,7 @@ export function UsersClient(props: {
                 <option value="">Add a sales point first</option>
               ) : (
                 <>
-                  <option value="">Select sales point</option>
+                  <option value="">select a sales point</option>
                   {salesPoints.map((sp) => (
                     <option key={sp.id} value={String(sp.id)}>
                       {sp.name}
@@ -290,7 +318,8 @@ export function UsersClient(props: {
           </div>
         ) : (
           <p className="text-xs opacity-70 rounded-md border border-black/10 dark:border-white/10 px-3 py-2">
-            This role is not tied to a single sales point (organization-wide access).
+            This role is not tied to a single sales point (organization-wide
+            access).
           </p>
         )}
 
@@ -333,11 +362,16 @@ export function UsersClient(props: {
                   key={u.id}
                   className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
                 >
-                  <div className="col-span-2 font-mono text-xs truncate" title={u.username}>
+                  <div
+                    className="col-span-2 font-mono text-xs truncate"
+                    title={u.username}
+                  >
                     {u.username}
                   </div>
                   <div className="col-span-2 truncate">{u.name}</div>
-                  <div className="col-span-2 opacity-90">{roleLabel(u.role)}</div>
+                  <div className="col-span-2 opacity-90">
+                    {roleLabel(u.role)}
+                  </div>
                   <div className="col-span-2 truncate text-xs opacity-80">
                     {u.salesPoint?.name ?? "—"}
                   </div>
@@ -353,7 +387,12 @@ export function UsersClient(props: {
                     {u.isActive ? (
                       <button
                         type="button"
-                        onClick={() => setPendingDeactivate({ id: u.id, username: u.username })}
+                        onClick={() =>
+                          setPendingDeactivate({
+                            id: u.id,
+                            username: u.username,
+                          })
+                        }
                         className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
                       >
                         Deactivate
@@ -369,12 +408,18 @@ export function UsersClient(props: {
                           fd.set("active", "1");
                           try {
                             await setUserActiveAction(fd);
-                            setBanner({ type: "ok", text: "User reactivated." });
+                            setBanner({
+                              type: "ok",
+                              text: "User reactivated.",
+                            });
                             router.refresh();
                           } catch (err) {
                             setBanner({
                               type: "error",
-                              text: err instanceof Error ? err.message : "Could not reactivate.",
+                              text:
+                                err instanceof Error
+                                  ? err.message
+                                  : "Could not reactivate.",
                             });
                           }
                         }}

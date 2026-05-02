@@ -6,8 +6,11 @@ import { useRouter } from "next/navigation";
 import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { canValidateDocuments } from "@/lib/auth-roles";
-import { UserRole, ValidationStatus } from "@/lib/domain";
+import {
+  canCreateOrEditDeliveryOrderDraft,
+  canValidateDeliveryOrder,
+} from "@/lib/auth-roles";
+import { ValidationStatus } from "@/lib/domain";
 import type {
   LoadedDeliveryOrderView,
   SaveHeaderResult,
@@ -406,14 +409,27 @@ export function DeliveryOrdersClient(props: {
   const section2Disabled = orderId == null;
   const section3Disabled = orderId == null;
 
+  const canDraftDO =
+    authStatus === "ready" && session
+      ? canCreateOrEditDeliveryOrderDraft(session.role)
+      : false;
+  const canValidateDO =
+    authStatus === "ready" && session ? canValidateDeliveryOrder(session.role) : false;
+  const draftFormLocked =
+    docStatus === ValidationStatus.VALIDATED || !canDraftDO;
+  const linesReadOnly =
+    section2Disabled || docStatus === ValidationStatus.VALIDATED || !canDraftDO;
+  const paymentsReadOnly =
+    section3Disabled || docStatus === ValidationStatus.VALIDATED || !canDraftDO;
+
   return (
     <div className="space-y-8">
       <div className="space-y-1">      
         <h1 className="text-2xl font-semibold">Delivery order</h1>
         <p className="text-sm opacity-75">
-          Work in three steps: save the header first, then line items (with VAT
-          and other taxes), then payments. Open a saved order anytime by
-          delivery order number.
+          Senior sales supervisors prepare drafts (header, lines, payments). Managers validate
+          pending orders. Open an order by number; clerks and supervisors can load to view or
+          print (validated orders appear on their report).
         </p>
       </div>
 
@@ -457,8 +473,13 @@ export function DeliveryOrdersClient(props: {
           </button>
           <button
             type="button"
+            disabled={
+              authStatus !== "ready" ||
+              !session ||
+              !canCreateOrEditDeliveryOrderDraft(session.role)
+            }
             onClick={resetNew}
-            className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+            className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
           >
             New blank order
           </button>
@@ -592,6 +613,7 @@ export function DeliveryOrdersClient(props: {
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
                     required
+                    disabled={draftFormLocked}
                   >
                     <option value="" disabled>
                       Select Customer
@@ -618,7 +640,7 @@ export function DeliveryOrdersClient(props: {
                     min={dateIssuedBounds?.minIso}
                     max={dateIssuedBounds?.maxIso}
                     onChange={(e) => setDateIssued(e.target.value)}
-                    disabled={wp.openFinancialYear == null}
+                    disabled={draftFormLocked || wp.openFinancialYear == null}
                   />
                 </div>
               </div>
@@ -650,6 +672,7 @@ export function DeliveryOrdersClient(props: {
                     value={orderRef}
                     onChange={(e) => setOrderRef(e.target.value)}
                     placeholder="PO / contract ref"
+                    disabled={draftFormLocked}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -679,9 +702,7 @@ export function DeliveryOrdersClient(props: {
                       value={salesPointId}
                       onChange={(e) => setSalesPointId(e.target.value)}
                       required
-                      disabled={
-                        orderId != null && docStatus === ValidationStatus.VALIDATED
-                      }
+                      disabled={draftFormLocked}
                     >
                       <option value="" disabled>
                         Select collection point
@@ -700,7 +721,7 @@ export function DeliveryOrdersClient(props: {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                disabled={busy !== null}
+                disabled={busy !== null || draftFormLocked}
                 onClick={() => void onSaveHeader()}
                 className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
@@ -713,7 +734,7 @@ export function DeliveryOrdersClient(props: {
               {orderId != null &&
               docStatus === ValidationStatus.PENDING &&
               session &&
-              canValidateDocuments(session.role) ? (
+              canValidateDO ? (
                 <button
                   type="button"
                   disabled={busy !== null}
@@ -723,7 +744,9 @@ export function DeliveryOrdersClient(props: {
                   {busy === "validate" ? "Validating…" : "Validate"}
                 </button>
               ) : null}
-              {orderId != null ? (
+              {orderId != null &&
+              docStatus === ValidationStatus.PENDING &&
+              canDraftDO ? (
                 <button
                   type="button"
                   disabled={busy !== null}
@@ -767,7 +790,7 @@ export function DeliveryOrdersClient(props: {
               <h3 className="text-base font-semibold">Lines</h3>
               <button
                 type="button"
-                disabled={section2Disabled}
+                disabled={linesReadOnly}
                 className="text-sm underline underline-offset-4 disabled:opacity-40"
                 onClick={() => setLines((prev) => [...prev, emptyLine()])}
               >
@@ -802,6 +825,7 @@ export function DeliveryOrdersClient(props: {
                         <select
                           className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-sm"
                           value={l.productId}
+                          disabled={linesReadOnly}
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
@@ -822,6 +846,7 @@ export function DeliveryOrdersClient(props: {
                           className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
                           inputMode="numeric"
                           value={l.orderQty}
+                          disabled={linesReadOnly}
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
@@ -835,6 +860,7 @@ export function DeliveryOrdersClient(props: {
                         <input
                           className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
                           value={l.orderUnit}
+                          disabled={linesReadOnly}
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
@@ -850,6 +876,7 @@ export function DeliveryOrdersClient(props: {
                           inputMode="decimal"
                           value={l.unitPrice}
                           placeholder="XAF"
+                          disabled={linesReadOnly}
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
@@ -867,7 +894,7 @@ export function DeliveryOrdersClient(props: {
                           type="button"
                           className="text-xs underline underline-offset-4 opacity-80"
                           onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
-                          disabled={lines.length === 1}
+                          disabled={linesReadOnly || lines.length === 1}
                         >
                           Remove
                         </button>
@@ -886,6 +913,7 @@ export function DeliveryOrdersClient(props: {
                           className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs"
                           placeholder="Other tax label"
                           value={l.otherTaxLabel}
+                          disabled={linesReadOnly}
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
@@ -899,6 +927,7 @@ export function DeliveryOrdersClient(props: {
                           inputMode="decimal"
                           placeholder="Other tax amount (XAF)"
                           value={l.otherTaxAmount}
+                          disabled={linesReadOnly}
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
@@ -947,7 +976,7 @@ export function DeliveryOrdersClient(props: {
 
             <button
               type="button"
-              disabled={section2Disabled || busy !== null}
+              disabled={linesReadOnly || busy !== null}
               onClick={() => void onSaveLines()}
               className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
@@ -980,7 +1009,7 @@ export function DeliveryOrdersClient(props: {
               <h3 className="text-base font-semibold">Payment rows</h3>
               <button
                 type="button"
-                disabled={section3Disabled}
+                disabled={paymentsReadOnly}
                 className="text-sm underline underline-offset-4 disabled:opacity-40"
                 onClick={() =>
                   setPayments((prev) => [
@@ -1022,6 +1051,7 @@ export function DeliveryOrdersClient(props: {
                             name={`do-payment-method-${idx}`}
                             value="CASH"
                             checked={p.method === "CASH"}
+                            disabled={paymentsReadOnly}
                             onChange={() =>
                               setPayments((prev) =>
                                 prev.map((x, i) =>
@@ -1045,6 +1075,7 @@ export function DeliveryOrdersClient(props: {
                             name={`do-payment-method-${idx}`}
                             value="CHEQUE"
                             checked={p.method === "CHEQUE"}
+                            disabled={paymentsReadOnly}
                             onChange={() =>
                               setPayments((prev) =>
                                 prev.map((x, i) =>
@@ -1071,6 +1102,7 @@ export function DeliveryOrdersClient(props: {
                         type="date"
                         className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
                         value={p.paymentDate}
+                        disabled={paymentsReadOnly}
                         onChange={(e) =>
                           setPayments((prev) =>
                             prev.map((x, i) =>
@@ -1092,6 +1124,7 @@ export function DeliveryOrdersClient(props: {
                             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
                             placeholder="Cheque no."
                             value={p.chequeNo}
+                            disabled={paymentsReadOnly}
                             onChange={(e) =>
                               setPayments((prev) =>
                                 prev.map((x, i) =>
@@ -1106,6 +1139,7 @@ export function DeliveryOrdersClient(props: {
                             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
                             placeholder="Bank"
                             value={p.bank}
+                            disabled={paymentsReadOnly}
                             onChange={(e) =>
                               setPayments((prev) =>
                                 prev.map((x, i) =>
@@ -1120,6 +1154,7 @@ export function DeliveryOrdersClient(props: {
                           className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
                           placeholder="CDC receipt no."
                           value={p.cashReceiptNo}
+                          disabled={paymentsReadOnly}
                           onChange={(e) =>
                             setPayments((prev) =>
                               prev.map((x, i) =>
@@ -1135,7 +1170,8 @@ export function DeliveryOrdersClient(props: {
                     <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
                       <button
                         type="button"
-                        className="text-xs underline underline-offset-4"
+                        className="text-xs underline underline-offset-4 disabled:opacity-40"
+                        disabled={paymentsReadOnly}
                         onClick={() =>
                           setPayments((prev) =>
                             prev.filter((_, i) => i !== idx),
@@ -1152,7 +1188,7 @@ export function DeliveryOrdersClient(props: {
 
             <button
               type="button"
-              disabled={section3Disabled || busy !== null}
+              disabled={paymentsReadOnly || busy !== null}
               onClick={() => void onSavePayments()}
               className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
