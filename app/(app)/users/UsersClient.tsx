@@ -41,7 +41,7 @@ export function UsersClient(props: {
   const [name, setName] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [role, setRole] = React.useState<UserRole>(UserRole.CLERK);
+  const [role, setRole] = React.useState<UserRole | "">("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [banner, setBanner] = React.useState<{ type: "error" | "ok"; text: string } | null>(null);
   const [pendingDeactivate, setPendingDeactivate] = React.useState<{
@@ -57,8 +57,8 @@ export function UsersClient(props: {
     setName("");
     setPassword("");
     setConfirmPassword("");
-    setRole(UserRole.CLERK);
-    setSalesPointId(salesPoints[0] ? String(salesPoints[0].id) : "");
+    setRole("");
+    setSalesPointId("");
     setBanner(null);
   }
 
@@ -72,12 +72,6 @@ export function UsersClient(props: {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  React.useEffect(() => {
-    if (salesPoints.length > 0 && !salesPointId) {
-      setSalesPointId(String(salesPoints[0].id));
-    }
-  }, [salesPoints, salesPointId]);
-
   async function onSaveForm(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (status !== "ready" || !session?.userId) {
@@ -85,6 +79,14 @@ export function UsersClient(props: {
       return;
     }
     setBanner(null);
+    if (!role) {
+      setBanner({ type: "error", text: "Please select a role." });
+      return;
+    }
+    if (roleRequiresSalesPoint(role) && !salesPointId) {
+      setBanner({ type: "error", text: "Please select a sales point." });
+      return;
+    }
     if (!editingId) {
       if (password !== confirmPassword) {
         setBanner({ type: "error", text: "Password and confirmation do not match." });
@@ -241,9 +243,16 @@ export function UsersClient(props: {
             name="role"
             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
             value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setRole(v === "" ? "" : (v as UserRole));
+              if (v !== UserRole.CLERK && v !== UserRole.SUPERVISOR) {
+                setSalesPointId("");
+              }
+            }}
             required
           >
+            <option value="">Select role</option>
             {ROLE_OPTIONS.map((r) => (
               <option key={r} value={r}>
                 {roleLabel(r)}
@@ -252,7 +261,7 @@ export function UsersClient(props: {
           </select>
         </div>
 
-        {roleRequiresSalesPoint(role) ? (
+        {role !== "" && roleRequiresSalesPoint(role) ? (
           <div className="grid gap-2">
             <label className="text-sm font-medium" htmlFor="salesPointId">
               Sales point
@@ -268,11 +277,14 @@ export function UsersClient(props: {
               {salesPoints.length === 0 ? (
                 <option value="">Add a sales point first</option>
               ) : (
-                salesPoints.map((sp) => (
-                  <option key={sp.id} value={String(sp.id)}>
-                    {sp.name}
-                  </option>
-                ))
+                <>
+                  <option value="">Select sales point</option>
+                  {salesPoints.map((sp) => (
+                    <option key={sp.id} value={String(sp.id)}>
+                      {sp.name}
+                    </option>
+                  ))}
+                </>
               )}
             </select>
           </div>
