@@ -33,6 +33,28 @@ export default function ReportsIndexPage() {
             <div className="text-sm opacity-75">Recent delivery orders with line totals and fiscal period.</div>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/reports/delivery-order-monitor"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Delivery order monitor</div>
+            <div className="text-sm opacity-75">
+              Look up by DO number: header, sales history, quantities and amounts vs invoiced.
+            </div>
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/reports/customer-delivery-monitor"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Delivery orders by customer</div>
+            <div className="text-sm opacity-75">
+              All delivery orders for a customer with lines, sales, and complete / incomplete status.
+            </div>
+          </Link>
+        </li>
       </ul>
     </div>
   );

@@ -18,6 +18,8 @@ export const PERMISSION_KEYS = [
   "route:/pos",
   "route:/reports/sales",
   "route:/reports/delivery-orders",
+  "route:/reports/delivery-order-monitor",
+  "route:/reports/customer-delivery-monitor",
   "ui:validate-documents",
   "ui:manage-access-control",
 ] as const;

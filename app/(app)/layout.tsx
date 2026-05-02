@@ -34,6 +34,8 @@ const operationsNav = [
 const reportNav = [
   { href: "/reports/sales", label: "Sales register" },
   { href: "/reports/delivery-orders", label: "Delivery orders" },
+  { href: "/reports/delivery-order-monitor", label: "DO monitor" },
+  { href: "/reports/customer-delivery-monitor", label: "DO by customer" },
 ] as const;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
