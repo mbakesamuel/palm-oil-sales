@@ -1,12 +1,36 @@
 "use server";
 
 import { CredentialsSignin } from "next-auth";
-import { auth, signIn } from "@/auth";
+import { signIn } from "@/auth";
 import type { AuthSession } from "@/lib/auth-session";
+import type { UserRole } from "@/lib/domain";
+import { getPrismaClient } from "@/lib/prisma";
 
 export type LoginResult =
   | { ok: true; session: AuthSession }
   | { ok: false; error: string };
+
+/**
+ * After `signIn()`, `auth()` in the same server-action request often still sees the
+ * pre-login cookies. Load the session from the DB instead (credentials were already verified).
+ */
+async function loadAuthSessionByUsername(username: string): Promise<AuthSession | null> {
+  const prisma = getPrismaClient();
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { salesPoint: { select: { id: true, name: true } } },
+  });
+  if (!user?.isActive) return null;
+  const salesPoint =
+    user.salesPoint != null ? { id: user.salesPoint.id, name: user.salesPoint.name } : null;
+  return {
+    userId: user.id,
+    username: user.username,
+    displayName: user.name,
+    role: user.role as UserRole,
+    salesPoint,
+  };
+}
 
 export async function loginWithCredentials(
   usernameRaw: string,
@@ -30,8 +54,8 @@ export async function loginWithCredentials(
     throw e;
   }
 
-  const session = await auth();
-  if (!session?.userId) {
+  const session = await loadAuthSessionByUsername(username);
+  if (!session) {
     return {
       ok: false,
       error:
@@ -39,14 +63,5 @@ export async function loginWithCredentials(
     };
   }
 
-  return {
-    ok: true,
-    session: {
-      userId: session.userId,
-      username: session.username,
-      displayName: session.displayName,
-      role: session.role,
-      salesPoint: session.salesPoint,
-    },
-  };
+  return { ok: true, session };
 }
