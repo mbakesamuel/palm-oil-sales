@@ -24,6 +24,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/delivery-orders"] = true;
   base["route:/reports/delivery-order-monitor"] = true;
   base["route:/reports/customer-delivery-monitor"] = true;
+  base["route:/reports/do-commitment-crosstab"] = true;
 
   // Validation buttons visible to supervisors and above (still server-enforced elsewhere).
   base["ui:validate-documents"] =
