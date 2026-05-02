@@ -19,6 +19,14 @@ function parseFiscalYearStartMonth(raw: string): number | null {
 export async function saveCompanySettings(formData: FormData) {
   const prisma = getPrismaClient();
   const companyName = String(formData.get("companyName") ?? "").trim();
+  const logoUrlRaw = String(formData.get("logoUrl") ?? "").trim();
+  const logoUrl =
+    logoUrlRaw &&
+    (logoUrlRaw.startsWith("/") ||
+      logoUrlRaw.startsWith("https://") ||
+      logoUrlRaw.startsWith("http://"))
+      ? logoUrlRaw
+      : null;
   const department = String(formData.get("department") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const address = String(formData.get("address") ?? "").trim() || null;
@@ -45,6 +53,7 @@ export async function saveCompanySettings(formData: FormData) {
     create: {
       id: "default",
       companyName,
+      logoUrl,
       department,
       phone,
       address,
@@ -54,6 +63,7 @@ export async function saveCompanySettings(formData: FormData) {
     },
     update: {
       companyName,
+      logoUrl,
       department,
       phone,
       address,

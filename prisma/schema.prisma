@@ -73,6 +73,8 @@ model FinancialYearPeriod {
 model CompanySettings {
   id            String   @id @default("default")
   companyName   String
+  /// Public path (e.g. `/logo.png`) or absolute image URL for branding.
+  logoUrl       String?
   department    String?
   phone         String?
   address       String?

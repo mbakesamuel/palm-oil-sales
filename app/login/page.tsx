@@ -9,11 +9,7 @@ export default async function LoginPage() {
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-10">
-      <LoginForm
-        companyName={settings.companyName}
-        department={settings.department}
-        showDevTestHint={process.env.NODE_ENV === "development"}
-      />
+      <LoginForm companyName={settings.companyName} department={settings.department} />
     </div>
   );
 }

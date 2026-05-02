@@ -40,6 +40,7 @@ export function UsersClient(props: {
   const [username, setUsername] = React.useState("");
   const [name, setName] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
   const [role, setRole] = React.useState<UserRole>(UserRole.CLERK);
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [banner, setBanner] = React.useState<{ type: "error" | "ok"; text: string } | null>(null);
@@ -55,6 +56,7 @@ export function UsersClient(props: {
     setUsername("");
     setName("");
     setPassword("");
+    setConfirmPassword("");
     setRole(UserRole.CLERK);
     setSalesPointId(salesPoints[0] ? String(salesPoints[0].id) : "");
     setBanner(null);
@@ -83,6 +85,16 @@ export function UsersClient(props: {
       return;
     }
     setBanner(null);
+    if (!editingId) {
+      if (password !== confirmPassword) {
+        setBanner({ type: "error", text: "Password and confirmation do not match." });
+        return;
+      }
+    } else if (password.length > 0 && password !== confirmPassword) {
+      setBanner({ type: "error", text: "Password and confirmation do not match." });
+      return;
+    }
+
     const fd = new FormData(e.currentTarget);
     const wasEdit = editingId != null;
     try {
@@ -198,6 +210,25 @@ export function UsersClient(props: {
             className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
             autoComplete="new-password"
             required={!editingId}
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <label className="text-sm font-medium" htmlFor="confirmPassword">
+            Confirm password{" "}
+            {editingId ? (
+              <span className="font-normal opacity-70">(required if changing password)</span>
+            ) : null}
+          </label>
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            autoComplete="new-password"
+            required={!editingId || password.length > 0}
           />
         </div>
 

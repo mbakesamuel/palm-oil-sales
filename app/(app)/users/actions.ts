@@ -41,6 +41,7 @@ export async function saveUser(formData: FormData) {
   const username = normalizeUsername(String(formData.get("username") ?? ""));
   const name = String(formData.get("name") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
   const role = parseRole(String(formData.get("role") ?? ""));
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
@@ -87,6 +88,9 @@ export async function saveUser(formData: FormData) {
     }
   } else {
     if (!password) throw new Error("Password is required for new users.");
+    if (password !== confirmPassword) {
+      throw new Error("Password and confirmation do not match.");
+    }
     const exists = await prisma.user.findUnique({ where: { username }, select: { id: true } });
     if (exists) throw new Error("That username is already taken.");
     await prisma.user.create({

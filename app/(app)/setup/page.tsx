@@ -41,6 +41,23 @@ export default async function SetupPage() {
         </div>
 
         <div className="grid gap-2">
+          <label className="text-sm font-medium" htmlFor="logoUrl">
+            Logo URL (optional)
+          </label>
+          <input
+            id="logoUrl"
+            name="logoUrl"
+            defaultValue={settings.logoUrl ?? ""}
+            placeholder="e.g. /cdc-logo-svg.svg or https://…"
+            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+          />
+          <div className="text-xs opacity-70">
+            Use a path to a file in <span className="font-mono">public</span> (starts with{" "}
+            <span className="font-mono">/</span>) or a direct image URL. Leave blank for text only.
+          </div>
+        </div>
+
+        <div className="grid gap-2">
           <label className="text-sm font-medium" htmlFor="department">
             Department (optional)
           </label>
