@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ReportSignatory } from "@/components/ReportSignatory";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,6 +69,8 @@ export default function ReportsIndexPage() {
           </Link>
         </li>
       </ul>
+
+      <ReportSignatory />
     </div>
   );
 }

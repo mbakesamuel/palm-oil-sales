@@ -2,6 +2,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
+import { ReportSignatory } from "@/components/ReportSignatory";
 import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -128,6 +129,8 @@ export default async function SalesReportPage() {
       {sales.length === 0 ? (
         <p className="text-sm opacity-75">No sales recorded yet.</p>
       ) : null}
+
+      <ReportSignatory />
     </div>
   );
 }

@@ -337,25 +337,6 @@ export function Sidebar(props: {
             </button>
           </div>
         ) : null}
-        <Link
-          href="/"
-          className={[
-            "text-sm underline underline-offset-4 opacity-80",
-            collapsed ? "lg:hidden" : "",
-          ].join(" ")}
-        >
-          Back to welcome
-        </Link>
-        <Link
-          href="/"
-          className={[
-            "hidden lg:inline text-xs underline underline-offset-4 opacity-80",
-            collapsed ? "" : "lg:hidden",
-          ].join(" ")}
-          title="Back to welcome"
-        >
-          Back
-        </Link>
       </div>
     </aside>
   );

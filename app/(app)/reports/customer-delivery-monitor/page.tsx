@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
+import { ReportSignatory } from "@/components/ReportSignatory";
 import { Prisma, ValidationStatus } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
@@ -83,6 +84,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
           Your role is tied to a sales point, but none is assigned. Ask an
           administrator.
         </div>
+        <ReportSignatory />
       </div>
     );
   }
@@ -764,6 +766,8 @@ export default async function CustomerDeliveryMonitorPage(props: {
           )}
         </>
       ) : null}
+
+      <ReportSignatory />
     </div>
   );
 }
