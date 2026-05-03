@@ -52,5 +52,6 @@ export async function deleteSalesPoint(formData: FormData) {
   revalidatePath("/storage-locations");
   revalidatePath("/stock/receive");
   revalidatePath("/reports/stock-on-hand");
+  revalidatePath("/reports/stock-vs-commitments");
 }
 

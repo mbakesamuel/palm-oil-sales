@@ -162,6 +162,11 @@ function revalidateOrderPaths(id: number) {
   revalidatePath("/delivery-orders");
   revalidatePath(`/delivery-orders/${id}`);
   revalidatePath("/dashboard");
+  revalidatePath("/reports/stock-vs-commitments");
+  revalidatePath("/reports/do-commitment-crosstab");
+  revalidatePath("/reports/customer-delivery-monitor");
+  revalidatePath("/reports/delivery-orders");
+  revalidatePath("/reports/delivery-order-monitor");
 }
 
 export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDeliveryOrderView | null> {
@@ -591,9 +596,7 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
 
   await prisma.deliveryOrder.delete({ where: { id } });
 
-  revalidatePath("/delivery-orders");
-  revalidatePath(`/delivery-orders/${id}`);
-  revalidatePath("/dashboard");
+  revalidateOrderPaths(id);
   return { ok: true };
 }
 

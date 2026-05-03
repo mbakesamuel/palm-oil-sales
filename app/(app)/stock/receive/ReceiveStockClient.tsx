@@ -191,16 +191,19 @@ export function ReceiveStockClient(props: {
             className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
             required={locsForSp.length > 0}
             disabled={locsForSp.length === 0}
-            defaultValue={draft?.storageLocationId}
+            defaultValue={draft ? draft.storageLocationId : ""}
           >
             {locsForSp.length === 0 ? (
               <option value="">No locations for this sales point</option>
             ) : (
-              locsForSp.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name}
-                </option>
-              ))
+              <>
+                <option value="">Select storage location</option>
+                {locsForSp.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </option>
+                ))}
+              </>
             )}
           </select>
           {locsForSp.length === 0 ? (

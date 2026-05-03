@@ -75,7 +75,20 @@ export default function ReportsIndexPage() {
           >
             <div className="font-medium">Stock on hand</div>
             <div className="text-sm opacity-75">
-              Remaining kg by sales point and product (from recorded receipts and validated sales).
+              Remaining kg by storage location and product (crosstab); consolidated grade summary when
+              applicable.
+            </div>
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/reports/stock-vs-commitments"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Stock vs commitments</div>
+            <div className="text-sm opacity-75">
+              By product: physical stock vs outstanding validated delivery order quantity (ordered minus
+              invoiced) per collection point, with balance.
             </div>
           </Link>
         </li>

@@ -2,6 +2,10 @@ import "server-only";
 
 import { FinancialYearStatus } from "@prisma/client";
 import { getPrismaClient } from "@/lib/prisma";
+import { prismaRetry } from "@/lib/prisma-retry";
+
+/** Same tuning as company settings — Neon cold start / pooler blips. */
+const OPEN_FY_DB_RETRY = { retries: 5, baseDelayMs: 400 } as const;
 import {
   assertIsoDateWithinWorkingCalendarMonth,
   isCalendarMonthFullyInsideFy,
@@ -17,10 +21,14 @@ export type OpenFinancialYearForPosting = {
 
 export async function getOpenFinancialYearPeriod() {
   const prisma = getPrismaClient();
-  return prisma.financialYearPeriod.findFirst({
-    where: { status: FinancialYearStatus.OPEN },
-    orderBy: { financialYear: "desc" },
-  });
+  return prismaRetry(
+    () =>
+      prisma.financialYearPeriod.findFirst({
+        where: { status: FinancialYearStatus.OPEN },
+        orderBy: { financialYear: "desc" },
+      }),
+    OPEN_FY_DB_RETRY,
+  );
 }
 
 export function toOpenFinancialYearForPosting(row: {

@@ -40,6 +40,7 @@ const reportNav = [
   { href: "/reports/customer-delivery-monitor", label: "DO by customer" },
   { href: "/reports/do-commitment-crosstab", label: "DO commitments grid" },
   { href: "/reports/stock-on-hand", label: "Stock on hand" },
+  { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
 ] as const;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {

@@ -122,6 +122,7 @@ export async function receiveStock(formData: FormData): Promise<ReceiveStockResu
 
   revalidatePath("/stock/receive");
   revalidatePath("/reports/stock-on-hand");
+  revalidatePath("/reports/stock-vs-commitments");
   revalidatePath("/storage-locations");
   return { ok: true };
 }
@@ -250,6 +251,7 @@ export async function updateReceivedBatch(formData: FormData): Promise<ReceiveSt
 
   revalidatePath("/stock/receive");
   revalidatePath("/reports/stock-on-hand");
+  revalidatePath("/reports/stock-vs-commitments");
   revalidatePath("/storage-locations");
   return { ok: true };
 }
@@ -292,6 +294,7 @@ export async function deleteReceivedBatch(formData: FormData): Promise<ReceiveSt
 
   revalidatePath("/stock/receive");
   revalidatePath("/reports/stock-on-hand");
+  revalidatePath("/reports/stock-vs-commitments");
   revalidatePath("/storage-locations");
   return { ok: true };
 }

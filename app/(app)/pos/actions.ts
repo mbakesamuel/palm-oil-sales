@@ -544,6 +544,7 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   revalidatePath(`/sales/${id}`);
   revalidatePath("/dashboard");
   revalidatePath("/reports/stock-on-hand");
+  revalidatePath("/reports/stock-vs-commitments");
   return { ok: true };
 }
 

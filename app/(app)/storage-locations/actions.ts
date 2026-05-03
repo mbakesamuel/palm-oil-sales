@@ -85,6 +85,7 @@ export async function saveStorageLocation(formData: FormData) {
     revalidatePath("/storage-locations");
     revalidatePath("/stock/receive");
     revalidatePath("/reports/stock-on-hand");
+    revalidatePath("/reports/stock-vs-commitments");
   } catch (e) {
     rethrowAsFriendlyDbError(e);
   }
@@ -123,6 +124,7 @@ export async function deleteStorageLocation(formData: FormData) {
     revalidatePath("/storage-locations");
     revalidatePath("/stock/receive");
     revalidatePath("/reports/stock-on-hand");
+    revalidatePath("/reports/stock-vs-commitments");
   } catch (e) {
     rethrowAsFriendlyDbError(e);
   }
