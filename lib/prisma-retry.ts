@@ -7,7 +7,13 @@ function sleep(ms: number) {
 }
 
 function isTransientDbNetworkError(e: unknown): boolean {
-  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P1001") {
+  if (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.code === "P1001" ||
+      e.code === "ETIMEDOUT" ||
+      e.code === "EAI_AGAIN" ||
+      e.code === "ENOTFOUND")
+  ) {
     return true;
   }
   const msg = e instanceof Error ? e.message : String(e ?? "");

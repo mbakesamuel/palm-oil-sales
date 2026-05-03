@@ -21,6 +21,7 @@ const setupNav = [
   { href: "/customers", label: "Customers" },
   { href: "/financial-years", label: "Financial years" },
   { href: "/sales-points", label: "Sales points" },
+  { href: "/storage-locations", label: "Storage locations" },
   { href: "/tax-regimes", label: "Tax regimes" },
   { href: "/product-categories", label: "Product categories" },
   { href: "/products", label: "Products" },
@@ -29,6 +30,7 @@ const setupNav = [
 const operationsNav = [
   { href: "/delivery-orders", label: "Delivery orders" },
   { href: "/pos", label: "Sales" },
+  { href: "/stock/receive", label: "Receive stock" },
 ] as const;
 
 const reportNav = [
@@ -37,6 +39,7 @@ const reportNav = [
   { href: "/reports/delivery-order-monitor", label: "DO monitor" },
   { href: "/reports/customer-delivery-monitor", label: "DO by customer" },
   { href: "/reports/do-commitment-crosstab", label: "DO commitments grid" },
+  { href: "/reports/stock-on-hand", label: "Stock on hand" },
 ] as const;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {

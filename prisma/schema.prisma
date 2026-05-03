@@ -198,20 +198,56 @@ model ProductCat {
 }
 
 model Batch {
-  id             String   @id @default(cuid())
-  productId      Int
-  receivedAt     DateTime @default(now())
-  costPerKg      Decimal  @db.Decimal(12, 2)
-  qtyReceivedKg  Decimal  @db.Decimal(14, 3)
-  qtyRemainingKg Decimal  @db.Decimal(14, 3)
-  note           String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  salesPointId        Int
+  salesPoint          SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  storageLocationId   Int
+  storageLocation     StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  productId           Int
+  receivedAt          DateTime @default(now())
+  costPerKg           Decimal  @db.Decimal(12, 2)
+  qtyReceivedKg       Decimal  @db.Decimal(14, 3)
+  qtyRemainingKg      Decimal  @db.Decimal(14, 3)
+  note                String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-   product Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  product               Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  saleLineAllocations SaleLineBatchAllocation[]
 
-
+  @@index([salesPointId, storageLocationId, productId, receivedAt])
+  @@index([salesPointId, productId, receivedAt])
   @@index([productId, receivedAt])
+}
+
+/// Physical storage at a collection point (e.g. production tanks).
+model StorageLocation {
+  id           Int        @id @default(autoincrement())
+  salesPointId Int
+  salesPoint   SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  batches      Batch[]
+
+  @@unique([salesPointId, name])
+  @@index([salesPointId])
+  @@map("StorageLocation")
+}
+
+/// Audit trail: which batch quantities were consumed when a sale line was validated.
+model SaleLineBatchAllocation {
+  id         String   @id @default(cuid())
+  saleLineId String
+  batchId    String
+  qtyKg      Decimal  @db.Decimal(14, 3)
+
+  saleLine SaleLine @relation(fields: [saleLineId], references: [id], onDelete: Cascade)
+  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@unique([saleLineId, batchId])
+  @@index([batchId])
+  @@map("SaleLineBatchAllocation")
 }
 
 model Sale {
@@ -270,8 +306,9 @@ model SaleLine {
   lineVat         Decimal  @db.Decimal(14, 2)
   lineGross       Decimal  @db.Decimal(14, 2)
 
-  sale  Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  sale                 Sale                       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product              Product                    @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  batchAllocations     SaleLineBatchAllocation[]
 
   @@index([saleId])
   @@index([productId])
@@ -296,9 +333,11 @@ model SalesPoint {
   id   Int    @id @default(autoincrement())
   name String
 
-  users          User[]
-  deliveryOrders DeliveryOrder[]
-  sales Sale[]
+  users              User[]
+  deliveryOrders     DeliveryOrder[]
+  sales              Sale[]
+  batches            Batch[]
+  storageLocations   StorageLocation[]
 
   @@map("SalesPoint") // maps to the actual Derby table name
 }

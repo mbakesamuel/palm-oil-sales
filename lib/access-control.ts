@@ -18,6 +18,9 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/dashboard"] = true;
   base["route:/delivery-orders"] = true;
   base["route:/pos"] = true;
+  base["route:/stock/receive"] = true;
+  // Operational: same users who receive stock need tank/location setup in the sidebar.
+  base["route:/storage-locations"] = true;
 
   // Reports default on.
   base["route:/reports/sales"] = true;
@@ -25,6 +28,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/delivery-order-monitor"] = true;
   base["route:/reports/customer-delivery-monitor"] = true;
   base["route:/reports/do-commitment-crosstab"] = true;
+  base["route:/reports/stock-on-hand"] = true;
 
   // Validation buttons visible to supervisors and above (still server-enforced elsewhere).
   base["ui:validate-documents"] =

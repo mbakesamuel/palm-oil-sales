@@ -22,6 +22,7 @@ import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
+import { applyFefoStockDeduction, StockInsufficientError } from "@/lib/stock-fefo";
 import type { SalePrintModel } from "@/components/SalePrint";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -502,18 +503,47 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   if (accessErr) return { ok: false, error: accessErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
-  await prisma.sale.update({
-    where: { id },
-    data: {
-      status: ValidationStatus.VALIDATED,
-      validatedAt: new Date(),
-      validatedByUserId: session.userId,
-    },
-  });
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const sale = await tx.sale.findUnique({
+          where: { id },
+          include: {
+            lines: {
+              include: { product: { select: { productName: true } } },
+            },
+          },
+        });
+        if (!sale) throw new Error("Sale not found.");
+        if (sale.status === ValidationStatus.VALIDATED) return;
+        if (sale.salesPointId == null) {
+          throw new StockInsufficientError(
+            "Cannot validate: this invoice has no sales point. Stock is tracked per collection point.",
+          );
+        }
+        await applyFefoStockDeduction(tx, sale.salesPointId, sale.lines);
+        await tx.sale.update({
+          where: { id },
+          data: {
+            status: ValidationStatus.VALIDATED,
+            validatedAt: new Date(),
+            validatedByUserId: session.userId,
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  } catch (e) {
+    if (e instanceof StockInsufficientError) {
+      return { ok: false, error: e.message };
+    }
+    throw e;
+  }
 
   revalidatePath("/pos");
   revalidatePath(`/sales/${id}`);
   revalidatePath("/dashboard");
+  revalidatePath("/reports/stock-on-hand");
   return { ok: true };
 }
 

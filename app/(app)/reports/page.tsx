@@ -68,6 +68,17 @@ export default function ReportsIndexPage() {
             </div>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/reports/stock-on-hand"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Stock on hand</div>
+            <div className="text-sm opacity-75">
+              Remaining kg by sales point and product (from recorded receipts and validated sales).
+            </div>
+          </Link>
+        </li>
       </ul>
 
       <ReportSignatory />

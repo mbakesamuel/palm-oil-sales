@@ -1,8 +1,30 @@
 import "server-only";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  /** Bumps when `prisma generate` changes model fields so we drop a stale singleton. */
+  prismaSchemaTag?: string;
+};
+
+/** Fingerprint of all model fields from the loaded generated client (invalidates cache after `prisma generate`). */
+function prismaDatamodelFieldTag(): string {
+  try {
+    return Prisma.dmmf.datamodel.models
+      .map(
+        (m) =>
+          `${m.name}:${m.fields
+            .map((f) => f.name)
+            .sort()
+            .join(",")}`,
+      )
+      .sort()
+      .join("|");
+  } catch {
+    return "";
+  }
+}
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;
@@ -28,14 +50,29 @@ function clientHasFinancialYearPeriod(client: PrismaClient): boolean {
   );
 }
 
+function clientHasStorageLocation(client: PrismaClient): boolean {
+  return (
+    "storageLocation" in client &&
+    typeof (client as unknown as { storageLocation?: { findMany?: unknown } }).storageLocation
+      ?.findMany === "function"
+  );
+}
+
 export function getPrismaClient() {
+  const schemaTag = prismaDatamodelFieldTag();
+
   // Lazy init so `next build` can run without DATABASE_URL.
   if (globalForPrisma.prisma) {
-    if (clientHasFinancialYearPeriod(globalForPrisma.prisma)) {
+    const tagMatches = globalForPrisma.prismaSchemaTag === schemaTag;
+    if (
+      tagMatches &&
+      clientHasFinancialYearPeriod(globalForPrisma.prisma) &&
+      clientHasStorageLocation(globalForPrisma.prisma)
+    ) {
       return globalForPrisma.prisma;
     }
-    // Stale cached client — drop so the next line creates a fresh one from the current generator.
     globalForPrisma.prisma = undefined;
+    globalForPrisma.prismaSchemaTag = undefined;
   }
   const client = createPrismaClient();
   if (!clientHasFinancialYearPeriod(client)) {
@@ -43,6 +80,14 @@ export function getPrismaClient() {
       "Prisma Client is out of date (missing FinancialYearPeriod). Run: npx prisma generate",
     );
   }
-  if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
+  if (!clientHasStorageLocation(client)) {
+    throw new Error(
+      "Prisma Client is out of date (missing StorageLocation). Run: npx prisma generate",
+    );
+  }
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = client;
+    globalForPrisma.prismaSchemaTag = schemaTag;
+  }
   return client;
 }
