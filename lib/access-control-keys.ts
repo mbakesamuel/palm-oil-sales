@@ -20,6 +20,7 @@ export const PERMISSION_KEYS = [
   "route:/stock/receive",
   "route:/reports",
   "route:/reports/sales",
+  "route:/reports/daily-sales-summary",
   "route:/reports/delivery-orders",
   "route:/reports/delivery-order-monitor",
   "route:/reports/customer-delivery-monitor",

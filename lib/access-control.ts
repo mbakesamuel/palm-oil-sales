@@ -27,6 +27,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   // Reports default on.
   base["route:/reports"] = true;
   base["route:/reports/sales"] = true;
+  base["route:/reports/daily-sales-summary"] = true;
   base["route:/reports/delivery-orders"] = true;
   base["route:/reports/delivery-order-monitor"] = true;
   base["route:/reports/customer-delivery-monitor"] = true;

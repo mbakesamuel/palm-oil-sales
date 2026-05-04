@@ -27,6 +27,18 @@ export default function ReportsIndexPage() {
         </li>
         <li>
           <Link
+            href="/reports/daily-sales-summary"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Daily sales summary</div>
+            <div className="text-sm opacity-75">
+              One calendar day inside the working month: validated sales only — customers, DOs,
+              quantities, DO balance (kg), and totals by customer type.
+            </div>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/reports/delivery-orders"
             className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
           >

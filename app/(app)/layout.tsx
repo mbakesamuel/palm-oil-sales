@@ -38,6 +38,7 @@ const operationsNav = [
 
 const reportNav = [
   { href: "/reports/sales", label: "Sales register" },
+  { href: "/reports/daily-sales-summary", label: "Daily sales summary" },
   { href: "/reports/delivery-orders", label: "Delivery orders" },
   { href: "/reports/delivery-order-monitor", label: "View DOs by DO-Number" },
   { href: "/reports/customer-delivery-monitor", label: "View DOs by customer" },
