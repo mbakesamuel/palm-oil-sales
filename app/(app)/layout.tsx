@@ -36,14 +36,18 @@ const operationsNav = [
 const reportNav = [
   { href: "/reports/sales", label: "Sales register" },
   { href: "/reports/delivery-orders", label: "Delivery orders" },
-  { href: "/reports/delivery-order-monitor", label: "DO monitor" },
-  { href: "/reports/customer-delivery-monitor", label: "DO by customer" },
-  { href: "/reports/do-commitment-crosstab", label: "DO commitments grid" },
-  { href: "/reports/stock-on-hand", label: "Stock on hand" },
+  { href: "/reports/delivery-order-monitor", label: "View DOs by DO-Number" },
+  { href: "/reports/customer-delivery-monitor", label: "View DOs by customer" },
+  { href: "/reports/do-commitment-crosstab", label: "Commitments" },
+  { href: "/reports/stock-on-hand", label: "Stock" },
   { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
 ] as const;
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
@@ -51,7 +55,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     getOrInitCompanySettings(),
     getOpenFinancialYearPeriod(),
   ]);
-  const vatPct = new Prisma.Decimal(String(settings.vatRate)).mul(100).toDecimalPlaces(2).toString();
+  const vatPct = new Prisma.Decimal(String(settings.vatRate))
+    .mul(100)
+    .toDecimalPlaces(2)
+    .toString();
   const subtitle = `Currency: XAF · VAT: ${vatPct}%`;
 
   return (
@@ -63,8 +70,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     >
       <WorkingPeriodProvider
         openFinancialYear={openPeriod?.financialYear ?? null}
-        openPeriodStartIso={openPeriod ? prismaDateToIso(openPeriod.startDate) : null}
-        openPeriodEndIso={openPeriod ? prismaDateToIso(openPeriod.endDate) : null}
+        openPeriodStartIso={
+          openPeriod ? prismaDateToIso(openPeriod.startDate) : null
+        }
+        openPeriodEndIso={
+          openPeriod ? prismaDateToIso(openPeriod.endDate) : null
+        }
       >
         <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-6xl px-4 py-6 h-full flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
@@ -92,4 +103,3 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </BrandingProvider>
   );
 }
-

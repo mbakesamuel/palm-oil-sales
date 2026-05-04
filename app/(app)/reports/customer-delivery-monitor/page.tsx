@@ -84,7 +84,9 @@ export default async function CustomerDeliveryMonitorPage(props: {
           Your role is tied to a sales point, but none is assigned. Ask an
           administrator.
         </div>
-        <ReportSignatory />
+        <div className="hidden print:block">
+          <ReportSignatory />
+        </div>
       </div>
     );
   }
@@ -767,7 +769,9 @@ export default async function CustomerDeliveryMonitorPage(props: {
         </>
       ) : null}
 
-      <ReportSignatory />
+      <div className="hidden print:block">
+        <ReportSignatory />
+      </div>
     </div>
   );
 }

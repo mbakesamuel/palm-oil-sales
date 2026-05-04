@@ -130,7 +130,9 @@ export default async function SalesReportPage() {
         <p className="text-sm opacity-75">No sales recorded yet.</p>
       ) : null}
 
-      <ReportSignatory />
+      <div className="hidden print:block">
+        <ReportSignatory />
+      </div>
     </div>
   );
 }

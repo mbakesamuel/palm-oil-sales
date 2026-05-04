@@ -76,7 +76,9 @@ export default async function DeliveryOrdersReportPage() {
           Your role is tied to a sales point, but no sales point is assigned to your account. Ask an
           administrator to assign one before you can view this report.
         </div>
-        <ReportSignatory />
+        <div className="hidden print:block">
+          <ReportSignatory />
+        </div>
       </div>
     );
   }
@@ -288,7 +290,9 @@ export default async function DeliveryOrdersReportPage() {
         </p>
       ) : null}
 
-      <ReportSignatory />
+      <div className="hidden print:block">
+        <ReportSignatory />
+      </div>
     </div>
   );
 }

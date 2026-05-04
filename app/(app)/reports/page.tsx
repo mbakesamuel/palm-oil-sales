@@ -61,7 +61,7 @@ export default function ReportsIndexPage() {
             href="/reports/do-commitment-crosstab"
             className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
           >
-            <div className="font-medium">DO commitments (crosstab)</div>
+            <div className="font-medium">Commitment by Customer/Product</div>
             <div className="text-sm opacity-75">
               Customer - product × sales points: outstanding ordered vs invoiced quantity, with row and
               column totals (validated DOs and sales).
@@ -94,7 +94,9 @@ export default function ReportsIndexPage() {
         </li>
       </ul>
 
-      <ReportSignatory />
+      <div className="hidden print:block">
+        <ReportSignatory />
+      </div>
     </div>
   );
 }

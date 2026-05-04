@@ -58,7 +58,9 @@ export default async function DoCommitmentCrosstabPage() {
         <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200">
           Your role is tied to a sales point, but none is assigned. Ask an administrator.
         </div>
-        <ReportSignatory />
+        <div className="hidden print:block">
+          <ReportSignatory />
+        </div>
       </div>
     );
   }
@@ -340,7 +342,9 @@ export default async function DoCommitmentCrosstabPage() {
         </div>
       )}
 
-      <ReportSignatory />
+      <div className="hidden print:block">
+        <ReportSignatory />
+      </div>
     </div>
   );
 }
