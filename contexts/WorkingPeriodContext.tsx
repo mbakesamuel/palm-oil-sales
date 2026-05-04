@@ -8,6 +8,7 @@ import {
   listSelectableCalendarMonths,
   type SelectableMonth,
 } from "@/lib/posting-calendar";
+import { WORKING_CAL_COOKIE } from "@/lib/working-period-cookie";
 
 const STORAGE_KEY = "po_working_period";
 
@@ -102,6 +103,15 @@ export function WorkingPeriodProvider(props: {
   React.useEffect(() => {
     applyDefaultMonth();
   }, [applyDefaultMonth]);
+
+  /** Mirror working month to an HTTP cookie so server-rendered reports (e.g. sales register) can filter. */
+  React.useEffect(() => {
+    if (openFinancialYear == null) return;
+    const ok = selectableMonths.some((m) => m.year === workingCalYear && m.month === workingCalMonth);
+    if (!ok) return;
+    const maxAge = 60 * 60 * 24 * 400;
+    document.cookie = `${WORKING_CAL_COOKIE}=${workingCalYear}-${workingCalMonth}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }, [openFinancialYear, selectableMonths, workingCalYear, workingCalMonth]);
 
   function setWorkingCalendarMonth(year: number, month: number) {
     setWorkingCalYear(year);

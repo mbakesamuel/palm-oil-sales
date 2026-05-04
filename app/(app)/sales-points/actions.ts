@@ -1,9 +1,11 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 export async function createSalesPoint(formData: FormData) {
+  await assertPermissionKey("route:/sales-points");
   const prisma = getPrismaClient();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
@@ -21,6 +23,7 @@ export async function createSalesPoint(formData: FormData) {
 }
 
 export async function updateSalesPoint(formData: FormData) {
+  await assertPermissionKey("route:/sales-points");
   const prisma = getPrismaClient();
   const idRaw = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -36,12 +39,14 @@ export async function updateSalesPoint(formData: FormData) {
 }
 
 export async function saveSalesPoint(formData: FormData) {
+  await assertPermissionKey("route:/sales-points");
   const idRaw = String(formData.get("id") ?? "").trim();
   if (idRaw) return updateSalesPoint(formData);
   return createSalesPoint(formData);
 }
 
 export async function deleteSalesPoint(formData: FormData) {
+  await assertPermissionKey("route:/sales-points");
   const prisma = getPrismaClient();
   const idRaw = String(formData.get("id") ?? "").trim();
   const id = Number.parseInt(idRaw, 10);

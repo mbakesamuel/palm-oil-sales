@@ -47,6 +47,7 @@ export type SalePrintModel = {
     method: string;
     amount: string;
     chequeNo: string | null;
+    bank: string | null;
     paidAtIso: string;
   }>;
 };
@@ -184,7 +185,12 @@ export function SalePrint(props: {
                   <td className="py-2">{formatDisplayDate(p.paidAtIso)}</td>
                   <td className="py-2 text-right tabular-nums">{moneyLabel(p.amount)}</td>
                   <td className="py-2 text-xs opacity-90">
-                    {p.chequeNo ? `Chq: ${p.chequeNo}` : "—"}
+                    {(() => {
+                      const bits: string[] = [];
+                      if (p.chequeNo) bits.push(`Chq: ${p.chequeNo}`);
+                      if (p.bank) bits.push(`Bank: ${p.bank}`);
+                      return bits.length > 0 ? bits.join(" · ") : "—";
+                    })()}
                   </td>
                 </tr>
               ))}

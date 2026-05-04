@@ -4,14 +4,21 @@ import { getPrismaClient } from "@/lib/prisma";
 import {
   PERMISSION_KEYS,
   assertActorIsAdmin,
+  assertPermissionKey,
   defaultPermissionsForRole,
   getPermissionsForRole,
   type PermissionKey,
 } from "@/lib/access-control";
+import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 export async function getRolePermissionsAction(role: UserRole) {
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  if (role !== session.role) {
+    await assertPermissionKey("route:/setup/permissions");
+  }
   return getPermissionsForRole(role);
 }
 
@@ -37,6 +44,7 @@ function parsePermissionKey(raw: string): PermissionKey | null {
 
 export async function setRolePermission(formData: FormData) {
   const prisma = getPrismaClient();
+  await assertPermissionKey("route:/setup/permissions");
   await assertActorIsAdmin();
 
   const role = parseRole(String(formData.get("role") ?? ""));
@@ -56,6 +64,7 @@ export async function setRolePermission(formData: FormData) {
 
 export async function resetRolePermissions(formData: FormData) {
   const prisma = getPrismaClient();
+  await assertPermissionKey("route:/setup/permissions");
   await assertActorIsAdmin();
 
   const role = parseRole(String(formData.get("role") ?? ""));

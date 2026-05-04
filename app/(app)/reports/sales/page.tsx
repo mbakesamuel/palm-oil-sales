@@ -1,12 +1,29 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
 import { ReportSignatory } from "@/components/ReportSignatory";
-import { Prisma } from "@prisma/client";
+import { PaymentMethod, Prisma } from "@prisma/client";
+import { getServerSession } from "@/lib/auth-server";
+import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
+import {
+  defaultSelectableMonthForToday,
+  listSelectableCalendarMonths,
+  prismaDateToIso,
+} from "@/lib/posting-calendar";
+import {
+  WORKING_CAL_COOKIE,
+  parseWorkingCalCookie,
+} from "@/lib/working-period-cookie";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const REPORT_LIMIT = 400;
+const z = new Prisma.Decimal(0);
 
 function xaf(d: Prisma.Decimal) {
   const n = Number(d.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP));
@@ -16,52 +33,214 @@ function xaf(d: Prisma.Decimal) {
   }).format(n);
 }
 
+function fmtKg(d: Prisma.Decimal) {
+  const n = Number(d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP));
+  return new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 3,
+    minimumFractionDigits: 0,
+  }).format(n);
+}
+
+function formatPaymentMethods(payments: { method: PaymentMethod }[]): string {
+  if (payments.length === 0) return "—";
+  return payments
+    .map((p) => (p.method === PaymentMethod.CHEQUE ? "Cheque" : "Cash"))
+    .join("; ");
+}
+
+function formatPaymentBanks(payments: { bank: string | null }[]): string {
+  const parts = payments.map((p) => (p.bank ?? "").trim()).filter(Boolean);
+  if (parts.length === 0) return "—";
+  return [...new Set(parts)].join("; ");
+}
+
+type MonthFilter = {
+  financialYear: number;
+  postingCalendarYear: number;
+  financialMonth: number;
+  label: string;
+};
+
+async function resolveWorkingMonthFilter(): Promise<{
+  monthFilter: MonthFilter | null;
+  hasOpenFy: boolean;
+}> {
+  const openPeriod = await getOpenFinancialYearPeriod();
+  if (!openPeriod) {
+    return { monthFilter: null, hasOpenFy: false };
+  }
+  const fyStart = prismaDateToIso(openPeriod.startDate);
+  const fyEnd = prismaDateToIso(openPeriod.endDate);
+  const selectable = listSelectableCalendarMonths(fyStart, fyEnd);
+  if (selectable.length === 0) {
+    return { monthFilter: null, hasOpenFy: true };
+  }
+
+  const cookieStore = await cookies();
+  const parsed = parseWorkingCalCookie(
+    cookieStore.get(WORKING_CAL_COOKIE)?.value,
+  );
+  const fromCookie =
+    parsed &&
+    selectable.some((s) => s.year === parsed.year && s.month === parsed.month)
+      ? parsed
+      : null;
+  const pick =
+    fromCookie ??
+    defaultSelectableMonthForToday(fyStart, fyEnd) ??
+    selectable[0] ??
+    null;
+  if (!pick) {
+    return { monthFilter: null, hasOpenFy: true };
+  }
+  const label = new Date(Date.UTC(pick.year, pick.month - 1, 1)).toLocaleString(
+    "en-GB",
+    {
+      month: "short",
+      year: "numeric",
+    },
+  );
+  return {
+    monthFilter: {
+      financialYear: openPeriod.financialYear,
+      postingCalendarYear: pick.year,
+      financialMonth: pick.month,
+      label,
+    },
+    hasOpenFy: true,
+  };
+}
+
 export default async function SalesReportPage() {
-  const [settings, prisma] = await Promise.all([getOrInitCompanySettings(), getPrismaClient()]);
+  const session = await getServerSession();
+  if (!session) redirect("/login");
+
+  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const assignedSalesPointId = session.salesPoint?.id ?? null;
+  const assignedSalesPointName = session.salesPoint?.name ?? null;
+
+  if (scopedToSalesPoint && assignedSalesPointId == null) {
+    return (
+      <div className="space-y-4 max-w-xl px-3 sm:px-8 lg:px-12">
+        <h1 className="text-2xl font-semibold">Report · Sales register</h1>
+        <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200">
+          Your role is tied to a sales point, but no sales point is assigned to
+          your account. Ask an administrator to assign one before you can view
+          this report.
+        </div>
+        <div className="hidden print:block">
+          <ReportSignatory />
+        </div>
+      </div>
+    );
+  }
+
+  const [{ monthFilter, hasOpenFy }, settings, prisma] = await Promise.all([
+    resolveWorkingMonthFilter(),
+    getOrInitCompanySettings(),
+    getPrismaClient(),
+  ]);
+
+  const where: Prisma.SaleWhereInput = {
+    ...(scopedToSalesPoint && assignedSalesPointId != null
+      ? { salesPointId: assignedSalesPointId }
+      : {}),
+    ...(monthFilter
+      ? {
+          financialYear: monthFilter.financialYear,
+          postingCalendarYear: monthFilter.postingCalendarYear,
+          financialMonth: monthFilter.financialMonth,
+        }
+      : {}),
+  };
 
   const sales = await prismaRetry(() =>
     prisma.sale.findMany({
-    orderBy: { soldAt: "desc" },
-    take: 400,
-    select: {
-      invoiceNo: true,
-      soldAt: true,
-      customerNameSnapshot: true,
-      netAmount: true,
-      vatAmount: true,
-      grossAmount: true,
-      financialYear: true,
-      financialMonth: true,
-      postingCalendarYear: true,
-      createdBy: { select: { name: true } },
-    },
+      where,
+      orderBy: { soldAt: "desc" },
+      take: REPORT_LIMIT,
+      select: {
+        invoiceNo: true,
+        soldAt: true,
+        customerNameSnapshot: true,
+        netAmount: true,
+        vatAmount: true,
+        grossAmount: true,
+        lines: { select: { qtyKg: true } },
+        payments: {
+          orderBy: { id: "asc" },
+          select: { method: true, bank: true },
+        },
+      },
     }),
   );
 
-  const totals = sales.reduce(
+  const rows = sales.map((s) => ({
+    ...s,
+    qtyKgTotal: s.lines.reduce((acc, l) => acc.add(l.qtyKg), z),
+    paymentMethodsLabel: formatPaymentMethods(s.payments),
+    paymentBanksLabel: formatPaymentBanks(s.payments),
+  }));
+
+  const totals = rows.reduce(
     (acc, s) => ({
       net: acc.net.add(s.netAmount),
       vat: acc.vat.add(s.vatAmount),
       gross: acc.gross.add(s.grossAmount),
+      qtyKg: acc.qtyKg.add(s.qtyKgTotal),
     }),
     {
       net: new Prisma.Decimal(0),
       vat: new Prisma.Decimal(0),
       gross: new Prisma.Decimal(0),
+      qtyKg: new Prisma.Decimal(0),
     },
   );
 
   const generated = new Date();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full min-w-0 max-w-none px-1 py-2 sm:px-2 sm:py-4 lg:px-3 lg:py-6 print:px-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between print:block">
         <div>
-          <h1 className="text-2xl font-semibold">Report · Sales register</h1>
+          <h1 className="text-2xl font-semibold">Sales register</h1>
           <p className="text-sm opacity-80 mt-1">{settings.companyName}</p>
+          <p className="text-sm opacity-75 mt-1">
+            {scopedToSalesPoint && assignedSalesPointName
+              ? `Sales at ${assignedSalesPointName} only.`
+              : "All collection points (consolidated)."}
+          </p>
+          <p className="text-sm opacity-75 mt-1">
+            {monthFilter ? (
+              <>
+                <span className="font-medium">Working month</span>:{" "}
+                {monthFilter.label} (FY {monthFilter.financialYear}). Lists
+                invoices whose posting calendar month matches the banner working
+                month (change it under Financial years if needed).
+              </>
+            ) : hasOpenFy ? (
+              <>
+                No working calendar month could be applied; open year has no
+                selectable months in range. Showing recent sales without a
+                posting month filter.
+              </>
+            ) : (
+              <>
+                No financial year is open. Showing recent sales without a
+                posting month filter. Open a year under Financial years to align
+                this report with your working month.
+              </>
+            )}
+          </p>
           <p className="text-xs opacity-70 mt-1 tabular-nums">
-            Generated {generated.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} ·{" "}
-            {sales.length} row{sales.length === 1 ? "" : "s"} (latest 400)
+            Generated{" "}
+            {generated.toLocaleString("en-GB", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}{" "}
+            · {rows.length} row{rows.length === 1 ? "" : "s"} (latest{" "}
+            {REPORT_LIMIT}
+            {scopedToSalesPoint ? ", this sales point" : ""})
           </p>
         </div>
         <div className="print:hidden">
@@ -69,65 +248,118 @@ export default async function SalesReportPage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
-        <table className="min-w-full text-sm">
+      <div className="w-full min-w-0 rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+        <table className="w-full min-w-0 table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+            <col className="w-[20%]" />
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+            <col className="w-[10%]" />
+            <col className="w-[8%]" />
+            <col className="w-[10%]" />
+            <col className="w-[12%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-black/10 dark:border-white/10 text-left">
-              <th className="px-3 py-2 font-medium">Invoice</th>
-              <th className="px-3 py-2 font-medium">Date</th>
-              <th className="px-3 py-2 font-medium">Customer</th>
-              <th className="px-3 py-2 font-medium">Clerk</th>
-              <th className="px-3 py-2 font-medium text-right">Net (XAF)</th>
-              <th className="px-3 py-2 font-medium text-right">VAT</th>
-              <th className="px-3 py-2 font-medium text-right">Gross</th>
-              <th className="px-3 py-2 font-medium">FY / calendar</th>
+              <th className="px-2 py-2 font-medium">Invoice</th>
+              <th className="px-2 py-2 font-medium">Date</th>
+              <th className="px-2 py-2 font-medium">Customer</th>
+              <th className="px-2 py-2 font-medium">Payment</th>
+              <th className="px-2 py-2 font-medium">Bank</th>
+              <th className="px-2 py-2 font-medium text-right">Net (XAF)</th>
+              <th className="px-2 py-2 font-medium text-right">VAT</th>
+              <th className="px-2 py-2 font-medium text-right">Gross</th>
+              <th className="px-2 py-2 font-medium text-right">Qty (kg)</th>
             </tr>
           </thead>
           <tbody>
-            {sales.map((s) => (
-              <tr
-                key={s.invoiceNo}
-                className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
-              >
-                <td className="px-3 py-2 font-mono text-xs">{s.invoiceNo}</td>
-                <td className="px-3 py-2 tabular-nums whitespace-nowrap">
-                  {s.soldAt.toISOString().slice(0, 16).replace("T", " ")}
-                </td>
-                <td className="px-3 py-2 max-w-[200px] truncate" title={s.customerNameSnapshot}>
-                  {s.customerNameSnapshot}
-                </td>
-                <td className="px-3 py-2 max-w-[120px] truncate">{s.createdBy.name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{xaf(s.netAmount)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{xaf(s.vatAmount)}</td>
-                <td className="px-3 py-2 text-right tabular-nums font-medium">{xaf(s.grossAmount)}</td>
-                <td className="px-3 py-2 tabular-nums text-xs opacity-80">
-                  {s.financialYear != null &&
-                  s.postingCalendarYear != null &&
-                  s.financialMonth != null
-                    ? `${s.financialYear} · ${s.postingCalendarYear}-${String(s.financialMonth).padStart(2, "0")}`
-                    : "—"}
-                </td>
-              </tr>
-            ))}
+            {rows.map((s) => {
+              const dateStr = s.soldAt
+                .toISOString()
+                .slice(0, 16)
+                .replace("T", " ");
+              return (
+                <tr
+                  key={s.invoiceNo}
+                  className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                >
+                  <td
+                    className="px-2 py-2 font-mono text-xs truncate max-w-0"
+                    title={s.invoiceNo}
+                  >
+                    {s.invoiceNo}
+                  </td>
+                  <td
+                    className="px-2 py-2 tabular-nums truncate max-w-0"
+                    title={dateStr}
+                  >
+                    {dateStr}
+                  </td>
+                  <td
+                    className="px-2 py-2 truncate max-w-0"
+                    title={s.customerNameSnapshot}
+                  >
+                    {s.customerNameSnapshot}
+                  </td>
+                  <td
+                    className="px-2 py-2 truncate max-w-0"
+                    title={s.paymentMethodsLabel}
+                  >
+                    {s.paymentMethodsLabel}
+                  </td>
+                  <td
+                    className="px-2 py-2 truncate max-w-0"
+                    title={s.paymentBanksLabel}
+                  >
+                    {s.paymentBanksLabel}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                    {xaf(s.netAmount)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                    {xaf(s.vatAmount)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums font-medium whitespace-nowrap">
+                    {xaf(s.grossAmount)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                    {fmtKg(s.qtyKgTotal)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
-          {sales.length > 0 ? (
+          {rows.length > 0 ? (
             <tfoot>
               <tr className="border-t-2 border-black/15 dark:border-white/15 font-medium">
-                <td className="px-3 py-2" colSpan={4}>
+                <td className="px-2 py-2 truncate max-w-0" colSpan={5}>
                   Totals (this page)
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{xaf(totals.net)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{xaf(totals.vat)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{xaf(totals.gross)}</td>
-                <td className="px-3 py-2" />
+                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                  {xaf(totals.net)}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                  {xaf(totals.vat)}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                  {xaf(totals.gross)}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                  {fmtKg(totals.qtyKg)}
+                </td>
               </tr>
             </tfoot>
           ) : null}
         </table>
       </div>
 
-      {sales.length === 0 ? (
-        <p className="text-sm opacity-75">No sales recorded yet.</p>
+      {rows.length === 0 ? (
+        <p className="text-sm opacity-75">
+          No sales in this scope for the selected working month (or no posting
+          month filter is applied).
+        </p>
       ) : null}
 
       <div className="hidden print:block">

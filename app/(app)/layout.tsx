@@ -6,6 +6,9 @@ import { BrandingProvider } from "@/components/BrandingProvider";
 import { WorkingPeriodBanner } from "@/components/WorkingPeriodBanner";
 import { WorkingPeriodProvider } from "@/contexts/WorkingPeriodContext";
 import { getServerSession } from "@/lib/auth-server";
+import { assertRouteAllowedForPath } from "@/lib/access-control";
+import { INVOKE_PATH_HEADER } from "@/auth.config";
+import { headers } from "next/headers";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
@@ -51,6 +54,11 @@ export default async function AppLayout({
   const session = await getServerSession();
   if (!session) redirect("/login");
 
+  const pathname = (await headers()).get(INVOKE_PATH_HEADER)?.trim() ?? "";
+  if (pathname) {
+    await assertRouteAllowedForPath(pathname, session.role);
+  }
+
   const [settings, openPeriod] = await Promise.all([
     getOrInitCompanySettings(),
     getOpenFinancialYearPeriod(),
@@ -78,7 +86,7 @@ export default async function AppLayout({
         }
       >
         <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 h-full flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
+          <div className="mx-auto w-full max-w-[min(100rem,calc(100vw-1.5rem))] px-4 py-6 h-full flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
             <div className="print:hidden shrink-0 h-full overflow-y-auto">
               <Sidebar
                 brand={settings.companyName}

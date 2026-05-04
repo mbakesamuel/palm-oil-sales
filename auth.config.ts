@@ -2,6 +2,27 @@ import type { NextAuthConfig } from "next-auth";
 import type { UserRole } from "@/lib/domain";
 import { NextResponse } from "next/server";
 
+/** Read in `app/(app)/layout.tsx` for route permission checks (set in `proxy.ts` via `NextResponse.next({ request })`). */
+export const INVOKE_PATH_HEADER = "x-invoke-path";
+
+/** Shared with `proxy.ts`: paths where we skip DB-backed `route:*` checks (and auth treats as public for assets). */
+export function isPublicOrAssetPath(pathname: string): boolean {
+  if (pathname === "/login" || pathname === "/forbidden") return true;
+  if (pathname.startsWith("/api/auth")) return true;
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/robots.txt") ||
+    pathname.startsWith("/sitemap") ||
+    pathname.startsWith("/manifest") ||
+    pathname.startsWith("/icons") ||
+    pathname.startsWith("/images")
+  ) {
+    return true;
+  }
+  return /\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|map|css|js)$/.test(pathname);
+}
+
 function resolveAuthSecret(): string {
   const fromEnv = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
   if (fromEnv && fromEnv.trim() !== "") return fromEnv.trim();
@@ -28,24 +49,7 @@ export default {
     authorized({ request, auth }) {
       const { pathname } = request.nextUrl;
 
-      if (pathname === "/login") return true;
-
-      if (pathname.startsWith("/api/auth")) return true;
-
-      if (
-        pathname.startsWith("/_next") ||
-        pathname.startsWith("/favicon") ||
-        pathname.startsWith("/robots.txt") ||
-        pathname.startsWith("/sitemap") ||
-        pathname.startsWith("/manifest") ||
-        pathname.startsWith("/icons") ||
-        pathname.startsWith("/images")
-      ) {
-        return true;
-      }
-      if (/\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|map|css|js)$/.test(pathname)) {
-        return true;
-      }
+      if (isPublicOrAssetPath(pathname)) return true;
 
       if (auth?.userId) return true;
 

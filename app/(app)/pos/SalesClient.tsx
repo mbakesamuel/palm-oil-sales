@@ -27,7 +27,7 @@ type Product = {
 
 type Line = { productId: string; qtyKg: string; unitPricePerKg: string };
 
-type Payment = { method: "CASH" | "CHEQUE"; amount: string; chequeNo?: string };
+type Payment = { method: "CASH" | "CHEQUE"; amount: string; chequeNo?: string; bank?: string };
 
 function parseDec(s: string) {
   const n = Number.parseFloat(String(s ?? "").replace(",", "."));
@@ -316,6 +316,7 @@ export function SalesClient(props: {
             method: p.method === "CHEQUE" ? "CHEQUE" : "CASH",
             amount: p.amount,
             chequeNo: p.chequeNo ?? undefined,
+            bank: p.bank ?? undefined,
           }))
         : [{ method: "CASH", amount: "0" }],
     );
@@ -903,9 +904,10 @@ export function SalesClient(props: {
 
           <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
-              <div className="col-span-4">Method</div>
-              <div className="col-span-4">Amount</div>
-              <div className="col-span-3">Cheque #</div>
+              <div className="col-span-2">Method</div>
+              <div className="col-span-2">Amount</div>
+              <div className="col-span-2">Cheque #</div>
+              <div className="col-span-5">Bank</div>
               <div className="col-span-1" />
             </div>
             {payments.map((p, idx) => (
@@ -913,7 +915,7 @@ export function SalesClient(props: {
                 key={idx}
                 className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
               >
-                <div className="col-span-4">
+                <div className="col-span-2">
                   <select
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
                     value={p.method}
@@ -934,7 +936,7 @@ export function SalesClient(props: {
                     <option value="CHEQUE">Cheque</option>
                   </select>
                 </div>
-                <div className="col-span-4">
+                <div className="col-span-2">
                   <input
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
                     value={p.amount}
@@ -948,7 +950,7 @@ export function SalesClient(props: {
                     }
                   />
                 </div>
-                <div className="col-span-3">
+                <div className="col-span-2">
                   <input
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
                     value={p.chequeNo ?? ""}
@@ -958,6 +960,21 @@ export function SalesClient(props: {
                       setPayments((prev) =>
                         prev.map((x, i) =>
                           i === idx ? { ...x, chequeNo: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+                <div className="col-span-5">
+                  <input
+                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                    value={p.bank ?? ""}
+                    placeholder={p.method === "CHEQUE" ? "Drawee bank" : ""}
+                    disabled={p.method !== "CHEQUE"}
+                    onChange={(e) =>
+                      setPayments((prev) =>
+                        prev.map((x, i) =>
+                          i === idx ? { ...x, bank: e.target.value } : x,
                         ),
                       )
                     }

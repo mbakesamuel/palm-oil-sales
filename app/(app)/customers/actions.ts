@@ -1,10 +1,12 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/prisma";
+import { assertPermissionKey } from "@/lib/access-control";
 import { CustomerType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomer(formData: FormData) {
+  await assertPermissionKey("route:/customers");
   const prisma = getPrismaClient();
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -31,6 +33,7 @@ export async function createCustomer(formData: FormData) {
 }
 
 export async function updateCustomer(formData: FormData) {
+  await assertPermissionKey("route:/customers");
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -60,12 +63,14 @@ export async function updateCustomer(formData: FormData) {
 }
 
 export async function saveCustomer(formData: FormData) {
+  await assertPermissionKey("route:/customers");
   const id = String(formData.get("id") ?? "").trim();
   if (id) return updateCustomer(formData);
   return createCustomer(formData);
 }
 
 export async function deleteCustomer(formData: FormData) {
+  await assertPermissionKey("route:/customers");
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "").trim();
   if (!id) throw new Error("Missing customer id.");

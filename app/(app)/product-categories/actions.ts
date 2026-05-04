@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
@@ -10,6 +11,7 @@ function revalidateAll() {
 }
 
 export async function createProductCat(formData: FormData) {
+  await assertPermissionKey("route:/product-categories");
   const prisma = getPrismaClient();
   const productCat = String(formData.get("productCat") ?? "").trim();
   const productCode = String(formData.get("productCode") ?? "").trim();
@@ -25,6 +27,7 @@ export async function createProductCat(formData: FormData) {
 }
 
 export async function updateProductCat(formData: FormData) {
+  await assertPermissionKey("route:/product-categories");
   const prisma = getPrismaClient();
   const idRaw = String(formData.get("productCatId") ?? "").trim();
   const productCat = String(formData.get("productCat") ?? "").trim();
@@ -43,12 +46,14 @@ export async function updateProductCat(formData: FormData) {
 }
 
 export async function saveProductCat(formData: FormData) {
+  await assertPermissionKey("route:/product-categories");
   const idRaw = String(formData.get("productCatId") ?? "").trim();
   if (idRaw) return updateProductCat(formData);
   return createProductCat(formData);
 }
 
 export async function deleteProductCat(formData: FormData) {
+  await assertPermissionKey("route:/product-categories");
   const prisma = getPrismaClient();
   const idRaw = String(formData.get("productCatId") ?? "").trim();
   const productCatId = Number.parseInt(idRaw, 10);

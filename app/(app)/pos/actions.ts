@@ -16,6 +16,7 @@ import {
   validateSaleAgainstDeliveryOrder,
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
+import { assertPermissionKey } from "@/lib/access-control";
 import { canValidateDocuments } from "@/lib/auth-roles";
 import { getServerSession } from "@/lib/auth-server";
 import {
@@ -37,6 +38,7 @@ type PosPaymentInput = {
   method: "CASH" | "CHEQUE";
   amount: string;
   chequeNo?: string;
+  bank?: string;
 };
 
 export type SaveSaleResult =
@@ -85,6 +87,7 @@ export type LoadedSaleView = {
     method: PaymentMethod;
     amount: string;
     chequeNo: string | null;
+    bank: string | null;
     paidAtIso: string;
   }>;
 };
@@ -147,6 +150,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/pos");
     ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -257,7 +261,12 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const gross = money2(net.add(vat));
 
   let paidTotal = d(0);
-  let preparedPayments: Array<{ method: PaymentMethod; amount: Prisma.Decimal; chequeNo: string | null }> = [];
+  let preparedPayments: Array<{
+    method: PaymentMethod;
+    amount: Prisma.Decimal;
+    chequeNo: string | null;
+    bank: string | null;
+  }> = [];
   try {
     preparedPayments = payments
       .filter((p) => d(p.amount).gt(0))
@@ -267,13 +276,15 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
 
         const method = p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH;
         const chequeNo = method === PaymentMethod.CHEQUE ? String(p.chequeNo ?? "").trim() : "";
+        const bankRaw = method === PaymentMethod.CHEQUE ? String(p.bank ?? "").trim() : "";
+        const bank = bankRaw ? bankRaw : null;
 
         if (method === PaymentMethod.CHEQUE && !chequeNo) {
           throw new Error("Cheque number is required for cheque payments.");
         }
 
         paidTotal = paidTotal.add(amount);
-        return { method, amount, chequeNo: chequeNo || null };
+        return { method, amount, chequeNo: chequeNo || null, bank };
       });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid payments." };
@@ -322,6 +333,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
           method: p.method,
           amount: p.amount,
           chequeNo: p.chequeNo,
+          bank: p.bank,
           paidAt: soldAt,
         })),
       },
@@ -342,6 +354,7 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
   const prisma = getPrismaClient();
   let actor;
   try {
+    await assertPermissionKey("route:/pos");
     ({ actor } = await requireActor(prisma));
   } catch {
     return null;
@@ -403,6 +416,7 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       method: p.method,
       amount: p.amount.toString(),
       chequeNo: p.chequeNo ?? null,
+      bank: p.bank ?? null,
       paidAtIso: p.paidAt.toISOString(),
     })),
   };
@@ -422,6 +436,7 @@ export async function lookupDeliveryOrderForSale(
   const prisma = getPrismaClient();
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/pos");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -454,6 +469,7 @@ export async function deleteSale(formData: FormData): Promise<SaleMutationResult
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/pos");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -484,6 +500,7 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/pos");
     ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -566,6 +583,7 @@ export async function loadSalePrintById(
   let actor;
   let settings;
   try {
+    await assertPermissionKey("route:/pos");
     const r = await requireActor(prisma);
     actor = r.actor;
     settings = await getOrInitCompanySettings();
@@ -620,6 +638,7 @@ export async function loadSalePrintById(
       method: p.method,
       amount: p.amount.toString(),
       chequeNo: p.chequeNo ?? null,
+      bank: p.bank ?? null,
       paidAtIso: p.paidAt.toISOString(),
     })),
   };

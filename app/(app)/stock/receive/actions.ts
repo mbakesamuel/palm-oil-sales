@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
@@ -45,6 +46,7 @@ export async function receiveStock(formData: FormData): Promise<ReceiveStockResu
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/stock/receive");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -132,6 +134,7 @@ export async function updateReceivedBatch(formData: FormData): Promise<ReceiveSt
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/stock/receive");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -261,6 +264,7 @@ export async function deleteReceivedBatch(formData: FormData): Promise<ReceiveSt
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/stock/receive");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };

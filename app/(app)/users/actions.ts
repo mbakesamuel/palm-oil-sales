@@ -1,18 +1,11 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-
-async function assertActorIsAdmin() {
-  const session = await getServerSession();
-  if (!session?.userId) throw new Error("Login required.");
-  if (session.role !== UserRole.ADMIN) {
-    throw new Error("Only administrators can manage user accounts.");
-  }
-}
 
 function normalizeUsername(raw: string) {
   return String(raw ?? "").trim().toLowerCase();
@@ -34,8 +27,8 @@ function parseRole(raw: string): UserRole | null {
 }
 
 export async function saveUser(formData: FormData) {
+  await assertPermissionKey("route:/users");
   const prisma = getPrismaClient();
-  await assertActorIsAdmin();
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const username = normalizeUsername(String(formData.get("username") ?? ""));
@@ -110,10 +103,10 @@ export async function saveUser(formData: FormData) {
 }
 
 export async function setUserActive(formData: FormData) {
+  await assertPermissionKey("route:/users");
   const prisma = getPrismaClient();
   const session = await getServerSession();
   if (!session?.userId) throw new Error("Login required.");
-  await assertActorIsAdmin();
 
   const id = String(formData.get("id") ?? "").trim();
   const active = String(formData.get("active") ?? "") === "1";

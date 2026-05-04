@@ -320,6 +320,8 @@ model Payment {
   method    PaymentMethod
   amount    Decimal       @db.Decimal(14, 2)
   chequeNo  String?
+  /// Drawee bank (cheque); optional, mainly for reporting
+  bank      String?
   paidAt    DateTime      @default(now())
   createdAt DateTime      @default(now())
 

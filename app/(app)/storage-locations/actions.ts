@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
@@ -37,6 +38,7 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
 }
 
 export async function saveStorageLocation(formData: FormData) {
+  await assertPermissionKey("route:/storage-locations");
   try {
     const prisma = getPrismaClient();
     const actor = await requireActor(prisma);
@@ -92,6 +94,7 @@ export async function saveStorageLocation(formData: FormData) {
 }
 
 export async function deleteStorageLocation(formData: FormData) {
+  await assertPermissionKey("route:/storage-locations");
   try {
     const prisma = getPrismaClient();
     const actor = await requireActor(prisma);

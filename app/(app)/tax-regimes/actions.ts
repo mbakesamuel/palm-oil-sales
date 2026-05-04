@@ -1,9 +1,11 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 export async function createTaxRegime(formData: FormData) {
+  await assertPermissionKey("route:/tax-regimes");
   const prisma = getPrismaClient();
   const name = String(formData.get("name") ?? "").trim();
   const vatApplies = String(formData.get("vatApplies") ?? "") === "on";
@@ -20,6 +22,7 @@ export async function createTaxRegime(formData: FormData) {
 }
 
 export async function updateTaxRegime(formData: FormData) {
+  await assertPermissionKey("route:/tax-regimes");
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -39,12 +42,14 @@ export async function updateTaxRegime(formData: FormData) {
 }
 
 export async function saveTaxRegime(formData: FormData) {
+  await assertPermissionKey("route:/tax-regimes");
   const id = String(formData.get("id") ?? "").trim();
   if (id) return updateTaxRegime(formData);
   return createTaxRegime(formData);
 }
 
 export async function deleteTaxRegime(formData: FormData) {
+  await assertPermissionKey("route:/tax-regimes");
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "").trim();
   if (!id) throw new Error("Missing id.");

@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
@@ -17,6 +18,7 @@ function parseFiscalYearStartMonth(raw: string): number | null {
 }
 
 export async function saveCompanySettings(formData: FormData) {
+  await assertPermissionKey("route:/setup");
   const prisma = getPrismaClient();
   const companyName = String(formData.get("companyName") ?? "").trim();
   const logoUrlRaw = String(formData.get("logoUrl") ?? "").trim();

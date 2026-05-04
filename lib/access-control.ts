@@ -4,6 +4,8 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@/lib/domain";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/access-control-keys";
+import { resolveRoutePermissionKey } from "@/lib/resolve-route-permission";
+import { redirect } from "next/navigation";
 
 export { PERMISSION_KEYS, type PermissionKey };
 
@@ -23,6 +25,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/storage-locations"] = true;
 
   // Reports default on.
+  base["route:/reports"] = true;
   base["route:/reports/sales"] = true;
   base["route:/reports/delivery-orders"] = true;
   base["route:/reports/delivery-order-monitor"] = true;
@@ -87,6 +90,36 @@ export async function assertActorIsAdmin() {
   }
   if (session.role !== UserRole.ADMIN) {
     throw new Error("Only administrators can manage access control.");
+  }
+}
+
+/** True when the role may open this pathname (no matching `route:*` key → allowed). */
+export async function isRouteAllowedForPath(
+  pathname: string,
+  role: UserRole,
+): Promise<boolean> {
+  const key = resolveRoutePermissionKey(pathname);
+  if (!key) return true;
+  const perms = await getPermissionsForRole(role);
+  return Boolean(perms[key]);
+}
+
+/** Server-only: block direct URL access when the role lacks `route:*` permission. */
+export async function assertRouteAllowedForPath(pathname: string, role: UserRole): Promise<void> {
+  if (!(await isRouteAllowedForPath(pathname, role))) {
+    redirect("/forbidden");
+  }
+}
+
+/** For server actions / APIs: same rules as `route:*` page access (throws if denied). */
+export async function assertPermissionKey(key: PermissionKey): Promise<void> {
+  const session = await getServerSession();
+  if (!session?.userId) {
+    throw new Error("Login required.");
+  }
+  const perms = await getPermissionsForRole(session.role);
+  if (!perms[key]) {
+    throw new Error("You do not have permission to perform this action.");
   }
 }
 

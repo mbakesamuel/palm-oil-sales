@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
 import { FinancialYearStatus, UserRole } from "@prisma/client";
@@ -87,6 +88,7 @@ export async function openFinancialYearPeriod(formData: FormData) {
 }
 
 export async function closeFinancialYearPeriod(formData: FormData) {
+  await assertPermissionKey("route:/financial-years");
   await assertCanManageCalendarFromSession();
 
   const id = String(formData.get("id") ?? "").trim();

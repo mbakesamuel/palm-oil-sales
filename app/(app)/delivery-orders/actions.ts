@@ -1,5 +1,6 @@
 "use server";
 
+import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
 import {
@@ -176,6 +177,7 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
   const prisma = getPrismaClient();
   let actor;
   try {
+    await assertPermissionKey("route:/delivery-orders");
     ({ actor } = await requireActor(prisma));
   } catch {
     return null;
@@ -267,6 +269,7 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/delivery-orders");
     ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -389,6 +392,7 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
   }
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/delivery-orders");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -494,6 +498,7 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
   }
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/delivery-orders");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -572,6 +577,7 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/delivery-orders");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -607,6 +613,7 @@ export async function validateDeliveryOrder(formData: FormData): Promise<SaveSec
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
+    await assertPermissionKey("route:/delivery-orders");
     ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
@@ -652,6 +659,7 @@ export async function loadDeliveryOrderPrintById(
   let actor;
   let settings;
   try {
+    await assertPermissionKey("route:/delivery-orders");
     const r = await requireActor(prisma);
     actor = r.actor;
     settings = await getOrInitCompanySettings();
