@@ -1,19 +1,41 @@
 import Link from "next/link";
+import { roleLabel } from "@/lib/auth-display";
+import { getServerSession } from "@/lib/auth-server";
 import { SignOutButton } from "./SignOutButton";
 
-export default function ForbiddenPage() {
+export const dynamic = "force-dynamic";
+
+export default async function ForbiddenPage() {
+  const session = await getServerSession();
+
   return (
     <div className="mx-auto max-w-md px-6 py-16 space-y-4 text-center">
       <h1 className="text-xl font-semibold">Access denied</h1>
-      <p className="text-sm opacity-80">
-        You are signed in, but your role is not allowed to open that screen. Use the menu or go
-        back to the dashboard.
-      </p>
+      {session ? (
+        <p className="text-sm opacity-80">
+         <span className="text-foreground/90">{roleLabel(session.role)}</span>.
+          role is not allowed to open the page you tried to reach. Use the
+          menu for screens you can access, or go back to the dashboard.
+        </p>
+      ) : (
+        <p className="text-sm opacity-80">
+          You do not have access to that page. Sign in with an account that has
+          the right permissions.
+        </p>
+      )}
       <div className="flex flex-col gap-3 text-sm items-center">
-        <Link className="underline underline-offset-4" href="/dashboard">
-          Dashboard
-        </Link>
-        <SignOutButton />
+        {session ? (
+          <>
+            <Link className="underline underline-offset-4" href="/dashboard">
+              Dashboard
+            </Link>
+            <SignOutButton />
+          </>
+        ) : (
+          <Link className="underline underline-offset-4" href="/login">
+            Sign in
+          </Link>
+        )}
       </div>
     </div>
   );
