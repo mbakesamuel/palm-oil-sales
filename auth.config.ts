@@ -2,6 +2,18 @@ import type { NextAuthConfig } from "next-auth";
 import type { UserRole } from "@/lib/domain";
 import { NextResponse } from "next/server";
 
+function resolveAuthSecret(): string {
+  const fromEnv = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (fromEnv && fromEnv.trim() !== "") return fromEnv.trim();
+  if (process.env.NODE_ENV !== "production") {
+    return "dev-only-insecure-secret-set-AUTH_SECRET-in-production";
+  }
+  throw new Error(
+    "Missing AUTH_SECRET (or NEXTAUTH_SECRET). Set it in Vercel → Settings → Environment Variables " +
+      "for Production and Preview. Generate one with: openssl rand -base64 32",
+  );
+}
+
 /**
  * Edge-safe Auth.js config (no Prisma, bcrypt, or other Node-only imports).
  * Used by `proxy.ts`. Full credentials + DB live in `auth.ts`.
@@ -9,11 +21,7 @@ import { NextResponse } from "next/server";
 export default {
   providers: [],
   trustHost: true,
-  secret:
-    process.env.AUTH_SECRET ??
-    (process.env.NODE_ENV === "production"
-      ? undefined
-      : "dev-only-insecure-secret-set-AUTH_SECRET-in-production"),
+  secret: resolveAuthSecret(),
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: "/login" },
   callbacks: {
