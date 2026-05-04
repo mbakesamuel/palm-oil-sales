@@ -9,7 +9,11 @@ export default async function LoginPage() {
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-10">
-      <LoginForm companyName={settings.companyName} department={settings.department} />
+      <LoginForm
+        companyName={settings.companyName}
+        department={settings.department}
+        logoSrc="/cdc-logo-svg.svg"
+      />
     </div>
   );
 }

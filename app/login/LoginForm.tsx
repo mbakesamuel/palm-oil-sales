@@ -8,8 +8,9 @@ import { loginWithCredentials } from "./actions";
 export function LoginForm(props: {
   companyName: string;
   department: string | null;
+  logoSrc: string;
 }) {
-  const { companyName, department } = props;
+  const { companyName, department, logoSrc } = props;
   const router = useRouter();
   const { signIn } = useAuth();
 
@@ -40,13 +41,21 @@ export function LoginForm(props: {
       onSubmit={(e) => void onSubmit(e)}
       className="rounded-2xl border border-black/10 dark:border-white/10 p-6 space-y-4"
     >
-      <div className="space-y-1 pb-1 border-b border-black/10 dark:border-white/10">
-        {department?.trim() ? (
-          <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
-            {companyName.trim()}
+      <div className="space-y-2 pb-4 border-b border-black/10 dark:border-white/10">
+        <div className="relative flex min-h-10 items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element -- SVG from /public */}
+          <img
+            src={logoSrc}
+            alt=""
+            className="absolute left-0 top-1/2 h-9 max-h-9 w-auto max-w-[80px] -translate-y-1/2 object-contain"
+          />
+          <div className="w-full px-16 text-center">
+            <div className="text-lg font-semibold leading-tight">{companyName.trim()}</div>
+            {department?.trim() ? (
+              <div className="text-sm font-medium opacity-80 mt-0.5">{department.trim()}</div>
+            ) : null}
           </div>
-        ) : null}
-        <div className="text-sm font-medium opacity-80">{department}</div>
+        </div>
       </div>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Sign in</h1>
