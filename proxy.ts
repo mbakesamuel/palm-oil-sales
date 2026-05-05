@@ -1,6 +1,5 @@
 import NextAuth from "next-auth";
-import authConfig, { INVOKE_PATH_HEADER, isPublicOrAssetPath } from "@/auth.config";
-import { isRouteAllowedForPath } from "@/lib/access-control";
+import authConfig, { INVOKE_PATH_HEADER } from "@/auth.config";
 import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 
 const { auth } = NextAuth(authConfig);
@@ -28,20 +27,10 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
     return res;
   }
 
-  const wrapped = auth(async (req) => {
+  // NOTE: Keep Proxy edge-safe. Do not call Prisma / DB-backed permission checks here.
+  // Route enforcement happens in `app/(app)/layout.tsx` (node runtime).
+  const wrapped = auth((req) => {
     const p = req.nextUrl.pathname;
-    const session = req.auth;
-
-    if (
-      session?.userId &&
-      session.role &&
-      !isPublicOrAssetPath(p) &&
-      !(await isRouteAllowedForPath(p, session.role))
-    ) {
-      const r = NextResponse.redirect(new URL("/forbidden", req.url));
-      r.headers.set("x-proxy-hit", "1");
-      return r;
-    }
 
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set(INVOKE_PATH_HEADER, p);

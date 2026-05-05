@@ -55,7 +55,10 @@ export default async function AppLayout({
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const pathname = (await headers()).get(INVOKE_PATH_HEADER)?.trim() ?? "";
+  const h = await headers();
+  // `x-invoke-path` is forwarded by `proxy.ts`. In some deployments the platform may also provide
+  // `x-matched-path`, so keep it as a fallback to avoid failing open.
+  const pathname = (h.get(INVOKE_PATH_HEADER) ?? h.get("x-matched-path") ?? "").trim();
   if (pathname) {
     await assertRouteAllowedForPath(pathname, session.role);
   }
