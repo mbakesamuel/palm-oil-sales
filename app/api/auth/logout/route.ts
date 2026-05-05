@@ -8,6 +8,9 @@ export async function POST() {
   if (!s?.userId) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  await signOut({ redirect: false });
+  const res = await signOut({ redirect: false });
+  // `signOut()` returns a Response that clears the auth cookies.
+  // If we ignore it and return our own JSON, the browser keeps the session cookie.
+  if (res instanceof Response) return res;
   return NextResponse.json({ ok: true });
 }
