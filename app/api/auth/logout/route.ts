@@ -5,17 +5,18 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const s = await auth();
-  if (!s?.userId) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized" },
-      { status: 401, headers: { "Cache-Control": "no-store, max-age=0" } },
-    );
-  }
-
   // Best-effort: call Auth.js to clear cookies.
-  const res = await signOut({ redirect: false });
-  if (res instanceof Response) return res;
+  // Important: do NOT require an active session to sign out — if the browser has a stale cookie
+  // we still want to overwrite/expire it to “unstick” users (especially across Vercel domains).
+  try {
+    const s = await auth();
+    if (s?.userId) {
+      const res = await signOut({ redirect: false });
+      if (res instanceof Response) return res;
+    }
+  } catch {
+    // ignore and fall through to manual cookie expiry
+  }
 
   // Defense-in-depth: explicitly expire Auth.js cookies on the response.
   // In production, cookies may be `Secure` and prefixed with `__Secure-`, so we mirror that.
@@ -28,18 +29,30 @@ export async function POST() {
   const lax = { sameSite: "lax" as const };
 
   // Non-secure variants (local/dev)
-  out.cookies.set("authjs.session-token", "", { ...base, ...lax });
-  out.cookies.set("authjs.csrf-token", "", { ...base, ...lax });
-  out.cookies.set("authjs.callback-url", "", { ...base, ...lax });
+  for (const name of [
+    // Auth.js (NextAuth v5)
+    "authjs.session-token",
+    "authjs.csrf-token",
+    "authjs.callback-url",
+    // NextAuth v4 naming (defensive)
+    "next-auth.session-token",
+    "next-auth.csrf-token",
+    "next-auth.callback-url",
+  ]) {
+    out.cookies.set(name, "", { ...base, ...lax });
+  }
 
   // Secure variants (Vercel/prod)
-  out.cookies.set("__Secure-authjs.session-token", "", {
-    ...base,
-    ...lax,
-    secure: true,
-  });
-  out.cookies.set("__Secure-authjs.csrf-token", "", { ...base, ...lax, secure: true });
-  out.cookies.set("__Secure-authjs.callback-url", "", { ...base, ...lax, secure: true });
+  for (const name of [
+    "__Secure-authjs.session-token",
+    "__Secure-authjs.csrf-token",
+    "__Secure-authjs.callback-url",
+    "__Secure-next-auth.session-token",
+    "__Secure-next-auth.csrf-token",
+    "__Secure-next-auth.callback-url",
+  ]) {
+    out.cookies.set(name, "", { ...base, ...lax, secure: true });
+  }
 
   return out;
 }
