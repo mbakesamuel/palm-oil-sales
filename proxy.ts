@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import authConfig, { INVOKE_PATH_HEADER, isPublicOrAssetPath } from "@/auth.config";
 import { isRouteAllowedForPath } from "@/lib/access-control";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
@@ -14,31 +14,45 @@ const { auth } = NextAuth(authConfig);
  * navigation including client-side RSC requests. The `(app)` layout only sees `x-invoke-path`
  * intermittently; skipping checks when that header is missing would fail open.
  */
-export default auth(async function proxy(request) {
+export default async function proxy(request: NextRequest, event: NextFetchEvent) {
   const pathname = request.nextUrl.pathname;
-  const session = request.auth;
 
-  if (
-    session?.userId &&
-    session.role &&
-    !isPublicOrAssetPath(pathname) &&
-    !(await isRouteAllowedForPath(pathname, session.role))
-  ) {
-    const r = NextResponse.redirect(new URL("/forbidden", request.url));
-    // Helpful for verifying Proxy runs in production (check in browser devtools).
-    r.headers.set("x-proxy-hit", "1");
-    return r;
+  // IMPORTANT: avoid wrapping the logout route with Auth.js middleware.
+  // Auth.js may refresh the session cookie (sliding expiration) during the middleware session lookup,
+  // which would re-set `__Secure-authjs.session-token` on the logout response.
+  if (pathname === "/api/auth/logout") {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set(INVOKE_PATH_HEADER, pathname);
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    res.headers.set("x-proxy-hit", "1");
+    return res;
   }
 
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set(INVOKE_PATH_HEADER, pathname);
-  const res = NextResponse.next({
-    request: { headers: requestHeaders },
+  const wrapped = auth(async (req) => {
+    const p = req.nextUrl.pathname;
+    const session = req.auth;
+
+    if (
+      session?.userId &&
+      session.role &&
+      !isPublicOrAssetPath(p) &&
+      !(await isRouteAllowedForPath(p, session.role))
+    ) {
+      const r = NextResponse.redirect(new URL("/forbidden", req.url));
+      r.headers.set("x-proxy-hit", "1");
+      return r;
+    }
+
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set(INVOKE_PATH_HEADER, p);
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    res.headers.set("x-proxy-hit", "1");
+    return res;
   });
-  // Helpful for verifying Proxy runs in production (check in browser devtools).
-  res.headers.set("x-proxy-hit", "1");
-  return res;
-});
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (wrapped as any)(request, event);
+}
 
 export const config = {
   matcher: [
