@@ -11,7 +11,11 @@ export function SignOutButton() {
       onClick={async () => {
         setBusy(true);
         try {
-          await fetch("/api/auth/logout", { method: "POST" });
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          });
         } catch {
           // ignore
         } finally {

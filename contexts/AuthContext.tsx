@@ -40,7 +40,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = React.useCallback(() => {
     setSession(null);
-    void fetch("/api/auth/logout", { method: "POST" });
+    void fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+    });
   }, []);
 
   const value = React.useMemo(

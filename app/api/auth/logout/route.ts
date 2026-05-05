@@ -5,14 +5,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  // Best-effort: call Auth.js to clear cookies.
-  // Important: do NOT require an active session to sign out — if the browser has a stale cookie
-  // we still want to overwrite/expire it to “unstick” users (especially across Vercel domains).
+  // Best-effort: ask Auth.js to sign out (may rotate tokens / clean up).
+  // IMPORTANT: we DO NOT return Auth.js' Response because its behavior (redirect vs JSON, cookie
+  // attributes) can vary by environment. We always return our own explicit cookie-expiring response
+  // to ensure the browser actually clears the cookie on Vercel.
   try {
     const s = await auth();
     if (s?.userId) {
-      const res = await signOut({ redirect: false });
-      if (res instanceof Response) return res;
+      await signOut({ redirect: false });
     }
   } catch {
     // ignore and fall through to manual cookie expiry
@@ -44,6 +44,13 @@ export async function POST() {
 
   // Secure variants (Vercel/prod)
   for (const name of [
+    // `__Host-` is also common for secure cookies (path=/, no domain).
+    "__Host-authjs.session-token",
+    "__Host-authjs.csrf-token",
+    "__Host-authjs.callback-url",
+    "__Host-next-auth.session-token",
+    "__Host-next-auth.csrf-token",
+    "__Host-next-auth.callback-url",
     "__Secure-authjs.session-token",
     "__Secure-authjs.csrf-token",
     "__Secure-authjs.callback-url",
