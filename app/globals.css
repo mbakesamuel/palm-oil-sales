@@ -26,7 +26,20 @@ body {
 }
 
 @media print {
+  /* Tighter top/bottom leaves more printable height (e.g. consignment note on one A4 sheet). */
   @page {
-    margin: 14mm;
+    size: A4 portrait;
+    margin-top: 5mm;
+    margin-bottom: 5mm;
+    margin-left: 12mm;
+    margin-right: 12mm;
+  }
+
+  /*
+   * Slight zoom on the consignment note only (Chromium / Edge print — helps one-page fit).
+   * Firefox may ignore `zoom`; margins above still help.
+   */
+  [data-print-fit-page] {
+    zoom: 0.94;
   }
 }

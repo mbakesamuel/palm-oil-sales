@@ -98,6 +98,12 @@ model DeliveryOrderSequence {
   updatedAt  DateTime @updatedAt
 }
 
+model VehicleConsignmentNoteSequence {
+  id         String   @id @default("default")
+  nextNumber Int      @default(1)
+  updatedAt  DateTime @updatedAt
+}
+
 model User {
   id        String   @id @default(cuid())
   /// Login id (unique, stored lowercased in app logic).
@@ -119,6 +125,8 @@ model User {
   validatedSales Sale[] @relation("SalesValidatedBy")
   deliveryOrdersCreated DeliveryOrder[] @relation("DeliveryOrdersCreatedBy")
   deliveryOrdersValidated DeliveryOrder[] @relation("DeliveryOrdersValidatedBy")
+  consignmentNotesCreated VehicleConsignmentNote[] @relation("ConsignmentNotesCreatedBy")
+  consignmentNotesValidated VehicleConsignmentNote[] @relation("ConsignmentNotesValidatedBy")
 
   sessions AuthSession[]
 }
@@ -285,6 +293,7 @@ model Sale {
   taxRegime TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
   lines     SaleLine[]
   payments  Payment[]
+  consignmentNote VehicleConsignmentNote?
 
   @@index([soldAt])
   @@index([customerId, soldAt])
@@ -412,4 +421,36 @@ model DeliveryOrderPaymentDetails {
   @@map("DeliveryOrderPaymentDetails")
 }
 
+/// Vehicle consignment note: 1:1 with a validated Sale (clerk draft, supervisor validate).
+model VehicleConsignmentNote {
+  id                     String           @id @default(cuid())
+  consignmentNoteNo      String           @unique
+  saleId                 String           @unique
+  destination            String
+  dateOfLifting          DateTime         @db.Date
+  vehicleNumber           String
+  /// Staff at the collection / sales point authorizing the consignment.
+  consignerName           String
+  consignerDesignation    String
+  dateOfConsignment      DateTime         @db.Date
+  receiverName           String
+  receiverNicNo          String
+  receiverNicPlaceOfIssue String
+  receivedDate           DateTime?        @db.Date
+  status                 ValidationStatus @default(PENDING)
+  validatedAt            DateTime?
+  validatedByUserId      String?
+  createdByUserId        String
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  sale        Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdBy   User  @relation("ConsignmentNotesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  validatedBy User? @relation("ConsignmentNotesValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@index([consignmentNoteNo])
+  @@index([status])
+  @@map("VehicleConsignmentNote")
+}
 

@@ -60,8 +60,7 @@ export function LoginForm(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Sign in</h1>
         <p className="text-sm opacity-75">
-          Enter the username and password issued by your administrator. Sessions use{" "}
-          <span className="font-medium">Auth.js</span> (JWT).
+          Enter the username and password issued by your administrator. 
         </p>
       </div>
 

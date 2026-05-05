@@ -31,3 +31,13 @@ export function canCreateOrEditDeliveryOrderDraft(role: UserRole): boolean {
 export function canValidateDeliveryOrder(role: UserRole): boolean {
   return role === UserRole.MANAGER || role === UserRole.ADMIN;
 }
+
+/** Draft vehicle consignment notes (1:1 with Sale): clerks prepare; supervisors validate. */
+export function canCreateOrEditConsignmentNoteDraft(role: UserRole): boolean {
+  return role === UserRole.CLERK || role === UserRole.ADMIN;
+}
+
+/** Validate a pending vehicle consignment note after a clerk has prepared it. */
+export function canValidateConsignmentNote(role: UserRole): boolean {
+  return role === UserRole.SUPERVISOR || role === UserRole.ADMIN;
+}

@@ -25,6 +25,11 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   // Operational: same users who receive stock need tank/location setup in the sidebar.
   base["route:/storage-locations"] = true;
 
+  // Vehicle consignment notes: clerks draft, supervisors validate (admin gets all keys below).
+  if (role === UserRole.CLERK || role === UserRole.SUPERVISOR) {
+    base["route:/consignment-notes"] = true;
+  }
+
   // Reports default on.
   base["route:/reports"] = true;
   base["route:/reports/sales"] = true;

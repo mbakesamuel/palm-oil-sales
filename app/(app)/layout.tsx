@@ -32,6 +32,7 @@ const setupNav = [
 
 const operationsNav = [
   { href: "/delivery-orders", label: "Delivery orders" },
+  { href: "/consignment-notes", label: "Consignment notes" },
   { href: "/pos", label: "Sales" },
   { href: "/stock/receive", label: "Stock In" },
 ] as const;
