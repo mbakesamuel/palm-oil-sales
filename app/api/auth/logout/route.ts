@@ -1,32 +1,20 @@
 import { NextResponse } from "next/server";
-import { auth, signOut } from "@/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  // Best-effort: ask Auth.js to sign out (may rotate tokens / clean up).
-  // IMPORTANT: we DO NOT return Auth.js' Response because its behavior (redirect vs JSON, cookie
-  // attributes) can vary by environment. We always return our own explicit cookie-expiring response
-  // to ensure the browser actually clears the cookie on Vercel.
-  try {
-    const s = await auth();
-    if (s?.userId) {
-      await signOut({ redirect: false });
-    }
-  } catch {
-    // ignore and fall through to manual cookie expiry
-  }
-
-  // Defense-in-depth: explicitly expire Auth.js cookies on the response.
-  // In production, cookies may be `Secure` and prefixed with `__Secure-`, so we mirror that.
+  // Always return an explicit cookie-expiring response.
+  // Do NOT call `auth()`/`signOut()` here: in production, `auth()` can refresh the session cookie
+  // (sliding expiration) which re-sets the token during logout.
   const out = NextResponse.json(
     { ok: true },
     { headers: { "Cache-Control": "no-store, max-age=0" } },
   );
   const expire = new Date(0);
-  const base = { path: "/", expires: expire as Date };
+  const base = { path: "/", expires: expire as Date, maxAge: 0 };
   const lax = { sameSite: "lax" as const };
+  const httpOnly = { httpOnly: true as const };
 
   // Non-secure variants (local/dev)
   for (const name of [
@@ -39,7 +27,7 @@ export async function POST() {
     "next-auth.csrf-token",
     "next-auth.callback-url",
   ]) {
-    out.cookies.set(name, "", { ...base, ...lax });
+    out.cookies.set(name, "", { ...base, ...lax, ...httpOnly });
   }
 
   // Secure variants (Vercel/prod)
@@ -58,7 +46,7 @@ export async function POST() {
     "__Secure-next-auth.csrf-token",
     "__Secure-next-auth.callback-url",
   ]) {
-    out.cookies.set(name, "", { ...base, ...lax, secure: true });
+    out.cookies.set(name, "", { ...base, ...lax, ...httpOnly, secure: true });
   }
 
   return out;
