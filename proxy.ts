@@ -24,14 +24,20 @@ export default auth(async function proxy(request) {
     !isPublicOrAssetPath(pathname) &&
     !(await isRouteAllowedForPath(pathname, session.role))
   ) {
-    return NextResponse.redirect(new URL("/forbidden", request.url));
+    const r = NextResponse.redirect(new URL("/forbidden", request.url));
+    // Helpful for verifying Proxy runs in production (check in browser devtools).
+    r.headers.set("x-proxy-hit", "1");
+    return r;
   }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(INVOKE_PATH_HEADER, pathname);
-  return NextResponse.next({
+  const res = NextResponse.next({
     request: { headers: requestHeaders },
   });
+  // Helpful for verifying Proxy runs in production (check in browser devtools).
+  res.headers.set("x-proxy-hit", "1");
+  return res;
 });
 
 export const config = {
