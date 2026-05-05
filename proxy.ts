@@ -4,6 +4,25 @@ import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server
 
 const { auth } = NextAuth(authConfig);
 
+function shouldSkipRouteCheck(pathname: string): boolean {
+  // Public pages
+  if (pathname === "/login" || pathname === "/forbidden") return true;
+  // Auth endpoints
+  if (pathname.startsWith("/api/auth")) return true;
+  // Internal authorization probe endpoint (node runtime)
+  if (pathname === "/api/access/authorize") return true;
+  // Next.js / assets
+  if (pathname.startsWith("/_next")) return true;
+  if (pathname.startsWith("/favicon")) return true;
+  if (pathname.startsWith("/robots.txt")) return true;
+  if (pathname.startsWith("/sitemap")) return true;
+  if (pathname.startsWith("/manifest")) return true;
+  if (pathname.startsWith("/icons")) return true;
+  if (pathname.startsWith("/images")) return true;
+  if (/\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|map|css|js)$/.test(pathname)) return true;
+  return false;
+}
+
 /**
  * Pathname must be forwarded with `NextResponse.next({ request: { headers } })` so it reaches
  * `headers()` in App Router layouts. Cloning `NextRequest` and passing it into `auth()` alone
@@ -28,9 +47,35 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
   }
 
   // NOTE: Keep Proxy edge-safe. Do not call Prisma / DB-backed permission checks here.
-  // Route enforcement happens in `app/(app)/layout.tsx` (node runtime).
-  const wrapped = auth((req) => {
+  // Route enforcement happens via a Node API probe, so users can’t bypass it by typing URLs.
+  const wrapped = auth(async (req) => {
     const p = req.nextUrl.pathname;
+
+    if (!shouldSkipRouteCheck(p)) {
+      const probeUrl = new URL("/api/access/authorize", req.url);
+      probeUrl.searchParams.set("pathname", p);
+
+      const cookie = req.headers.get("cookie") ?? "";
+      const probe = await fetch(probeUrl, {
+        method: "GET",
+        headers: cookie ? { cookie } : {},
+        cache: "no-store",
+        redirect: "manual",
+      });
+
+      if (!probe.ok) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/forbidden";
+        return NextResponse.redirect(url);
+      }
+
+      const data = (await probe.json()) as { allowed?: boolean };
+      if (!data?.allowed) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/forbidden";
+        return NextResponse.redirect(url);
+      }
+    }
 
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set(INVOKE_PATH_HEADER, p);

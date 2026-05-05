@@ -51,7 +51,14 @@ export default {
 
       if (isPublicOrAssetPath(pathname)) return true;
 
-      if (auth?.userId) return true;
+      // Auth.js shapes `auth` slightly differently depending on context (middleware vs server),
+      // so accept a few common identifiers.
+      const isAuthed =
+        !!auth &&
+        (typeof (auth as { userId?: unknown }).userId !== "undefined" ||
+          typeof (auth as { user?: unknown }).user !== "undefined" ||
+          typeof (auth as { user?: { id?: unknown } }).user?.id !== "undefined");
+      if (isAuthed) return true;
 
       const url = request.nextUrl.clone();
       url.pathname = "/login";

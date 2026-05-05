@@ -327,9 +327,10 @@ export function Sidebar(props: {
             )}
             <button
               type="button"
-              onClick={() => {
-                signOut();
+              onClick={async () => {
+                await signOut();
                 router.push("/login");
+                router.refresh();
               }}
               className="text-left w-full text-xs underline underline-offset-4 hover:opacity-100"
             >

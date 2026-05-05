@@ -11,7 +11,7 @@ type AuthContextValue = {
   status: AuthStatus;
   session: AuthSession | null;
   signIn: (session: AuthSession) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -38,13 +38,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(next);
   }, []);
 
-  const signOut = React.useCallback(() => {
+  const signOut = React.useCallback(async () => {
     setSession(null);
-    void fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-      cache: "no-store",
-    });
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+    } catch {
+      // If the network fails, keep local state signed out anyway.
+    }
   }, []);
 
   const value = React.useMemo(

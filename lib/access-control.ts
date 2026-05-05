@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/prisma";
+import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@/lib/domain";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/access-control-keys";
@@ -57,21 +58,31 @@ export async function getPermissionsForRole(role: UserRole): Promise<RolePermiss
   const prisma = getPrismaClient();
 
   const defaults = defaultPermissionsForRole(role);
-  const rows = await prisma.rolePermission.findMany({
-    where: { role, key: { in: [...PERMISSION_KEYS] } },
-    select: { key: true, allowed: true },
-  });
+  // Hot path: runs on every request via the app layout guard.
+  // Neon/pooled TLS can intermittently throw ECONNRESET; retry a bit more than default.
+  const rows = await prismaRetry(
+    () =>
+      prisma.rolePermission.findMany({
+        where: { role, key: { in: [...PERMISSION_KEYS] } },
+        select: { key: true, allowed: true },
+      }),
+    { retries: 6, baseDelayMs: 300 },
+  );
 
   // If no rows exist yet, lazily seed defaults for this role.
   if (rows.length === 0) {
-    await prisma.rolePermission.createMany({
-      data: PERMISSION_KEYS.map((key) => ({
-        role,
-        key,
-        allowed: defaults[key],
-      })),
-      skipDuplicates: true,
-    });
+    await prismaRetry(
+      () =>
+        prisma.rolePermission.createMany({
+          data: PERMISSION_KEYS.map((key) => ({
+            role,
+            key,
+            allowed: defaults[key],
+          })),
+          skipDuplicates: true,
+        }),
+      { retries: 6, baseDelayMs: 300 },
+    );
     return defaults;
   }
 
