@@ -8,13 +8,15 @@ export function SignOutButton() {
     <button
       type="button"
       disabled={busy}
-      onClick={() => {
+      onClick={async () => {
         setBusy(true);
-        void fetch("/api/auth/logout", { method: "POST" })
-          .catch(() => {})
-          .finally(() => {
-            window.location.href = "/login";
-          });
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } catch {
+          // ignore
+        } finally {
+          window.location.href = "/login";
+        }
       }}
       className="text-sm underline underline-offset-4 bg-transparent border-0 cursor-pointer p-0 font-inherit disabled:opacity-50"
     >
