@@ -25,7 +25,6 @@ export type RecentReceiptRow = {
   receivedAtIso: string;
   qtyReceivedKg: string;
   qtyRemainingKg: string;
-  costPerKg: string;
   note: string | null;
   hasAllocations: boolean;
 };
@@ -249,7 +248,7 @@ export function ReceiveStockClient(props: {
           ) : null}
         </div>
 
-        <div className="grid gap-1 sm:grid-cols-2 sm:gap-4">
+        <div className="grid gap-1">
           <div className="grid gap-1">
             <label htmlFor="qtyKg" className="text-sm font-medium">
               Quantity received (kg)
@@ -271,22 +270,6 @@ export function ReceiveStockClient(props: {
                 Quantity is locked — stock from this receipt was already sold.
               </p>
             ) : null}
-          </div>
-          <div className="grid gap-1">
-            <label htmlFor="costPerKg" className="text-sm font-medium">
-              Cost per kg (XAF)
-            </label>
-            <input
-              key={`${formKey}-cost`}
-              id="costPerKg"
-              name="costPerKg"
-              type="text"
-              inputMode="decimal"
-              className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
-              placeholder="0"
-              required
-              defaultValue={draft?.costPerKg}
-            />
           </div>
         </div>
 
@@ -342,7 +325,7 @@ export function ReceiveStockClient(props: {
       <section className="space-y-3 max-w-4xl">
         <h2 className="text-lg font-semibold">Recent receipts</h2>
         <p className="text-sm opacity-75">
-          Edit cost, date, storage, or note anytime. Product and quantity can only change if no
+          Edit date, storage, or note anytime. Product and quantity can only change if no
           validated sale has used this receipt yet. Delete is only allowed in that case.
         </p>
         <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">

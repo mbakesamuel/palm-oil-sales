@@ -49,7 +49,6 @@ export default async function ReceiveStockPage() {
     receivedAtIso: string;
     qtyReceivedKg: string;
     qtyRemainingKg: string;
-    costPerKg: string;
     note: string | null;
     hasAllocations: boolean;
   }>;
@@ -90,7 +89,6 @@ export default async function ReceiveStockPage() {
             storageLocationId: true,
             productId: true,
             receivedAt: true,
-            costPerKg: true,
             qtyReceivedKg: true,
             qtyRemainingKg: true,
             note: true,
@@ -110,7 +108,6 @@ export default async function ReceiveStockPage() {
           receivedAtIso: prismaDateToIso(b.receivedAt),
           qtyReceivedKg: b.qtyReceivedKg.toString(),
           qtyRemainingKg: b.qtyRemainingKg.toString(),
-          costPerKg: b.costPerKg.toString(),
           note: b.note,
           hasAllocations: b._count.saleLineAllocations > 0,
         })),
@@ -121,7 +118,7 @@ export default async function ReceiveStockPage() {
     return (
       <div className="space-y-6 max-w-xl">
         <div>
-          <h1 className="text-2xl font-semibold">Receipt stock from Mill</h1>
+          <h1 className="text-2xl font-semibold">Stock-In Transactions</h1>
           <p className="mt-1 text-sm opacity-80">
             Record a new batch at a collection point and where it is physically stored.
           </p>
@@ -134,7 +131,7 @@ export default async function ReceiveStockPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Receipt stock from Mill</h1>
+        <h1 className="text-2xl font-semibold">Stock-In Transactions</h1>
         <p className="mt-1 text-sm opacity-80">
           Record a new batch at a collection point and where it is physically stored. Validated
           sales use one stock pool per collection point and product (oldest receipt first across all

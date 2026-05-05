@@ -73,11 +73,6 @@ export async function receiveStock(formData: FormData): Promise<ReceiveStockResu
     return { ok: false, error: "Quantity (kg) must be greater than zero." };
   }
 
-  const costPerKg = dQty(String(formData.get("costPerKg") ?? ""));
-  if (!costPerKg || costPerKg.lt(0)) {
-    return { ok: false, error: "Cost per kg must be zero or greater." };
-  }
-
   const note = String(formData.get("note") ?? "").trim() || null;
   const receivedAtRaw = String(formData.get("receivedAt") ?? "").trim();
   let receivedAt = new Date();
@@ -115,7 +110,6 @@ export async function receiveStock(formData: FormData): Promise<ReceiveStockResu
         productId,
         qtyReceivedKg: qtyKg,
         qtyRemainingKg: qtyKg,
-        costPerKg,
         receivedAt,
         note,
       },
@@ -186,11 +180,6 @@ export async function updateReceivedBatch(formData: FormData): Promise<ReceiveSt
     return { ok: false, error: "Quantity (kg) must be greater than zero." };
   }
 
-  const costPerKg = dQty(String(formData.get("costPerKg") ?? ""));
-  if (!costPerKg || costPerKg.lt(0)) {
-    return { ok: false, error: "Cost per kg must be zero or greater." };
-  }
-
   const note = String(formData.get("note") ?? "").trim() || null;
   const receivedAtRaw = String(formData.get("receivedAt") ?? "").trim();
   let receivedAt = batch.receivedAt;
@@ -245,7 +234,6 @@ export async function updateReceivedBatch(formData: FormData): Promise<ReceiveSt
         productId,
         qtyReceivedKg: qtyKg,
         qtyRemainingKg: qtyRemaining,
-        costPerKg,
         receivedAt,
         note,
       },

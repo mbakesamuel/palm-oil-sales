@@ -205,7 +205,6 @@ model Batch {
   storageLocation     StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   productId           Int
   receivedAt          DateTime @default(now())
-  costPerKg           Decimal  @db.Decimal(12, 2)
   qtyReceivedKg       Decimal  @db.Decimal(14, 3)
   qtyRemainingKg      Decimal  @db.Decimal(14, 3)
   note                String?
