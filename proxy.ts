@@ -14,7 +14,7 @@ const { auth } = NextAuth(authConfig);
  * navigation including client-side RSC requests. The `(app)` layout only sees `x-invoke-path`
  * intermittently; skipping checks when that header is missing would fail open.
  */
-export const proxy = auth(async (request) => {
+export default auth(async function proxy(request) {
   const pathname = request.nextUrl.pathname;
   const session = request.auth;
 
