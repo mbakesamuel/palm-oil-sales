@@ -20,6 +20,7 @@ const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 const setupNav = [
   { href: "/setup", label: "Setup" },
   { href: "/setup/sales-budget", label: "Sales budgets" },
+  { href: "/setup/product-pricing", label: "Product pricing" },
   { href: "/setup/permissions", label: "Access control" },
   { href: "/users", label: "Users" },
   { href: "/customers", label: "Customers" },

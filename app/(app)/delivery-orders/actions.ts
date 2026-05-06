@@ -15,6 +15,7 @@ import {
   combinedVatAndOtherRates,
 } from "@/lib/tax/resolve";
 import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
+import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
   canCreateOrEditDeliveryOrderDraft,
   canValidateDeliveryOrder,
@@ -487,11 +488,31 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
     const accessErr = salesPointErrorForResource(actor, order.salesPointId);
     if (accessErr) return { ok: false, error: accessErr };
 
-    const resolved = await resolveTaxesForCustomer(prisma, order.customerId, order.dateIssued);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
-    const comb = combinedVatAndOtherRates(resolved.taxes);
+    const [resolvedTaxes, customer] = await Promise.all([
+      resolveTaxesForCustomer(prisma, order.customerId, order.dateIssued),
+      prisma.customer.findUnique({
+        where: { id: order.customerId },
+        select: { customerType: true },
+      }),
+    ]);
+    if (!resolvedTaxes.ok) return { ok: false, error: resolvedTaxes.error };
+    if (!customer) return { ok: false, error: "Customer not found." };
+    const comb = combinedVatAndOtherRates(resolvedTaxes.taxes);
 
-    const prepared = lines.map((l) => {
+    const prepared: Array<{
+      productId: number;
+      orderQty: number;
+      orderUnit: string | null;
+      unitPrice: Prisma.Decimal;
+      lineSubtotalExTax: Prisma.Decimal;
+      vatRate: Prisma.Decimal;
+      vatAmount: Prisma.Decimal;
+      otherTaxLabel: string | null;
+      otherTaxAmount: Prisma.Decimal;
+      amount: Prisma.Decimal;
+    }> = [];
+
+    for (const l of lines) {
       const productId = Number.parseInt(l.productId, 10);
       if (!Number.isFinite(productId)) throw new Error("Invalid product on a line.");
 
@@ -501,10 +522,15 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
       }
 
       const orderUnit = String(l.orderUnit ?? "").trim() || null;
-      const unitPriceRaw = String(l.unitPrice ?? "").trim();
-      if (!unitPriceRaw) throw new Error("Unit price (ex VAT) is required on each line.");
+      const priced = await resolveUnitPriceExTax(
+        prisma,
+        productId,
+        customer.customerType,
+        order.dateIssued,
+      );
+      if (!priced.ok) throw new Error(priced.error);
 
-      const unitPrice = money2(d(unitPriceRaw));
+      const unitPrice = money2(priced.unitPriceExTax);
       const lineSubtotalExTax = money2(unitPrice.mul(d(orderQty)));
       const vatAmount = money2(lineSubtotalExTax.mul(comb.vatRate));
       const otherTaxAmount = money2(lineSubtotalExTax.mul(comb.otherRate));
@@ -512,7 +538,7 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
 
       const amount = money2(lineSubtotalExTax.add(vatAmount).add(otherTaxAmount));
 
-      return {
+      prepared.push({
         productId,
         orderQty,
         orderUnit,
@@ -523,8 +549,8 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
         otherTaxLabel,
         otherTaxAmount,
         amount,
-      };
-    });
+      });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.deliveryOrderDetails.deleteMany({ where: { deliveryOrderId } });

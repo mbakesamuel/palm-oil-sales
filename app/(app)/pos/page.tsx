@@ -9,6 +9,7 @@ import {
   previewPosTaxes,
   validateSale,
 } from "./actions";
+import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 import { SalesClient } from "./SalesClient";
 import Link from "next/link";
 
@@ -91,6 +92,7 @@ export default async function PosPage() {
           lookupDeliveryOrderAction={lookupDeliveryOrderForSale}
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
+          previewProductUnitPriceAction={previewProductUnitPrice}
         />
       )}
     </div>

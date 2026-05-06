@@ -69,6 +69,11 @@ export function DeliveryOrdersClient(props: {
   saveDeliveryOrderPayments: (formData: FormData) => Promise<SaveSectionResult>;
   deleteDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
+  previewProductUnitPriceAction: (
+    customerId: string,
+    productId: number,
+    dateIso: string,
+  ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
 }) {
   const {
     customers,
@@ -81,6 +86,7 @@ export function DeliveryOrdersClient(props: {
     saveDeliveryOrderPayments,
     deleteDeliveryOrder,
     validateDeliveryOrder,
+    previewProductUnitPriceAction,
   } = props;
 
   const wp = useWorkingPeriod();
@@ -125,6 +131,9 @@ export function DeliveryOrdersClient(props: {
     id: number;
     deliveryOrderNo: string;
   } | null>(null);
+  /** When false, line unit prices keep values from the server (loaded order) until the user edits customer, date, or product. */
+  const [allowAutoUnitPrice, setAllowAutoUnitPrice] = React.useState(true);
+  const [linePriceErrors, setLinePriceErrors] = React.useState<Record<number, string>>({});
 
   function emptyLine(): LineRow {
     return {
@@ -163,6 +172,45 @@ export function DeliveryOrdersClient(props: {
     previewDeliveryOrderTaxesAction,
   ]);
 
+  const lineProductKey = lines.map((l) => l.productId).join(",");
+
+  React.useEffect(() => {
+    if (!allowAutoUnitPrice) return;
+    if (!customerId || authStatus !== "ready") return;
+    if (!dateIssued) return;
+    let alive = true;
+    setLinePriceErrors({});
+    void (async () => {
+      const errs: Record<number, string> = {};
+      const priceByIdx: Record<number, string> = {};
+      await Promise.all(
+        lines.map(async (l, idx) => {
+          const pid = Number.parseInt(l.productId, 10);
+          if (!Number.isFinite(pid)) return;
+          const r = await previewProductUnitPriceAction(customerId, pid, dateIssued);
+          if (!alive) return;
+          if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
+          else errs[idx] = r.error;
+        }),
+      );
+      if (!alive) return;
+      setLinePriceErrors(errs);
+      setLines((prev) =>
+        prev.map((row, i) => (priceByIdx[i] != null ? { ...row, unitPrice: priceByIdx[i]! } : row)),
+      );
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [
+    allowAutoUnitPrice,
+    customerId,
+    dateIssued,
+    lineProductKey,
+    authStatus,
+    previewProductUnitPriceAction,
+  ]);
+
   React.useEffect(() => {
     if (wp.openFinancialYear == null) return;
     const { minIso, maxIso } = workingMonthDateBounds(
@@ -198,6 +246,8 @@ export function DeliveryOrdersClient(props: {
     setDocStatus(data.status);
     setValidatedByName(data.validatedByName ?? "");
     setValidatedAtIso(data.validatedAtIso ?? "");
+    setAllowAutoUnitPrice(false);
+    setLinePriceErrors({});
     setLines(
       data.lines.length > 0
         ? data.lines.map((l) => ({
@@ -240,6 +290,8 @@ export function DeliveryOrdersClient(props: {
     setDocStatus(null);
     setValidatedByName("");
     setValidatedAtIso("");
+    setAllowAutoUnitPrice(true);
+    setLinePriceErrors({});
     setLines(products.length > 0 ? [emptyLine()] : []);
     setPayments([]);
     setBanner(null);
@@ -637,7 +689,10 @@ export function DeliveryOrdersClient(props: {
                     id="do-customer"
                     className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
                     value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
+                    onChange={(e) => {
+                      setAllowAutoUnitPrice(true);
+                      setCustomerId(e.target.value);
+                    }}
                     required
                     disabled={draftFormLocked}
                   >
@@ -665,7 +720,10 @@ export function DeliveryOrdersClient(props: {
                     value={dateIssued}
                     min={dateIssuedBounds?.minIso}
                     max={dateIssuedBounds?.maxIso}
-                    onChange={(e) => setDateIssued(e.target.value)}
+                    onChange={(e) => {
+                      setAllowAutoUnitPrice(true);
+                      setDateIssued(e.target.value);
+                    }}
                     disabled={draftFormLocked || wp.openFinancialYear == null}
                   />
                 </div>
@@ -831,21 +889,23 @@ export function DeliveryOrdersClient(props: {
                 type="button"
                 disabled={linesReadOnly}
                 className="text-sm underline underline-offset-4 disabled:opacity-40"
-                onClick={() => setLines((prev) => [...prev, emptyLine()])}
+                onClick={() => {
+                  setAllowAutoUnitPrice(true);
+                  setLines((prev) => [...prev, emptyLine()]);
+                }}
               >
                 Add line
               </button>
             </div>
+            <p className="text-xs opacity-70">
+              Unit price (ex VAT) comes from{" "}
+              <Link href="/setup/product-pricing" className="underline underline-offset-4">
+                Product pricing
+              </Link>{" "}
+              for the customer type and document date; it cannot be edited here.
+            </p>
 
-            <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-x-auto">
-              <div className="min-w-[900px] grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
-                <div className="col-span-4">Product</div>
-                <div className="col-span-1">Qty</div>
-                <div className="col-span-1">Unit</div>
-                <div className="col-span-2">Unit price (ex VAT)</div>
-                <div className="col-span-2">Net</div>
-                <div className="col-span-2"> </div>
-              </div>
+            <div className="space-y-3">
               {lines.map((l, idx) => {
                 const s = lineSummaries[idx] ?? {
                   net: 0,
@@ -856,33 +916,36 @@ export function DeliveryOrdersClient(props: {
                 return (
                   <div
                     key={idx}
-                    className="min-w-[900px] border-b border-black/5 dark:border-white/5"
+                    className="rounded-lg border border-black/10 dark:border-white/10 p-3 sm:p-4 space-y-3 min-w-0"
                   >
-                    {/* Main line: product + qty + unit price + net */}
-                    <div className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center">
-                      <div className="col-span-4">
-                        <select
-                          className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-sm"
-                          value={l.productId}
-                          disabled={linesReadOnly}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) =>
-                                i === idx ? { ...x, productId: e.target.value } : x,
-                              ),
-                            )
-                          }
-                        >
-                          {products.map((g) => (
-                            <option key={g.productId} value={String(g.productId)}>
-                              {g.productName} ({g.productCat.productCat})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-1">
+                    <div className="space-y-1 min-w-0">
+                      <div className="text-xs font-medium opacity-70">Product</div>
+                      <select
+                        className="w-full min-w-0 max-w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-2 text-sm"
+                        value={l.productId}
+                        disabled={linesReadOnly}
+                        onChange={(e) => {
+                          setAllowAutoUnitPrice(true);
+                          setLines((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, productId: e.target.value } : x,
+                            ),
+                          );
+                        }}
+                      >
+                        {products.map((g) => (
+                          <option key={g.productId} value={String(g.productId)}>
+                            {g.productName} ({g.productCat.productCat})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-0">
+                      <div className="space-y-1 min-w-0">
+                        <label className="text-xs font-medium opacity-70">Qty</label>
                         <input
-                          className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                          className="w-full min-w-0 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-2 text-sm"
                           inputMode="numeric"
                           value={l.orderQty}
                           disabled={linesReadOnly}
@@ -895,9 +958,10 @@ export function DeliveryOrdersClient(props: {
                           }
                         />
                       </div>
-                      <div className="col-span-1">
+                      <div className="space-y-1 min-w-0">
+                        <label className="text-xs font-medium opacity-70">Unit</label>
                         <input
-                          className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                          className="w-full min-w-0 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-2 text-sm"
                           value={l.orderUnit}
                           disabled={linesReadOnly}
                           onChange={(e) =>
@@ -909,54 +973,60 @@ export function DeliveryOrdersClient(props: {
                           }
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="space-y-1 min-w-0 col-span-2 sm:col-span-1">
+                        <label className="text-xs font-medium opacity-70">
+                          Unit price (ex VAT)
+                        </label>
                         <input
-                          className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                          className="w-full min-w-0 rounded-md border border-black/10 dark:border-white/10 bg-black/3 dark:bg-white/6 px-2 py-2 text-sm"
                           inputMode="decimal"
                           value={l.unitPrice}
-                          placeholder="XAF"
+                          placeholder="—"
+                          readOnly
+                          title="Resolved from product pricing schedules"
                           disabled={linesReadOnly}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) =>
-                                i === idx ? { ...x, unitPrice: e.target.value } : x,
-                              ),
-                            )
-                          }
                         />
+                        {linePriceErrors[idx] ? (
+                          <p className="text-[10px] text-amber-800 dark:text-amber-200/90 leading-snug">
+                            {linePriceErrors[idx]}
+                          </p>
+                        ) : null}
                       </div>
-                      <div className="col-span-2 tabular-nums text-xs opacity-90">
-                        {s.net.toFixed(2)}
-                      </div>
-                      <div className="col-span-2 flex justify-end">
-                        <button
-                          type="button"
-                          className="text-xs underline underline-offset-4 opacity-80"
-                          onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
-                          disabled={linesReadOnly || lines.length === 1}
-                        >
-                          Remove
-                        </button>
+                      <div className="space-y-1 min-w-0 col-span-2 sm:col-span-1 flex flex-col justify-end">
+                        <div className="text-xs font-medium opacity-70">Net (ex VAT)</div>
+                        <div className="tabular-nums text-sm font-medium py-2">
+                          {s.net.toFixed(2)}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Taxes line: VAT + other taxes (auto) + line total */}
-                    <div className="grid grid-cols-12 gap-2 px-3 pb-3 -mt-1 text-xs">
-                      <div className="col-span-4 opacity-70">Taxes</div>
-                      <div className="col-span-2 tabular-nums">
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs border-t border-black/5 dark:border-white/10 pt-3">
+                      <span className="opacity-70 font-medium">Taxes</span>
+                      <span className="tabular-nums">
                         <span className="opacity-70">VAT:</span>{" "}
                         <span className="font-medium">{s.vat.toFixed(2)} XAF</span>
-                      </div>
-                      <div className="col-span-4 tabular-nums">
+                      </span>
+                      <span className="tabular-nums min-w-0">
                         <span className="opacity-70">
                           {taxPreview?.otherLabel ? `${taxPreview.otherLabel}:` : "Other taxes:"}
                         </span>{" "}
                         <span className="font-medium">{s.other.toFixed(2)} XAF</span>
-                      </div>
-                      <div className="col-span-2 text-right tabular-nums">
-                        <span className="opacity-70">Total:</span>{" "}
+                      </span>
+                      <span className="tabular-nums sm:ml-auto">
+                        <span className="opacity-70">Line total:</span>{" "}
                         <span className="font-semibold">{s.total.toFixed(2)} XAF</span>
-                      </div>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        className="text-xs underline underline-offset-4 opacity-80"
+                        onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
+                        disabled={linesReadOnly || lines.length === 1}
+                      >
+                        Remove line
+                      </button>
                     </div>
                   </div>
                 );

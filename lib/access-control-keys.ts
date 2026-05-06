@@ -7,6 +7,7 @@ export const PERMISSION_KEYS = [
   "route:/dashboard",
   "route:/setup",
   "route:/setup/permissions",
+  "route:/setup/product-pricing",
   "route:/setup/sales-budget",
   "route:/users",
   "route:/customers",

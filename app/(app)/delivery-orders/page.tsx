@@ -10,6 +10,7 @@ import {
   saveDeliveryOrderPayments,
   validateDeliveryOrder,
 } from "./actions";
+import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -64,6 +65,7 @@ export default async function DeliveryOrdersPage() {
       saveDeliveryOrderPayments={saveDeliveryOrderPayments}
       deleteDeliveryOrder={deleteDeliveryOrder}
       validateDeliveryOrder={validateDeliveryOrder}
+      previewProductUnitPriceAction={previewProductUnitPrice}
     />
   );
 }

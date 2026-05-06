@@ -75,6 +75,15 @@ function clientHasProductSalesBudget(client: PrismaClient): boolean {
   );
 }
 
+function clientHasProductUnitPriceSchedule(client: PrismaClient): boolean {
+  return (
+    "productUnitPriceSchedule" in client &&
+    typeof (
+      client as unknown as { productUnitPriceSchedule?: { findMany?: unknown } }
+    ).productUnitPriceSchedule?.findMany === "function"
+  );
+}
+
 export function getPrismaClient() {
   const schemaTag = prismaDatamodelFieldTag();
 
@@ -86,7 +95,8 @@ export function getPrismaClient() {
       clientHasFinancialYearPeriod(globalForPrisma.prisma) &&
       clientHasStorageLocation(globalForPrisma.prisma) &&
       clientHasSalesBudgetMonthPhaseProfile(globalForPrisma.prisma) &&
-      clientHasProductSalesBudget(globalForPrisma.prisma)
+      clientHasProductSalesBudget(globalForPrisma.prisma) &&
+      clientHasProductUnitPriceSchedule(globalForPrisma.prisma)
     ) {
       return globalForPrisma.prisma;
     }
@@ -112,6 +122,11 @@ export function getPrismaClient() {
   if (!clientHasProductSalesBudget(client)) {
     throw new Error(
       "Prisma Client is out of date (missing ProductSalesBudget). Run: npx prisma generate",
+    );
+  }
+  if (!clientHasProductUnitPriceSchedule(client)) {
+    throw new Error(
+      "Prisma Client is out of date (missing ProductUnitPriceSchedule). Run: npx prisma generate",
     );
   }
   if (process.env.NODE_ENV !== "production") {

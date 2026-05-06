@@ -294,6 +294,22 @@ model SaleAppliedTax {
   @@index([saleId])
 }
 
+/// Ex-tax unit price per kg (or per order unit used on lines); effectiveFrom is inclusive (latest row where effectiveFrom <= date wins).
+model ProductUnitPriceSchedule {
+  id             String         @id @default(cuid())
+  productId      Int
+  product        Product        @relation(fields: [productId], references: [productId], onDelete: Restrict, onUpdate: Cascade)
+  /// Main-category products: required. Non-Main: must be null (direct price).
+  customerType   CustomerType?
+  unitPriceExTax Decimal        @db.Decimal(14, 2)
+  effectiveFrom  DateTime       @db.Date
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([productId, effectiveFrom])
+  @@map("ProductUnitPriceSchedule")
+}
+
 model Product {
   productId     Int        @id @default(autoincrement())
   productName   String
@@ -305,6 +321,7 @@ model Product {
   saleLines     SaleLine[]
   deliveryOrderDetails DeliveryOrderDetails[]
   salesBudgets        ProductSalesBudget[]
+  unitPriceSchedules  ProductUnitPriceSchedule[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

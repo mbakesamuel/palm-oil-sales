@@ -28,6 +28,7 @@ import {
 } from "@/lib/auth-sales-point-scope";
 import { applyFefoStockDeduction, StockInsufficientError } from "@/lib/stock-fefo";
 import type { SalePrintModel } from "@/components/SalePrint";
+import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -188,6 +189,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         name: true,
         taxpayerId: true,
         taxRegimeId: true,
+        customerType: true,
       },
     }),
     getOpenFinancialYearPeriod(),
@@ -228,24 +230,32 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     lineNet: Prisma.Decimal;
   }> = [];
   try {
-    preparedLines = lines.map((l) => {
+    preparedLines = [];
+    for (const l of lines) {
       if (!l.productId) throw new Error("Each line must have a product.");
       const productId = Number.parseInt(l.productId, 10);
       if (!Number.isFinite(productId)) throw new Error("Invalid product selected.");
       const qty = d(l.qtyKg);
-      const price = d(l.unitPricePerKg);
       if (qty.lte(0)) throw new Error("Qty must be > 0.");
+      const priced = await resolveUnitPriceExTax(
+        prisma,
+        productId,
+        customer.customerType,
+        soldAt,
+      );
+      if (!priced.ok) throw new Error(priced.error);
+      const price = money2(priced.unitPriceExTax);
       if (price.lt(0)) throw new Error("Unit price must be >= 0.");
       const lineNet = money2(qty.mul(price));
       net = net.add(lineNet);
 
-      return {
+      preparedLines.push({
         productId,
         qtyKg: qty,
         unitPricePerKg: price,
         lineNet,
-      };
-    });
+      });
+    }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid line items." };
   }

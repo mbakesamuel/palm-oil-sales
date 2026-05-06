@@ -70,6 +70,11 @@ export function SalesClient(props: {
   >;
   validateSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
   deleteSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
+  previewProductUnitPriceAction: (
+    customerId: string,
+    productId: number,
+    dateIso: string,
+  ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
 }) {
   const {
     customers,
@@ -81,6 +86,7 @@ export function SalesClient(props: {
     lookupDeliveryOrderAction,
     validateSaleAction,
     deleteSaleAction,
+    previewProductUnitPriceAction,
   } = props;
 
   const wp = useWorkingPeriod();
@@ -135,6 +141,7 @@ export function SalesClient(props: {
     id: string;
     invoiceNo: string;
   } | null>(null);
+  const [linePriceErrors, setLinePriceErrors] = React.useState<Record<number, string>>({});
 
   React.useEffect(() => {
     if (session?.salesPoint?.id != null) {
@@ -236,6 +243,50 @@ export function SalesClient(props: {
     authStatus,
     session?.userId,
     previewPosTaxesAction,
+  ]);
+
+  const lineProductKey = lines.map((l) => l.productId).join(",");
+
+  React.useEffect(() => {
+    if (saleId != null) return;
+    if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
+      setLinePriceErrors({});
+      return;
+    }
+    let alive = true;
+    setLinePriceErrors({});
+    void (async () => {
+      const errs: Record<number, string> = {};
+      const priceByIdx: Record<number, string> = {};
+      await Promise.all(
+        lines.map(async (l, idx) => {
+          const pid = Number.parseInt(l.productId, 10);
+          if (!Number.isFinite(pid)) return;
+          const r = await previewProductUnitPriceAction(customerId, pid, transactionDate);
+          if (!alive) return;
+          if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
+          else errs[idx] = r.error;
+        }),
+      );
+      if (!alive) return;
+      setLinePriceErrors(errs);
+      setLines((prev) =>
+        prev.map((row, i) =>
+          priceByIdx[i] != null ? { ...row, unitPricePerKg: priceByIdx[i]! } : row,
+        ),
+      );
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [
+    saleId,
+    customerId,
+    transactionDate,
+    lineProductKey,
+    authStatus,
+    session?.userId,
+    previewProductUnitPriceAction,
   ]);
 
   const customer = customers.find((c) => c.id === customerId);
@@ -357,6 +408,7 @@ export function SalesClient(props: {
     setLoadedAppliedTaxes(null);
     setTaxPreviewRows([]);
     setTaxPreviewError(null);
+    setLinePriceErrors({});
     setBanner(null);
   }
 
@@ -404,6 +456,7 @@ export function SalesClient(props: {
     );
     setLoadedAppliedTaxes(legacyAppliedTaxesFromSale(s));
     setTaxPreviewError(null);
+    setLinePriceErrors({});
     setBanner({
       type: "ok",
       text: bannerText ?? `Loaded ${s.invoiceNo}.`,
@@ -903,18 +956,25 @@ export function SalesClient(props: {
               Add line
             </button>
           </div>
+          <p className="text-xs opacity-70">
+            Price / kg (ex tax) is resolved from{" "}
+            <Link href="/setup/product-pricing" className="underline underline-offset-4">
+              Product pricing
+            </Link>{" "}
+            for the customer type and transaction date.
+          </p>
 
           <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
               <div className="col-span-5">Product</div>
               <div className="col-span-3">Qty (kg)</div>
-              <div className="col-span-3">Price / kg</div>
+              <div className="col-span-3">Price / kg (ex tax)</div>
               <div className="col-span-1" />
             </div>
             {lines.map((l, idx) => (
               <div
                 key={idx}
-                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
+                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-start"
               >
                 <div className="col-span-5">
                   <select
@@ -952,21 +1012,19 @@ export function SalesClient(props: {
                     }
                   />
                 </div>
-                <div className="col-span-3">
+                <div className="col-span-3 space-y-0.5 min-w-0 pt-0.5">
                   <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.06] px-2 py-1"
                     value={l.unitPricePerKg}
                     inputMode="decimal"
-                    onChange={(e) =>
-                      setLines((prev) =>
-                        prev.map((x, i) =>
-                          i === idx
-                            ? { ...x, unitPricePerKg: e.target.value }
-                            : x,
-                        ),
-                      )
-                    }
+                    readOnly
+                    title="Resolved from product pricing schedules"
                   />
+                  {linePriceErrors[idx] ? (
+                    <p className="text-[10px] text-amber-800 dark:text-amber-200/90 leading-snug">
+                      {linePriceErrors[idx]}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="col-span-1 flex justify-end">
                   <button
