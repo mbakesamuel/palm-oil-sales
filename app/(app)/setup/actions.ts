@@ -2,6 +2,8 @@
 
 import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
+import { syncLatestVatScheduleToCompanyRate } from "@/lib/tax/bootstrap";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 function parseVatRate(input: string) {
@@ -74,6 +76,8 @@ export async function saveCompanySettings(formData: FormData) {
       fiscalYearStartMonth,
     },
   });
+
+  await syncLatestVatScheduleToCompanyRate(new Prisma.Decimal(vatRate));
 
   // Ensure there is at least one admin and one clerk user for per-user cash tracking.
   const userCount = await prisma.user.count();

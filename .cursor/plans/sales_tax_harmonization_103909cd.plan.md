@@ -4,25 +4,25 @@ overview: "Introduce versioned tax definitions and regime-to-tax links, resolve 
 todos:
   - id: schema-migration
     content: Add TaxType, TaxRateSchedule, TaxRegimeTax, SaleAppliedTax (+ indexes, FKs); define compatibility fields on Sale
-    status: pending
+    status: completed
   - id: tax-resolve-lib
     content: Implement lib/tax/resolve.ts and use in createSale with money2 rounding rules
-    status: pending
+    status: completed
   - id: data-migration
     content: Migrate CompanySettings.vatRate + TaxRegime.vatApplies into new tables; optional SaleAppliedTax backfill
-    status: pending
+    status: completed
   - id: admin-ui
     content: CRUD UI for tax types and rate schedules; extend tax regime UI to attach taxes
-    status: pending
+    status: completed
   - id: pos-ui
     content: "POS page/client: preview taxes from customer + transaction date; align with server"
-    status: pending
+    status: completed
   - id: print-reports
     content: "SalePrint + loadSalePrintById: snapshot-based multi-tax lines; adjust reports if needed"
-    status: pending
+    status: completed
   - id: delivery-orders
     content: Harmonize delivery-orders actions/client with shared resolver where rates apply
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -31,9 +31,9 @@ isProject: false
 ## Context (current state)
 
 - [`prisma/schema.prisma`](prisma/schema.prisma): `TaxRegime` is only `name` + `vatApplies`. `CompanySettings` holds a single global `vatRate`. `Sale` stores `vatRateSnapshot`, `netAmount`, `vatAmount`, `grossAmount`; `SaleLine` has `lineVat` / `lineGross`. `DeliveryOrderDetails` already has `vatRate`, `vatAmount`, `otherTaxLabel`, `otherTaxAmount` (partial multi-tax at DO only).
-- [`app/(app)/pos/actions.ts`](app/(app)/pos/actions.ts): VAT rate = `customer.taxRegime.vatApplies ? settings.vatRate : 0` (no date-aware rate).
-- POS UI ([`app/(app)/pos/SalesClient.tsx`](app/(app)/pos/SalesClient.tsx), [`app/(app)/pos/page.tsx`](app/(app)/pos/page.tsx)): preview uses global `vatRateDecimal` + `vatApplies` boolean.
-- [`components/SalePrint.tsx`](components/SalePrint.tsx): single “VAT” line; `vatApplies` on print payload comes from **current** customer regime in [`loadSalePrintById`](app/(app)/pos/actions.ts) — not ideal for audit once regimes change.
+- [`app/(app)/pos/actions.ts`](<app/(app)/pos/actions.ts>): VAT rate = `customer.taxRegime.vatApplies ? settings.vatRate : 0` (no date-aware rate).
+- POS UI ([`app/(app)/pos/SalesClient.tsx`](<app/(app)/pos/SalesClient.tsx>), [`app/(app)/pos/page.tsx`](<app/(app)/pos/page.tsx>)): preview uses global `vatRateDecimal` + `vatApplies` boolean.
+- [`components/SalePrint.tsx`](components/SalePrint.tsx): single “VAT” line; `vatApplies` on print payload comes from **current** customer regime in [`loadSalePrintById`](<app/(app)/pos/actions.ts>) — not ideal for audit once regimes change.
 
 ## Design decisions (locked)
 
@@ -66,19 +66,19 @@ New e.g. [`lib/tax/resolve.ts`](lib/tax/resolve.ts):
 
 - Input: `taxRegimeId`, `asOf: Date` (UTC date boundary consistent with [`noonUtcFromIsoDate`](lib/posting-calendar.ts)).
 - Steps: load regime’s `TaxRegimeTax` → for each `TaxType`, load active `TaxRateSchedule` row for `asOf` → return `{ taxTypeId, code, label, rate }[]`.
-- Used by: `createSale`, POS preview API/props, delivery order line computation ([`app/(app)/delivery-orders/actions.ts`](app/(app)/delivery-orders/actions.ts)), and any future reports.
+- Used by: `createSale`, POS preview API/props, delivery order line computation ([`app/(app)/delivery-orders/actions.ts`](<app/(app)/delivery-orders/actions.ts>)), and any future reports.
 
 ## Application layer changes
 
-| Area | Change |
-|------|--------|
-| **POS server** [`createSale`](app/(app)/pos/actions.ts) | Replace `settings.vatRate` + `vatApplies` with `resolveTaxesForRegime(..., soldAt)`; compute each tax amount = `money2(net * rate)`; `gross = net + sum`; insert `SaleAppliedTax` rows; set legacy `vatAmount`/`vatRateSnapshot` per compatibility rule. |
-| **POS page / client** | Pass resolved taxes (or a small server helper) keyed by **customer + transaction date** so preview matches server. Replace single `vatRateDecimal` prop with structured taxes + totals. |
-| **Tax regimes UI** [`TaxRegimesClient`](app/(app)/tax-regimes/TaxRegimesClient.tsx) | Add management for linked taxes (multi-select of `TaxType`). Optionally keep `vatApplies` as a **synced shortcut** (“VAT applies” toggles VAT in the join table) to avoid confusing existing users. |
-| **New admin UI** | CRUD for `TaxType` + `TaxRateSchedule` (list rows per type, `effectiveFrom`, rate). Guardrails: warn if `asOf` has no rate for a regime-linked tax. |
-| **Print** [`SalePrint`](components/SalePrint.tsx) | Replace single VAT row with **dynamic list** of applied taxes from snapshots (`SaleAppliedTax`), and drive “VAT applies” text from **snapshots** (e.g. “VAT: 19.25% — …”) not live customer regime. |
-| **Delivery orders** | Replace `companyVatRate` + `vatApplies` with same resolver + optional `otherTax` mapping to additional `TaxType`s (retire ad-hoc `otherTaxLabel` where possible, or map label → type in v2). |
-| **Reports** | Anywhere summing `sale.vatAmount` remains valid if `vatAmount` stays VAT-only; add columns for **total non-VAT taxes** if needed from `SaleAppliedTax`. |
+| Area                                                                                  | Change                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **POS server** [`createSale`](<app/(app)/pos/actions.ts>)                             | Replace `settings.vatRate` + `vatApplies` with `resolveTaxesForRegime(..., soldAt)`; compute each tax amount = `money2(net * rate)`; `gross = net + sum`; insert `SaleAppliedTax` rows; set legacy `vatAmount`/`vatRateSnapshot` per compatibility rule. |
+| **POS page / client**                                                                 | Pass resolved taxes (or a small server helper) keyed by **customer + transaction date** so preview matches server. Replace single `vatRateDecimal` prop with structured taxes + totals.                                                                  |
+| **Tax regimes UI** [`TaxRegimesClient`](<app/(app)/tax-regimes/TaxRegimesClient.tsx>) | Add management for linked taxes (multi-select of `TaxType`). Optionally keep `vatApplies` as a **synced shortcut** (“VAT applies” toggles VAT in the join table) to avoid confusing existing users.                                                      |
+| **New admin UI**                                                                      | CRUD for `TaxType` + `TaxRateSchedule` (list rows per type, `effectiveFrom`, rate). Guardrails: warn if `asOf` has no rate for a regime-linked tax.                                                                                                      |
+| **Print** [`SalePrint`](components/SalePrint.tsx)                                     | Replace single VAT row with **dynamic list** of applied taxes from snapshots (`SaleAppliedTax`), and drive “VAT applies” text from **snapshots** (e.g. “VAT: 19.25% — …”) not live customer regime.                                                      |
+| **Delivery orders**                                                                   | Replace `companyVatRate` + `vatApplies` with same resolver + optional `otherTax` mapping to additional `TaxType`s (retire ad-hoc `otherTaxLabel` where possible, or map label → type in v2).                                                             |
+| **Reports**                                                                           | Anywhere summing `sale.vatAmount` remains valid if `vatAmount` stays VAT-only; add columns for **total non-VAT taxes** if needed from `SaleAppliedTax`.                                                                                                  |
 
 ## Migrations and seed
 

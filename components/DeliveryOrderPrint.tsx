@@ -63,27 +63,40 @@ export function DeliveryOrderPrint(props: {
   department: string | null;
   companyPhone: string | null;
   companyAddress: string | null;
+  logoSrc: string;
   order: DeliveryOrderPrintModel;
 }) {
-  const { companyName, department, companyPhone, companyAddress, order } =
-    props;
+  const {
+    companyName,
+    department,
+    companyPhone,
+    companyAddress,
+    logoSrc,
+    order,
+  } = props;
 
   return (
     <article className="delivery-order-print text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
-      <header className="border-b border-black/20 pb-4 mb-6 text-center flex flex-col items-center">
-        <h1 className="text-xl font-bold mt-1">
-          CAMEROON DEVELOPMENT CORPORATION
-        </h1>
-        <h1 className="text-xl font-bold mt-1">Palm Oil Sales Service</h1>
-        {department ? (
-          <p className="text-xs font-semibold uppercase tracking-widest opacity-80">
-            {department}
-          </p>
-        ) : null}
-
-        <div className="mt-2 text-sm opacity-90 space-y-0.5">
-          {companyAddress ? <p>{companyAddress}</p> : null}
-          {companyPhone ? <p>Tel: {companyPhone}</p> : null}
+      <header className="border-b border-black/20 pb-4 mb-6">
+        <div className="w-full">
+          <div className="relative flex min-h-8 items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
+            <img
+              src={logoSrc}
+              alt=""
+              className="absolute left-0 top-1/2 h-8 max-h-8 w-auto max-w-[72px] -translate-y-1/2 object-contain"
+            />
+            <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
+              {companyName}
+            </h1>
+          </div>
+          {department ? (
+            <p className="mt-1 text-center text-sm opacity-80">{department}</p>
+          ) : null}
+          <div className="mt-2 text-center text-sm opacity-90 space-y-0.5">
+            {companyAddress ? <p>{companyAddress}</p> : null}
+            {companyPhone ? <p>Tel: {companyPhone}</p> : null}
+          </div>
         </div>
       </header>
 
@@ -206,7 +219,7 @@ export function DeliveryOrderPrint(props: {
             <span className="tabular-nums">{moneyLabel(order.totalVat)}</span>
           </div>
           <div className="flex justify-between gap-8">
-            <span className="opacity-70">Other taxes</span>
+            <span className="opacity-70">Sales Tax</span>
             <span className="tabular-nums">
               {moneyLabel(order.totalOtherTax)}
             </span>

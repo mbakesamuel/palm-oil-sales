@@ -1,10 +1,10 @@
 import { getPrismaClient } from "@/lib/prisma";
-import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
 import {
   deleteDeliveryOrder,
   loadDeliveryOrderByNo,
+  previewDeliveryOrderTaxes,
   saveDeliveryOrderDetails,
   saveDeliveryOrderHeader,
   saveDeliveryOrderPayments,
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 export default async function DeliveryOrdersPage() {
   const prisma = getPrismaClient();
 
-  const [customers, products, salesPoints, settings] = await Promise.all([
+  const [customers, products, salesPoints] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
         orderBy: { name: "asc" },
@@ -46,10 +46,7 @@ export default async function DeliveryOrdersPage() {
         select: { id: true, name: true },
       }),
     ),
-    getOrInitCompanySettings(),
   ]);
-
-  const companyVatRate = settings.vatRate.toString();
 
   return (
     <DeliveryOrdersClient
@@ -60,7 +57,7 @@ export default async function DeliveryOrdersPage() {
       }))}
       products={products}
       salesPoints={salesPoints}
-      companyVatRate={companyVatRate}
+      previewDeliveryOrderTaxesAction={previewDeliveryOrderTaxes}
       loadDeliveryOrderByNo={loadDeliveryOrderByNo}
       saveDeliveryOrderHeader={saveDeliveryOrderHeader}
       saveDeliveryOrderDetails={saveDeliveryOrderDetails}

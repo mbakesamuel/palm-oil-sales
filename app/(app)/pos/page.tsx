@@ -6,6 +6,7 @@ import {
   deleteSale,
   loadSaleByInvoiceNo,
   lookupDeliveryOrderForSale,
+  previewPosTaxes,
   validateSale,
 } from "./actions";
 import { SalesClient } from "./SalesClient";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function PosPage() {
-  const settings = await getOrInitCompanySettings();
+  await getOrInitCompanySettings();
   const prisma = getPrismaClient();
 
   const [customers, grades, salesPoints] = await Promise.all([
@@ -84,7 +85,7 @@ export default async function PosPage() {
           customers={customers}
           products={grades}
           salesPoints={salesPoints}
-          vatRateDecimal={String(settings.vatRate)}
+          previewPosTaxesAction={previewPosTaxes}
           saveSaleAction={createSale}
           loadSaleByInvoiceNo={loadSaleByInvoiceNo}
           lookupDeliveryOrderAction={lookupDeliveryOrderForSale}

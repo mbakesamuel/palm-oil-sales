@@ -10,6 +10,9 @@ import {
 } from "@/lib/financial-year";
 import { noonUtcFromIsoDate, normalizeIsoDateInput, utcIsoDateToday } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import { legacyVatSnapshotFromResolved } from "@/lib/tax/resolve";
+import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import {
   loadDeliveryOrderControl,
   toDeliveryOrderLookupDto,
@@ -90,6 +93,19 @@ export type LoadedSaleView = {
     bank: string | null;
     paidAtIso: string;
   }>;
+  appliedTaxes: Array<{
+    code: string;
+    label: string;
+    rate: string;
+    amount: string;
+  }>;
+};
+
+export type PosTaxPreviewRow = {
+  code: string;
+  label: string;
+  rate: string;
+  ratePercentLabel: string;
 };
 
 function d(value: string | number) {
@@ -172,7 +188,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         name: true,
         taxpayerId: true,
         taxRegimeId: true,
-        taxRegime: { select: { vatApplies: true } },
       },
     }),
     getOpenFinancialYearPeriod(),
@@ -204,10 +219,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       error: e instanceof Error ? e.message : "Transaction date is outside the working month.",
     };
   }
-
-  const vatRate = customer.taxRegime.vatApplies
-    ? d(settings.vatRate as unknown as string)
-    : d(0);
 
   let net = d(0);
   let preparedLines: Array<{
@@ -257,8 +268,45 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     if (!check.ok) return { ok: false, error: check.error };
   }
 
-  const vat = money2(net.mul(vatRate));
-  const gross = money2(net.add(vat));
+  const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
+  const appliedTaxCreates = resolved.taxes.map((t) => ({
+    taxTypeId: t.taxTypeId,
+    codeSnapshot: t.code,
+    labelSnapshot: t.label,
+    rateSnapshot: t.rate,
+    amount: money2(net.mul(t.rate)),
+  }));
+
+  const totalTax = appliedTaxCreates.reduce((acc, row) => acc.add(row.amount), d(0));
+  const vatAmount = appliedTaxCreates
+    .filter((r) => r.codeSnapshot === VAT_TAX_CODE)
+    .reduce((acc, r) => acc.add(r.amount), d(0));
+  const { vatRateSnapshot } = legacyVatSnapshotFromResolved(resolved.taxes);
+  const gross = money2(net.add(totalTax));
+
+  let lineVatRunning = d(0);
+  const lineCreates = preparedLines.map((l, idx) => {
+    const isLast = idx === preparedLines.length - 1;
+    let lineVat: Prisma.Decimal;
+    if (net.lte(0)) {
+      lineVat = d(0);
+    } else if (isLast) {
+      lineVat = money2(totalTax.sub(lineVatRunning));
+    } else {
+      lineVat = money2(l.lineNet.div(net).mul(totalTax));
+      lineVatRunning = lineVatRunning.add(lineVat);
+    }
+    return {
+      productId: l.productId,
+      qtyKg: l.qtyKg,
+      unitPricePerKg: l.unitPricePerKg,
+      lineNet: l.lineNet,
+      lineVat,
+      lineGross: money2(l.lineNet.add(lineVat)),
+    };
+  });
 
   let paidTotal = d(0);
   let preparedPayments: Array<{
@@ -311,23 +359,15 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       status: ValidationStatus.PENDING,
       customerNameSnapshot: customer.name,
       taxRegimeId: customer.taxRegimeId,
-      vatRateSnapshot: vatRate,
+      vatRateSnapshot,
       netAmount: net,
-      vatAmount: vat,
+      vatAmount,
       grossAmount: gross,
       financialYear: postingFY,
       financialMonth: postingCalendarMonth,
       postingCalendarYear,
-      lines: {
-        create: preparedLines.map((l) => ({
-          productId: l.productId,
-          qtyKg: l.qtyKg,
-          unitPricePerKg: l.unitPricePerKg,
-          lineNet: l.lineNet,
-          lineVat: money2(l.lineNet.mul(vatRate)),
-          lineGross: money2(l.lineNet.add(money2(l.lineNet.mul(vatRate)))),
-        })),
-      },
+      appliedTaxes: { create: appliedTaxCreates },
+      lines: { create: lineCreates },
       payments: {
         create: preparedPayments.map((p) => ({
           method: p.method,
@@ -345,6 +385,50 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   revalidatePath("/dashboard");
 
   return { ok: true, id: created.id, invoiceNo: created.invoiceNo, soldAtIso: created.soldAt.toISOString() };
+}
+
+export async function previewPosTaxes(
+  customerId: string,
+  transactionIso: string,
+): Promise<{ ok: true; taxes: PosTaxPreviewRow[] } | { ok: false; error: string }> {
+  const prisma = getPrismaClient();
+  try {
+    await assertPermissionKey("route:/pos");
+    await requireActor(prisma);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const cid = String(customerId ?? "").trim();
+  if (!cid) return { ok: false, error: "Customer is required." };
+
+  const iso = normalizeIsoDateInput(transactionIso) ?? utcIsoDateToday();
+  const soldAt = noonUtcFromIsoDate(iso);
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: cid },
+    select: { id: true },
+  });
+  if (!customer) return { ok: false, error: "Customer not found." };
+
+  const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
+  return {
+    ok: true,
+    taxes: resolved.taxes.map((t) => {
+      const pct = new Prisma.Decimal(t.rate.toString())
+        .mul(100)
+        .toDecimalPlaces(2)
+        .toString();
+      return {
+        code: t.code,
+        label: t.label,
+        rate: t.rate.toString(),
+        ratePercentLabel: pct,
+      };
+    }),
+  };
 }
 
 export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView | null> {
@@ -367,6 +451,7 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       createdBy: { select: { id: true, name: true } },
       validatedBy: { select: { id: true, name: true } },
       salesPoint: { select: { id: true, name: true } },
+      appliedTaxes: { orderBy: { id: "asc" } },
       lines: { include: { product: { select: { productName: true, productCat: { select: { productCat: true } } } } }, orderBy: { id: "asc" } },
       payments: { orderBy: { id: "asc" } },
     },
@@ -386,7 +471,14 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     customerId: row.customerId,
     customerName: row.customer.name,
     taxpayerId: row.customer.taxpayerId,
-    vatApplies: row.customer.taxRegime.vatApplies,
+    vatApplies:
+      row.appliedTaxes.length > 0
+        ? row.appliedTaxes.some(
+            (t) =>
+              t.codeSnapshot === VAT_TAX_CODE &&
+              new Prisma.Decimal(t.amount).gt(0),
+          )
+        : row.customer.taxRegime.vatApplies,
     createdByUserId: row.createdByUserId,
     createdByName: row.createdBy.name,
     status: row.status,
@@ -418,6 +510,12 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       chequeNo: p.chequeNo ?? null,
       bank: p.bank ?? null,
       paidAtIso: p.paidAt.toISOString(),
+    })),
+    appliedTaxes: row.appliedTaxes.map((t) => ({
+      code: t.codeSnapshot,
+      label: t.labelSnapshot,
+      rate: t.rateSnapshot.toString(),
+      amount: t.amount.toString(),
     })),
   };
 }
@@ -601,6 +699,7 @@ export async function loadSalePrintById(
           taxRegime: { select: { vatApplies: true } },
         },
       },
+      appliedTaxes: { orderBy: { id: "asc" } },
       lines: {
         orderBy: { id: "asc" },
         include: { product: { include: { productCat: true } } },
@@ -614,6 +713,38 @@ export async function loadSalePrintById(
     return { ok: false, reason: "missing" };
   }
 
+  const appliedTaxLines =
+    sale.appliedTaxes.length > 0
+      ? sale.appliedTaxes.map((t) => ({
+          label: t.labelSnapshot,
+          ratePercentLabel: new Prisma.Decimal(t.rateSnapshot.toString())
+            .mul(100)
+            .toDecimalPlaces(2)
+            .toString(),
+          amount: t.amount.toString(),
+        }))
+      : new Prisma.Decimal(sale.vatAmount).gt(0)
+        ? [
+            {
+              label: "VAT",
+              ratePercentLabel: new Prisma.Decimal(sale.vatRateSnapshot.toString())
+                .mul(100)
+                .toDecimalPlaces(2)
+                .toString(),
+              amount: sale.vatAmount.toString(),
+            },
+          ]
+        : [];
+
+  const vatAppliesSnapshot =
+    sale.appliedTaxes.length > 0
+      ? sale.appliedTaxes.some(
+          (t) =>
+            t.codeSnapshot === VAT_TAX_CODE &&
+            new Prisma.Decimal(t.amount).gt(0),
+        )
+      : sale.customer.taxRegime.vatApplies;
+
   const saleModel: SalePrintModel = {
     invoiceNo: sale.invoiceNo,
     soldAtIso: sale.soldAt.toISOString(),
@@ -622,7 +753,8 @@ export async function loadSalePrintById(
     deliveryOrderNo: sale.deliveryOrderNo,
     customerName: sale.customer.name,
     taxpayerId: sale.customer.taxpayerId,
-    vatApplies: sale.customer.taxRegime.vatApplies,
+    vatApplies: vatAppliesSnapshot,
+    appliedTaxLines,
     lines: sale.lines.map((l, idx) => ({
       lineNo: idx + 1,
       productName: l.product.productName,

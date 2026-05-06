@@ -27,13 +27,14 @@ const setupNav = [
   { href: "/sales-points", label: "Sales points" },
   { href: "/storage-locations", label: "Storage locations" },
   { href: "/tax-regimes", label: "Tax regimes" },
+  { href: "/tax-types", label: "Tax types" },
   { href: "/product-categories", label: "Product categories" },
   { href: "/products", label: "Products" },
 ] as const;
 
 const operationsNav = [
   { href: "/delivery-orders", label: "Delivery orders" },
-  { href: "/consignment-notes", label: "Consignment notes" },
+  { href: "/consignment-notes", label: "VehicleConsignment notes" },
   { href: "/pos", label: "Sales" },
   { href: "/stock/receive", label: "Stock In" },
 ] as const;

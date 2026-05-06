@@ -37,6 +37,7 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
         department={data.department}
         companyPhone={data.companyPhone}
         companyAddress={data.companyAddress}
+        logoSrc={data.logoSrc}
         order={data.order}
       />
     </div>

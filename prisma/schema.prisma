@@ -28,6 +28,11 @@ enum CustomerType {
   WORKER
 }
 
+enum CustomerResidency {
+  LOCAL
+  OVERSEAS
+}
+
 enum FinancialYearStatus {
   OPEN
   CLOSED
@@ -37,6 +42,18 @@ enum ValidationStatus {
   PENDING
   VALIDATED
   REJECTED
+}
+
+enum TaxRegimeKind {
+  SIMPLIFIED
+  REAL
+}
+
+enum TaxRateVariant {
+  DEFAULT
+  SIMPLIFIED
+  REAL
+  NO_TAXPAYER_ID
 }
 
 model RolePermission {
@@ -192,7 +209,9 @@ model Customer {
   email       String?
   address     String?
   customerType CustomerType @default(INDUSTRY)
+  residency    CustomerResidency @default(LOCAL)
   taxRegimeId   String
+  hasTaxpayerId Boolean @default(false)
   taxpayerId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -205,15 +224,74 @@ model Customer {
   @@index([taxRegimeId])
 }
 
+/// Catalog of tax levies (e.g. VAT). Rates vary over time via TaxRateSchedule.
+model TaxType {
+  id        String   @id @default(cuid())
+  /// Stable code for snapshots and reporting (e.g. VAT).
+  code      String   @unique
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rateSchedules TaxRateSchedule[]
+  regimeLinks   TaxRegimeTax[]
+  saleApplied   SaleAppliedTax[]
+}
+
+/// Versioned rate per tax type; active row for date D is the one with max effectiveFrom where effectiveFrom <= D.
+model TaxRateSchedule {
+  id            String   @id @default(cuid())
+  taxTypeId     String
+  taxType       TaxType  @relation(fields: [taxTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variant       TaxRateVariant @default(DEFAULT)
+  rate          Decimal  @db.Decimal(5, 4)
+  effectiveFrom DateTime @db.Date
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([taxTypeId, effectiveFrom])
+  @@unique([taxTypeId, effectiveFrom, variant])
+}
+
+/// Which tax types apply to a given regime (additive on net).
+model TaxRegimeTax {
+  taxRegimeId String
+  taxTypeId   String
+  taxRegime   TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  taxType     TaxType   @relation(fields: [taxTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([taxRegimeId, taxTypeId])
+  @@index([taxTypeId])
+}
+
 model TaxRegime {
   id        String   @id @default(cuid())
   name      String   @unique
+  kind      TaxRegimeKind @default(SIMPLIFIED)
   vatApplies Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  taxTypeLinks TaxRegimeTax[]
   customers Customer[]
   sales     Sale[]
+}
+
+/// Taxes applied on an invoice at posting time (audit snapshot).
+model SaleAppliedTax {
+  id            String   @id @default(cuid())
+  saleId        String
+  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  taxTypeId     String?
+  taxType       TaxType? @relation(fields: [taxTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  codeSnapshot  String
+  labelSnapshot String
+  rateSnapshot  Decimal  @db.Decimal(5, 4)
+  amount        Decimal  @db.Decimal(14, 2)
+  createdAt     DateTime @default(now())
+
+  @@index([saleId])
 }
 
 model Product {
@@ -333,6 +411,7 @@ model Sale {
   taxRegime TaxRegime @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
   lines     SaleLine[]
   payments  Payment[]
+  appliedTaxes SaleAppliedTax[]
   consignmentNote VehicleConsignmentNote?
 
   @@index([soldAt])

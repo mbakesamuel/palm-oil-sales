@@ -12,6 +12,10 @@ import {
 import { firstDayOfCalendarMonth, noonUtcFromIsoDate } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import {
+  combinedVatAndOtherRates,
+} from "@/lib/tax/resolve";
+import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
+import {
   canCreateOrEditDeliveryOrderDraft,
   canValidateDeliveryOrder,
 } from "@/lib/auth-roles";
@@ -125,8 +129,6 @@ type LineInput = {
   orderQty: string;
   orderUnit: string;
   unitPrice: string;
-  otherTaxLabel: string;
-  otherTaxAmount: string;
 };
 
 type PaymentInput = {
@@ -157,6 +159,62 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
   });
   if (!actor?.isActive) throw new Error("Login required.");
   return { session, actor };
+}
+
+export type DeliveryOrderTaxPreview = {
+  vatRate: string;
+  vatPercentLabel: string;
+  otherRate: string;
+  otherPercentLabel: string;
+  otherLabel: string | null;
+};
+
+export async function previewDeliveryOrderTaxes(
+  customerId: string,
+  dateIssuedIso: string,
+): Promise<
+  { ok: true; preview: DeliveryOrderTaxPreview } | { ok: false; error: string }
+> {
+  const prisma = getPrismaClient();
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    await requireActor(prisma);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const cid = String(customerId ?? "").trim();
+  if (!cid) return { ok: false, error: "Customer is required." };
+
+  const iso = String(dateIssuedIso ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return { ok: false, error: "Date issued must be YYYY-MM-DD." };
+  }
+
+  const soldAt = new Date(`${iso}T12:00:00.000Z`);
+  const customer = await prisma.customer.findUnique({
+    where: { id: cid },
+    select: { id: true },
+  });
+  if (!customer) return { ok: false, error: "Customer not found." };
+
+  const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
+  const c = combinedVatAndOtherRates(resolved.taxes);
+  const pct = (n: Prisma.Decimal) =>
+    new Prisma.Decimal(n.toString()).mul(100).toDecimalPlaces(2).toString();
+
+  return {
+    ok: true,
+    preview: {
+      vatRate: c.vatRate.toString(),
+      vatPercentLabel: pct(c.vatRate),
+      otherRate: c.otherRate.toString(),
+      otherPercentLabel: pct(c.otherRate),
+      otherLabel: c.otherLabel,
+    },
+  };
 }
 
 function revalidateOrderPaths(id: number) {
@@ -420,7 +478,7 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
   try {
     const order = await prisma.deliveryOrder.findUnique({
       where: { id: deliveryOrderId },
-      include: { customer: { include: { taxRegime: true } } },
+      select: { customerId: true, status: true, salesPointId: true, dateIssued: true },
     });
     if (!order) return { ok: false, error: "Order not found." };
     if (order.status === ValidationStatus.VALIDATED) {
@@ -429,10 +487,9 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
     const accessErr = salesPointErrorForResource(actor, order.salesPointId);
     if (accessErr) return { ok: false, error: accessErr };
 
-    const settings = await getOrInitCompanySettings();
-    const companyVatRate = settings.vatRate;
-    const vatApplies = order.customer.taxRegime.vatApplies;
-    const appliedVatRate = vatApplies ? companyVatRate : new Prisma.Decimal(0);
+    const resolved = await resolveTaxesForCustomer(prisma, order.customerId, order.dateIssued);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const comb = combinedVatAndOtherRates(resolved.taxes);
 
     const prepared = lines.map((l) => {
       const productId = Number.parseInt(l.productId, 10);
@@ -449,13 +506,9 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
 
       const unitPrice = money2(d(unitPriceRaw));
       const lineSubtotalExTax = money2(unitPrice.mul(d(orderQty)));
-      const vatAmount = vatApplies
-        ? money2(lineSubtotalExTax.mul(appliedVatRate))
-        : money2(d(0));
-
-      const otherTaxLabel = String(l.otherTaxLabel ?? "").trim() || null;
-      const otherTaxRaw = String(l.otherTaxAmount ?? "").trim();
-      const otherTaxAmount = otherTaxRaw ? money2(d(otherTaxRaw)) : money2(d(0));
+      const vatAmount = money2(lineSubtotalExTax.mul(comb.vatRate));
+      const otherTaxAmount = money2(lineSubtotalExTax.mul(comb.otherRate));
+      const otherTaxLabel = comb.otherLabel;
 
       const amount = money2(lineSubtotalExTax.add(vatAmount).add(otherTaxAmount));
 
@@ -465,7 +518,7 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
         orderUnit,
         unitPrice,
         lineSubtotalExTax,
-        vatRate: appliedVatRate,
+        vatRate: comb.vatRate,
         vatAmount,
         otherTaxLabel,
         otherTaxAmount,
@@ -647,6 +700,7 @@ export type DeliveryOrderPrintPayload = {
   department: string | null;
   companyPhone: string | null;
   companyAddress: string | null;
+  logoSrc: string;
   order: DeliveryOrderPrintModel;
 };
 
@@ -730,6 +784,11 @@ export async function loadDeliveryOrderPrintById(
     grandTotal: t.grandTotal,
   };
 
+  const logoSrc =
+    settings.logoUrl && settings.logoUrl.trim() !== ""
+      ? settings.logoUrl.trim()
+      : "/cdc-logo-svg.svg";
+
   return {
     ok: true,
     data: {
@@ -737,6 +796,7 @@ export async function loadDeliveryOrderPrintById(
       department: settings.department ?? null,
       companyPhone: settings.phone ?? null,
       companyAddress: settings.address ?? null,
+      logoSrc,
       order: orderModel,
     },
   };

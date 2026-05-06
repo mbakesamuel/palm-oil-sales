@@ -14,6 +14,7 @@ export const PERMISSION_KEYS = [
   "route:/sales-points",
   "route:/storage-locations",
   "route:/tax-regimes",
+  "route:/tax-types",
   "route:/product-categories",
   "route:/products",
   "route:/delivery-orders",

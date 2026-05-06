@@ -43,3 +43,10 @@ export const CustomerType = {
 } as const;
 export type CustomerType = (typeof CustomerType)[keyof typeof CustomerType];
 
+export const CustomerResidency = {
+  LOCAL: "LOCAL",
+  OVERSEAS: "OVERSEAS",
+} as const;
+export type CustomerResidency =
+  (typeof CustomerResidency)[keyof typeof CustomerResidency];
+

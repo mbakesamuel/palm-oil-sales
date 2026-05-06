@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth-roles";
 import { ValidationStatus } from "@/lib/domain";
 import type {
+  DeliveryOrderTaxPreview,
   LoadedDeliveryOrderView,
   SaveHeaderResult,
   SaveSectionResult,
@@ -30,8 +31,6 @@ type LineRow = {
   orderQty: string;
   orderUnit: string;
   unitPrice: string;
-  otherTaxLabel: string;
-  otherTaxAmount: string;
 };
 
 type Payment = {
@@ -56,7 +55,12 @@ export function DeliveryOrdersClient(props: {
   customers: Customer[];
   products: Product[];
   salesPoints: SalesPointOpt[];
-  companyVatRate: string;
+  previewDeliveryOrderTaxesAction: (
+    customerId: string,
+    dateIssuedIso: string,
+  ) => Promise<
+    { ok: true; preview: DeliveryOrderTaxPreview } | { ok: false; error: string }
+  >;
   loadDeliveryOrderByNo: (
     no: string,
   ) => Promise<LoadedDeliveryOrderView | null>;
@@ -70,7 +74,7 @@ export function DeliveryOrdersClient(props: {
     customers,
     products,
     salesPoints,
-    companyVatRate,
+    previewDeliveryOrderTaxesAction,
     loadDeliveryOrderByNo,
     saveDeliveryOrderHeader,
     saveDeliveryOrderDetails,
@@ -82,10 +86,11 @@ export function DeliveryOrdersClient(props: {
   const wp = useWorkingPeriod();
   const { status: authStatus, session } = useAuth();
   const router = useRouter();
-  const vatRateNum = Number.parseFloat(companyVatRate);
-  const vatPercentLabel = Number.isFinite(vatRateNum)
-    ? (vatRateNum * 100).toFixed(2)
-    : companyVatRate;
+
+  const [taxPreview, setTaxPreview] = React.useState<DeliveryOrderTaxPreview | null>(
+    null,
+  );
+  const [taxPreviewError, setTaxPreviewError] = React.useState<string | null>(null);
 
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [deliveryOrderNo, setDeliveryOrderNo] = React.useState("");
@@ -106,8 +111,6 @@ export function DeliveryOrdersClient(props: {
             orderQty: "1",
             orderUnit: "kg",
             unitPrice: "",
-            otherTaxLabel: "",
-            otherTaxAmount: "",
           },
         ]
       : [],
@@ -129,13 +132,36 @@ export function DeliveryOrdersClient(props: {
       orderQty: "1",
       orderUnit: "kg",
       unitPrice: "",
-      otherTaxLabel: "",
-      otherTaxAmount: "",
     };
   }
 
-  const customerVatApplies =
-    customers.find((c) => c.id === customerId)?.vatApplies ?? false;
+  React.useEffect(() => {
+    if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
+      setTaxPreview(null);
+      setTaxPreviewError(null);
+      return;
+    }
+    let alive = true;
+    void previewDeliveryOrderTaxesAction(customerId, dateIssued).then((r) => {
+      if (!alive) return;
+      if (r.ok) {
+        setTaxPreview(r.preview);
+        setTaxPreviewError(null);
+      } else {
+        setTaxPreview(null);
+        setTaxPreviewError(r.error);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [
+    customerId,
+    dateIssued,
+    authStatus,
+    session?.userId,
+    previewDeliveryOrderTaxesAction,
+  ]);
 
   React.useEffect(() => {
     if (wp.openFinancialYear == null) return;
@@ -179,8 +205,6 @@ export function DeliveryOrdersClient(props: {
             orderQty: String(l.orderQty),
             orderUnit: l.orderUnit || "kg",
             unitPrice: l.unitPrice,
-            otherTaxLabel: l.otherTaxLabel,
-            otherTaxAmount: l.otherTaxAmount,
           }))
         : [emptyLine()],
     );
@@ -383,15 +407,17 @@ export function DeliveryOrdersClient(props: {
     }
   }
 
+  const vatRateNum = taxPreview ? parseDec(taxPreview.vatRate) : 0;
+  const otherRateNum = taxPreview ? parseDec(taxPreview.otherRate) : 0;
+
   const lineSummaries = lines.map((l) => {
     const q = Number.parseInt(l.orderQty, 10) || 0;
     const unit = parseDec(l.unitPrice);
     const net = Math.round(q * unit * 100) / 100;
-    const vat =
-      customerVatApplies && Number.isFinite(vatRateNum)
-        ? Math.round(net * vatRateNum * 100) / 100
-        : 0;
-    const other = parseDec(l.otherTaxAmount);
+    const regimeVat = Math.round(net * vatRateNum * 100) / 100;
+    const regimeOther = Math.round(net * otherRateNum * 100) / 100;
+    const vat = regimeVat;
+    const other = regimeOther;
     const total = Math.round((net + vat + other) * 100) / 100;
     return { net, vat, other, total };
   });
@@ -645,18 +671,30 @@ export function DeliveryOrdersClient(props: {
                 </div>
               </div>
               <p className="text-xs opacity-70 -mt-1">
-                VAT on lines follows this customer’s regime:{" "}
-                <span className="font-medium">
-                  {customerVatApplies ? "VAT applies" : "VAT exempt"}
-                </span>
-                {customerVatApplies ? (
-                  <span>
-                    {" "}
-                    at company rate{" "}
-                    <span className="font-medium">{vatPercentLabel}%</span> (net
-                    × rate).
+                {taxPreviewError ? (
+                  <span className="text-amber-800 dark:text-amber-300">
+                    {taxPreviewError}
                   </span>
-                ) : null}
+                ) : taxPreview ? (
+                  <>
+                    Taxes from regime (date issued): VAT{" "}
+                    <span className="font-medium">{taxPreview.vatPercentLabel}%</span>
+                    {parseDec(taxPreview.otherRate) > 0 ? (
+                      <>
+                        {" "}
+                        · {taxPreview.otherLabel ?? "Other"}{" "}
+                        <span className="font-medium">
+                          {taxPreview.otherPercentLabel}%
+                        </span>
+                      </>
+                    ) : null}
+                    . Optional per-line amount adds on top of statutory other taxes.
+                  </>
+                ) : customerId ? (
+                  "Loading tax rates…"
+                ) : (
+                  "Select a customer and date to load tax rates."
+                )}
               </p>
               <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
                 <div className="grid gap-2">
@@ -775,9 +813,10 @@ export function DeliveryOrdersClient(props: {
               <p className="text-xs opacity-75 mt-1">
                 Stored in{" "}
                 <code className="text-[11px]">DeliveryOrderDetails</code>. Unit
-                price is <span className="font-medium">excluding VAT</span>. VAT
-                is computed from the customer regime and company VAT rate; add
-                other taxes manually per line.
+                price is <span className="font-medium">excluding tax</span>. VAT
+                and other statutory taxes follow the customer regime and{" "}
+                <span className="font-medium">Tax types</span> schedule for the
+                date issued.
               </p>
             </div>
             {section2Disabled ? (
@@ -901,41 +940,18 @@ export function DeliveryOrdersClient(props: {
                       </div>
                     </div>
 
-                    {/* Taxes line: VAT + other tax + line total */}
+                    {/* Taxes line: VAT + other taxes (auto) + line total */}
                     <div className="grid grid-cols-12 gap-2 px-3 pb-3 -mt-1 text-xs">
                       <div className="col-span-4 opacity-70">Taxes</div>
                       <div className="col-span-2 tabular-nums">
                         <span className="opacity-70">VAT:</span>{" "}
                         <span className="font-medium">{s.vat.toFixed(2)} XAF</span>
                       </div>
-                      <div className="col-span-4 flex flex-col gap-1">
-                        <input
-                          className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs"
-                          placeholder="Other tax label"
-                          value={l.otherTaxLabel}
-                          disabled={linesReadOnly}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) =>
-                                i === idx ? { ...x, otherTaxLabel: e.target.value } : x,
-                              ),
-                            )
-                          }
-                        />
-                        <input
-                          className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1 text-xs"
-                          inputMode="decimal"
-                          placeholder="Other tax amount (XAF)"
-                          value={l.otherTaxAmount}
-                          disabled={linesReadOnly}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) =>
-                                i === idx ? { ...x, otherTaxAmount: e.target.value } : x,
-                              ),
-                            )
-                          }
-                        />
+                      <div className="col-span-4 tabular-nums">
+                        <span className="opacity-70">
+                          {taxPreview?.otherLabel ? `${taxPreview.otherLabel}:` : "Other taxes:"}
+                        </span>{" "}
+                        <span className="font-medium">{s.other.toFixed(2)} XAF</span>
                       </div>
                       <div className="col-span-2 text-right tabular-nums">
                         <span className="opacity-70">Total:</span>{" "}
@@ -976,7 +992,12 @@ export function DeliveryOrdersClient(props: {
 
             <button
               type="button"
-              disabled={linesReadOnly || busy !== null}
+              disabled={
+                linesReadOnly ||
+                busy !== null ||
+                Boolean(taxPreviewError) ||
+                taxPreview == null
+              }
               onClick={() => void onSaveLines()}
               className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
@@ -1038,148 +1059,145 @@ export function DeliveryOrdersClient(props: {
                 {payments.map((p, idx) => (
                   <div
                     key={idx}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-3 py-3 border-b border-black/10 dark:border-white/10 last:border-b-0"
+                    className="overflow-x-auto px-3 py-3 border-b border-black/10 dark:border-white/10 last:border-b-0"
                   >
-                    <div className="grid gap-1">
-                      <label className="text-xs font-medium opacity-70">
-                        Method
-                      </label>
-                      <div className="flex flex-wrap items-center gap-3 rounded-md border border-black/10 dark:border-white/10 px-3 py-2 text-sm">
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`do-payment-method-${idx}`}
-                            value="CASH"
-                            checked={p.method === "CASH"}
-                            disabled={paymentsReadOnly}
-                            onChange={() =>
-                              setPayments((prev) =>
-                                prev.map((x, i) =>
-                                  i === idx
-                                    ? {
-                                        ...x,
-                                        method: "CASH",
-                                        chequeNo: "",
-                                        bank: "",
-                                      }
-                                    : x,
-                                ),
-                              )
-                            }
-                          />
-                          Cash
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`do-payment-method-${idx}`}
-                            value="CHEQUE"
-                            checked={p.method === "CHEQUE"}
-                            disabled={paymentsReadOnly}
-                            onChange={() =>
-                              setPayments((prev) =>
-                                prev.map((x, i) =>
-                                  i === idx
-                                    ? {
-                                        ...x,
-                                        method: "CHEQUE",
-                                        cashReceiptNo: "",
-                                      }
-                                    : x,
-                                ),
-                              )
-                            }
-                          />
-                          Cheque
-                        </label>
-                      </div>
-                    </div>
-                    <div className="grid gap-1">
-                      <label className="text-xs font-medium opacity-70">
-                        Date issued
-                      </label>
-                      <input
-                        type="date"
-                        className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
-                        value={p.paymentDate}
-                        disabled={paymentsReadOnly}
-                        onChange={(e) =>
-                          setPayments((prev) =>
-                            prev.map((x, i) =>
-                              i === idx
-                                ? { ...x, paymentDate: e.target.value }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-1 sm:col-span-2 lg:col-span-1">
-                      <label className="text-xs font-medium opacity-70">
-                        Details
-                      </label>
-                      {p.method === "CHEQUE" ? (
-                        <div className="flex flex-col gap-2">
-                          <input
-                            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
-                            placeholder="Cheque no."
-                            value={p.chequeNo}
-                            disabled={paymentsReadOnly}
-                            onChange={(e) =>
-                              setPayments((prev) =>
-                                prev.map((x, i) =>
-                                  i === idx
-                                    ? { ...x, chequeNo: e.target.value }
-                                    : x,
-                                ),
-                              )
-                            }
-                          />
-                          <input
-                            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
-                            placeholder="Bank"
-                            value={p.bank}
-                            disabled={paymentsReadOnly}
-                            onChange={(e) =>
-                              setPayments((prev) =>
-                                prev.map((x, i) =>
-                                  i === idx ? { ...x, bank: e.target.value } : x,
-                                ),
-                              )
-                            }
-                          />
+                    <div className="min-w-[1100px] flex items-end gap-3">
+                      <div className="grid gap-1 w-[260px] shrink-0">
+                        <label className="text-xs font-medium opacity-70">Method</label>
+                        <div className="flex flex-wrap items-center gap-3 rounded-md border border-black/10 dark:border-white/10 px-3 py-2 text-sm">
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`do-payment-method-${idx}`}
+                              value="CASH"
+                              checked={p.method === "CASH"}
+                              disabled={paymentsReadOnly}
+                              onChange={() =>
+                                setPayments((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          method: "CASH",
+                                          chequeNo: "",
+                                          bank: "",
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            />
+                            Cash
+                          </label>
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`do-payment-method-${idx}`}
+                              value="CHEQUE"
+                              checked={p.method === "CHEQUE"}
+                              disabled={paymentsReadOnly}
+                              onChange={() =>
+                                setPayments((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          method: "CHEQUE",
+                                          cashReceiptNo: "",
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            />
+                            Cheque
+                          </label>
                         </div>
-                      ) : (
+                      </div>
+
+                      <div className="grid gap-1 w-[170px] shrink-0">
+                        <label className="text-xs font-medium opacity-70">Date issued</label>
                         <input
+                          type="date"
                           className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
-                          placeholder="CDC receipt no."
-                          value={p.cashReceiptNo}
+                          value={p.paymentDate}
                           disabled={paymentsReadOnly}
                           onChange={(e) =>
                             setPayments((prev) =>
                               prev.map((x, i) =>
-                                i === idx
-                                  ? { ...x, cashReceiptNo: e.target.value }
-                                  : x,
+                                i === idx ? { ...x, paymentDate: e.target.value } : x,
                               ),
                             )
                           }
                         />
+                      </div>
+
+                      {p.method === "CHEQUE" ? (
+                        <>
+                          <div className="grid gap-1 w-[220px] shrink-0">
+                            <label className="text-xs font-medium opacity-70">Cheque no.</label>
+                            <input
+                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                              placeholder="Cheque no."
+                              value={p.chequeNo}
+                              disabled={paymentsReadOnly}
+                              onChange={(e) =>
+                                setPayments((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx ? { ...x, chequeNo: e.target.value } : x,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="grid gap-1 w-[220px] shrink-0">
+                            <label className="text-xs font-medium opacity-70">Bank</label>
+                            <input
+                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                              placeholder="Bank"
+                              value={p.bank}
+                              disabled={paymentsReadOnly}
+                              onChange={(e) =>
+                                setPayments((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx ? { ...x, bank: e.target.value } : x,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="grid gap-1 w-[260px] shrink-0">
+                            <label className="text-xs font-medium opacity-70">CDC receipt no.</label>
+                            <input
+                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                              placeholder="CDC receipt no."
+                              value={p.cashReceiptNo}
+                              disabled={paymentsReadOnly}
+                              onChange={(e) =>
+                                setPayments((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx ? { ...x, cashReceiptNo: e.target.value } : x,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                        </>
                       )}
-                    </div>
-                    <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
-                      <button
-                        type="button"
-                        className="text-xs underline underline-offset-4 disabled:opacity-40"
-                        disabled={paymentsReadOnly}
-                        onClick={() =>
-                          setPayments((prev) =>
-                            prev.filter((_, i) => i !== idx),
-                          )
-                        }
-                      >
-                        Remove payment
-                      </button>
+
+                      <div className="ml-auto flex justify-end">
+                        <button
+                          type="button"
+                          className="text-xs underline underline-offset-4 disabled:opacity-40"
+                          disabled={paymentsReadOnly}
+                          onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

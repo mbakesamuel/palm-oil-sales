@@ -22,6 +22,8 @@ export default async function CustomersPage() {
       email: true,
       address: true,
       customerType: true,
+      residency: true,
+      hasTaxpayerId: true,
       taxpayerId: true,
       taxRegime: { select: { id: true, name: true, vatApplies: true } },
       createdAt: true,

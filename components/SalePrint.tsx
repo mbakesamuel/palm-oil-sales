@@ -31,7 +31,13 @@ export type SalePrintModel = {
   deliveryOrderNo?: string | null;
   customerName: string;
   taxpayerId: string | null;
+  /** From invoice tax snapshots (not the customer’s current regime). */
   vatApplies: boolean;
+  appliedTaxLines: Array<{
+    label: string;
+    ratePercentLabel: string;
+    amount: string;
+  }>;
   lines: Array<{
     lineNo: number;
     productName: string;
@@ -41,6 +47,7 @@ export type SalePrintModel = {
     lineNet: string;
   }>;
   netAmount: string;
+  /** Legacy total VAT only; use appliedTaxLines for full tax breakdown. */
   vatAmount: string;
   grossAmount: string;
   payments: Array<{
@@ -109,7 +116,9 @@ export function SalePrint(props: {
           <p className="text-xs font-semibold uppercase opacity-70 mb-1">Customer</p>
           <p className="font-semibold">{sale.customerName}</p>
           {sale.taxpayerId ? <p className="opacity-80">Tax ID: {sale.taxpayerId}</p> : null}
-          <p className="opacity-80">VAT: {sale.vatApplies ? "applies" : "exempt"}</p>
+          <p className="opacity-80">
+            VAT (on invoice): {sale.vatApplies ? "charged" : "none"}
+          </p>
         </div>
       </div>
 
@@ -152,13 +161,17 @@ export function SalePrint(props: {
       <div className="flex justify-end mb-8">
         <div className="text-sm space-y-1 min-w-[240px]">
           <div className="flex justify-between gap-8">
-            <span className="opacity-70">Subtotal (ex VAT)</span>
+            <span className="opacity-70">Subtotal (ex tax)</span>
             <span className="tabular-nums">{moneyLabel(sale.netAmount)}</span>
           </div>
-          <div className="flex justify-between gap-8">
-            <span className="opacity-70">VAT</span>
-            <span className="tabular-nums">{moneyLabel(sale.vatAmount)}</span>
-          </div>
+          {sale.appliedTaxLines.map((t, i) => (
+            <div key={`${t.label}-${i}`} className="flex justify-between gap-8">
+              <span className="opacity-70">
+                {t.label} ({t.ratePercentLabel}%)
+              </span>
+              <span className="tabular-nums">{moneyLabel(t.amount)}</span>
+            </div>
+          ))}
           <div className="flex justify-between gap-8 border-t border-black/20 pt-2 font-semibold">
             <span>Grand total</span>
             <span className="tabular-nums">{moneyLabel(sale.grossAmount)}</span>

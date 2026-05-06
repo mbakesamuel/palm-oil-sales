@@ -10,7 +10,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
 import { UserRole, ValidationStatus } from "@/lib/domain";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
-import type { LoadedSaleView, SaleMutationResult, SaveSaleResult } from "./actions";
+import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import type {
+  LoadedSaleView,
+  PosTaxPreviewRow,
+  SaleMutationResult,
+  SaveSaleResult,
+} from "./actions";
 
 type Customer = {
   id: string;
@@ -34,11 +40,25 @@ function parseDec(s: string) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function legacyAppliedTaxesFromSale(s: LoadedSaleView): LoadedSaleView["appliedTaxes"] {
+  if (s.appliedTaxes.length > 0) return s.appliedTaxes;
+  const v = parseDec(s.vatAmount);
+  if (v <= 0) return [];
+  const netNum = parseDec(s.netAmount);
+  const rate = netNum > 0 ? String(v / netNum) : "0";
+  return [
+    { code: VAT_TAX_CODE, label: "VAT", rate, amount: s.vatAmount },
+  ];
+}
+
 export function SalesClient(props: {
   customers: Customer[];
   products: Product[];
   salesPoints: Array<{ id: number; name: string }>;
-  vatRateDecimal: string;
+  previewPosTaxesAction: (
+    customerId: string,
+    transactionIso: string,
+  ) => Promise<{ ok: true; taxes: PosTaxPreviewRow[] } | { ok: false; error: string }>;
   saveSaleAction: (formData: FormData) => Promise<SaveSaleResult>;
   loadSaleByInvoiceNo: (invoiceNo: string) => Promise<LoadedSaleView | null>;
   lookupDeliveryOrderAction: (
@@ -55,7 +75,7 @@ export function SalesClient(props: {
     customers,
     products,
     salesPoints,
-    vatRateDecimal,
+    previewPosTaxesAction,
     saveSaleAction,
     loadSaleByInvoiceNo,
     lookupDeliveryOrderAction,
@@ -98,6 +118,13 @@ export function SalesClient(props: {
     { method: "CASH", amount: "0" },
   ]);
   const [transactionDate, setTransactionDate] = React.useState(utcIsoDateToday);
+
+  const [taxPreviewRows, setTaxPreviewRows] = React.useState<PosTaxPreviewRow[]>([]);
+  const [taxPreviewError, setTaxPreviewError] = React.useState<string | null>(null);
+  /** When set, invoice is loaded and tax rows come from server snapshots (not live preview). */
+  const [loadedAppliedTaxes, setLoadedAppliedTaxes] = React.useState<
+    LoadedSaleView["appliedTaxes"] | null
+  >(null);
 
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
@@ -181,15 +208,67 @@ export function SalesClient(props: {
     session?.userId,
   ]);
 
+  React.useEffect(() => {
+    if (saleId != null) return;
+    if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
+      setTaxPreviewRows([]);
+      setTaxPreviewError(null);
+      return;
+    }
+    let alive = true;
+    void previewPosTaxesAction(customerId, transactionDate).then((res) => {
+      if (!alive) return;
+      if (res.ok) {
+        setTaxPreviewRows(res.taxes);
+        setTaxPreviewError(null);
+      } else {
+        setTaxPreviewRows([]);
+        setTaxPreviewError(res.error);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [
+    saleId,
+    customerId,
+    transactionDate,
+    authStatus,
+    session?.userId,
+    previewPosTaxesAction,
+  ]);
+
   const customer = customers.find((c) => c.id === customerId);
-  const vatApplicable = customer?.taxRegime.vatApplies ?? false;
-  const vatRate = vatApplicable ? Number.parseFloat(vatRateDecimal) : 0;
   const net = lines.reduce(
     (sum, l) => sum + parseDec(l.qtyKg) * parseDec(l.unitPricePerKg),
     0,
   );
-  const vat = Math.round(net * vatRate * 100) / 100;
-  const gross = Math.round((net + vat) * 100) / 100;
+
+  const taxDisplayRows = React.useMemo(() => {
+    if (saleId != null && loadedAppliedTaxes) {
+      return loadedAppliedTaxes.map((t) => ({
+        key: t.code,
+        label: t.label,
+        ratePercentLabel: (parseDec(t.rate) * 100).toFixed(2),
+        amount: parseDec(t.amount),
+      }));
+    }
+    return taxPreviewRows.map((t) => ({
+      key: t.code,
+      label: t.label,
+      ratePercentLabel: t.ratePercentLabel,
+      amount: Math.round(net * parseDec(t.rate) * 100) / 100,
+    }));
+  }, [saleId, loadedAppliedTaxes, taxPreviewRows, net]);
+
+  const totalTax = Math.round(taxDisplayRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+  const gross = Math.round((net + totalTax) * 100) / 100;
+  const vatChargedHint =
+    saleId != null && loadedAppliedTaxes
+      ? loadedAppliedTaxes.some(
+          (t) => t.code === VAT_TAX_CODE && parseDec(t.amount) > 0,
+        )
+      : taxPreviewRows.some((t) => t.code === VAT_TAX_CODE);
   const paid = payments.reduce((sum, p) => sum + parseDec(p.amount), 0);
 
   const transactionDateBounds =
@@ -275,10 +354,13 @@ export function SalesClient(props: {
     ]);
     setPayments([{ method: "CASH", amount: "0" }]);
     setTransactionDate(utcIsoDateToday());
+    setLoadedAppliedTaxes(null);
+    setTaxPreviewRows([]);
+    setTaxPreviewError(null);
     setBanner(null);
   }
 
-  function applyLoaded(s: LoadedSaleView) {
+  function applyLoaded(s: LoadedSaleView, bannerText?: string) {
     setSaleId(s.id);
     setInvoiceNo(s.invoiceNo);
     setLookupNo(s.invoiceNo);
@@ -320,7 +402,12 @@ export function SalesClient(props: {
           }))
         : [{ method: "CASH", amount: "0" }],
     );
-    setBanner({ type: "ok", text: `Loaded ${s.invoiceNo}.` });
+    setLoadedAppliedTaxes(legacyAppliedTaxesFromSale(s));
+    setTaxPreviewError(null);
+    setBanner({
+      type: "ok",
+      text: bannerText ?? `Loaded ${s.invoiceNo}.`,
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -397,11 +484,15 @@ export function SalesClient(props: {
 
       const r = await saveSaleAction(fd);
       if (r.ok) {
-        setSaleId(r.id);
-        setInvoiceNo(r.invoiceNo);
-        setLookupNo(r.invoiceNo);
-        setSoldAtIso(r.soldAtIso);
-        setSaleStatus(ValidationStatus.PENDING);
+        const full = await loadSaleByInvoiceNo(r.invoiceNo);
+        if (full) applyLoaded(full, `Created ${r.invoiceNo}.`);
+        else {
+          setSaleId(r.id);
+          setInvoiceNo(r.invoiceNo);
+          setLookupNo(r.invoiceNo);
+          setSoldAtIso(r.soldAtIso);
+          setSaleStatus(ValidationStatus.PENDING);
+        }
         setBanner({ type: "ok", text: `Created ${r.invoiceNo}.` });
         router.refresh();
       } else {
@@ -576,9 +667,20 @@ export function SalesClient(props: {
                 </option>
               ))}
             </select>
-            <div className="text-xs opacity-70">
-              VAT: {vatApplicable ? "applies" : "exempt"} · Regime:{" "}
-              {customer?.taxRegime.name ?? "-"}
+            <div className="text-xs opacity-70 space-y-0.5">
+              <div>
+                Regime: {customer?.taxRegime.name ?? "-"}
+                {vatChargedHint ? " · VAT may apply" : ""}
+              </div>
+              {saleId == null && taxPreviewError ? (
+                <div className="text-amber-800 dark:text-amber-300">{taxPreviewError}</div>
+              ) : null}
+              {saleId == null &&
+              !taxPreviewError &&
+              customerId &&
+              taxPreviewRows.length === 0 ? (
+                <div>No taxes configured for this regime on this date.</div>
+              ) : null}
             </div>
           </div>
 
@@ -999,13 +1101,17 @@ export function SalesClient(props: {
 
         <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
           <div className="flex justify-between">
-            <span className="opacity-70">Net</span>
+            <span className="opacity-70">Net (ex tax)</span>
             <span className="tabular-nums">{net.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="opacity-70">VAT</span>
-            <span className="tabular-nums">{vat.toFixed(2)}</span>
-          </div>
+          {taxDisplayRows.map((row) => (
+            <div key={row.key} className="flex justify-between">
+              <span className="opacity-70">
+                {row.label} ({row.ratePercentLabel}%)
+              </span>
+              <span className="tabular-nums">{row.amount.toFixed(2)}</span>
+            </div>
+          ))}
           <div className="flex justify-between font-semibold border-t border-black/10 dark:border-white/10 pt-2 mt-2">
             <span>Gross</span>
             <span className="tabular-nums">{gross.toFixed(2)}</span>
@@ -1017,12 +1123,16 @@ export function SalesClient(props: {
 
         <div className="flex flex-col gap-2">
           {saleId == null &&
-          (deliveryOrderSaveBlock.block || !vehicleNumber.trim()) ? (
+          (deliveryOrderSaveBlock.block ||
+            !vehicleNumber.trim() ||
+            Boolean(taxPreviewError)) ? (
             <p className="text-xs text-amber-800 dark:text-amber-300 max-w-xl">
-              {!vehicleNumber.trim()
-                ? "Enter a vehicle number before saving."
-                : (deliveryOrderSaveBlock.hint ??
-                  "Fix delivery order validation before saving.")}
+              {taxPreviewError
+                ? "Fix tax configuration before saving."
+                : !vehicleNumber.trim()
+                  ? "Enter a vehicle number before saving."
+                  : (deliveryOrderSaveBlock.hint ??
+                    "Fix delivery order validation before saving.")}
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
@@ -1032,7 +1142,8 @@ export function SalesClient(props: {
               busy !== null ||
               saleId != null ||
               !vehicleNumber.trim() ||
-              deliveryOrderSaveBlock.block
+              deliveryOrderSaveBlock.block ||
+              Boolean(taxPreviewError)
             }
             onClick={() => void onSaveSale()}
             className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
