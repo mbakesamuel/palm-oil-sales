@@ -70,6 +70,45 @@ model FinancialYearPeriod {
   @@map("FinancialYearPeriod")
 }
 
+/// Global monthly percentage weights (fiscal months 1–12) for sales budget quantity phasing; must sum to 100.
+model SalesBudgetMonthPhaseProfile {
+  id        String   @id @default("default")
+  /// Percent for fiscal month 1 … 12 (e.g. 8.333333 for one-twelfth).
+  pctM01    Decimal  @db.Decimal(10, 6)
+  pctM02    Decimal  @db.Decimal(10, 6)
+  pctM03    Decimal  @db.Decimal(10, 6)
+  pctM04    Decimal  @db.Decimal(10, 6)
+  pctM05    Decimal  @db.Decimal(10, 6)
+  pctM06    Decimal  @db.Decimal(10, 6)
+  pctM07    Decimal  @db.Decimal(10, 6)
+  pctM08    Decimal  @db.Decimal(10, 6)
+  pctM09    Decimal  @db.Decimal(10, 6)
+  pctM10    Decimal  @db.Decimal(10, 6)
+  pctM11    Decimal  @db.Decimal(10, 6)
+  pctM12    Decimal  @db.Decimal(10, 6)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("SalesBudgetMonthPhaseProfile")
+}
+
+/// Annual sales budget per product and financial year (company-wide).
+model ProductSalesBudget {
+  id                   String   @id @default(cuid())
+  financialYear        Int
+  productId            Int
+  annualQtyKg          Decimal  @db.Decimal(14, 3)
+  budgetUnitPricePerKg Decimal  @db.Decimal(14, 2)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [productId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([financialYear, productId])
+  @@index([financialYear])
+  @@map("ProductSalesBudget")
+}
+
 model CompanySettings {
   id            String   @id @default("default")
   companyName   String
@@ -187,6 +226,7 @@ model Product {
   batches       Batch[]
   saleLines     SaleLine[]
   deliveryOrderDetails DeliveryOrderDetails[]
+  salesBudgets        ProductSalesBudget[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

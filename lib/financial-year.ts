@@ -31,6 +31,17 @@ export async function getOpenFinancialYearPeriod() {
   );
 }
 
+export async function getFinancialYearPeriodByYear(financialYear: number) {
+  const prisma = getPrismaClient();
+  return prismaRetry(
+    () =>
+      prisma.financialYearPeriod.findUnique({
+        where: { financialYear },
+      }),
+    OPEN_FY_DB_RETRY,
+  );
+}
+
 export function toOpenFinancialYearForPosting(row: {
   financialYear: number;
   startDate: Date;

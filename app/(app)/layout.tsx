@@ -19,6 +19,7 @@ const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
   { href: "/setup", label: "Setup" },
+  { href: "/setup/sales-budget", label: "Sales budgets" },
   { href: "/setup/permissions", label: "Access control" },
   { href: "/users", label: "Users" },
   { href: "/customers", label: "Customers" },
@@ -46,6 +47,7 @@ const reportNav = [
   { href: "/reports/do-commitment-crosstab", label: "Commitments" },
   { href: "/reports/stock-on-hand", label: "Stock" },
   { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
+  { href: "/reports/sales-budget-monthly-crosstab", label: "Budget phasing (monthly)" },
 ] as const;
 
 export default async function AppLayout({

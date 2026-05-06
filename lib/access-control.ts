@@ -30,6 +30,10 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     base["route:/consignment-notes"] = true;
   }
 
+  if (role === UserRole.DIRECTOR || role === UserRole.MANAGER) {
+    base["route:/setup/sales-budget"] = true;
+  }
+
   // Reports default on.
   base["route:/reports"] = true;
   base["route:/reports/sales"] = true;
@@ -40,6 +44,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/do-commitment-crosstab"] = true;
   base["route:/reports/stock-on-hand"] = true;
   base["route:/reports/stock-vs-commitments"] = true;
+  base["route:/reports/sales-budget-monthly-crosstab"] = true;
 
   // Validation buttons visible to supervisors and above (still server-enforced elsewhere).
   base["ui:validate-documents"] =

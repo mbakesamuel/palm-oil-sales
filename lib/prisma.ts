@@ -58,6 +58,23 @@ function clientHasStorageLocation(client: PrismaClient): boolean {
   );
 }
 
+function clientHasSalesBudgetMonthPhaseProfile(client: PrismaClient): boolean {
+  return (
+    "salesBudgetMonthPhaseProfile" in client &&
+    typeof (
+      client as unknown as { salesBudgetMonthPhaseProfile?: { findUnique?: unknown } }
+    ).salesBudgetMonthPhaseProfile?.findUnique === "function"
+  );
+}
+
+function clientHasProductSalesBudget(client: PrismaClient): boolean {
+  return (
+    "productSalesBudget" in client &&
+    typeof (client as unknown as { productSalesBudget?: { findMany?: unknown } }).productSalesBudget
+      ?.findMany === "function"
+  );
+}
+
 export function getPrismaClient() {
   const schemaTag = prismaDatamodelFieldTag();
 
@@ -67,7 +84,9 @@ export function getPrismaClient() {
     if (
       tagMatches &&
       clientHasFinancialYearPeriod(globalForPrisma.prisma) &&
-      clientHasStorageLocation(globalForPrisma.prisma)
+      clientHasStorageLocation(globalForPrisma.prisma) &&
+      clientHasSalesBudgetMonthPhaseProfile(globalForPrisma.prisma) &&
+      clientHasProductSalesBudget(globalForPrisma.prisma)
     ) {
       return globalForPrisma.prisma;
     }
@@ -83,6 +102,16 @@ export function getPrismaClient() {
   if (!clientHasStorageLocation(client)) {
     throw new Error(
       "Prisma Client is out of date (missing StorageLocation). Run: npx prisma generate",
+    );
+  }
+  if (!clientHasSalesBudgetMonthPhaseProfile(client)) {
+    throw new Error(
+      "Prisma Client is out of date (missing SalesBudgetMonthPhaseProfile). Run: npx prisma generate",
+    );
+  }
+  if (!clientHasProductSalesBudget(client)) {
+    throw new Error(
+      "Prisma Client is out of date (missing ProductSalesBudget). Run: npx prisma generate",
     );
   }
   if (process.env.NODE_ENV !== "production") {

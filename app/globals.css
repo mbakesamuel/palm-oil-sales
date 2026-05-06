@@ -25,21 +25,33 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-@media print {
-  /* Tighter top/bottom leaves more printable height (e.g. consignment note on one A4 sheet). */
-  @page {
-    size: A4 portrait;
-    margin-top: 5mm;
-    margin-bottom: 5mm;
-    margin-left: 12mm;
-    margin-right: 12mm;
-  }
+@page {
+  size: A4 portrait;
+  margin-top: 5mm;
+  margin-bottom: 5mm;
+  margin-left: 12mm;
+  margin-right: 12mm;
+}
 
+@page sales-budget-monthly-crosstab {
+  size: A4 landscape;
+  margin-top: 5mm;
+  margin-bottom: 5mm;
+  margin-left: 10mm;
+  margin-right: 10mm;
+}
+
+@media print {
   /*
    * Slight zoom on the consignment note only (Chromium / Edge print — helps one-page fit).
    * Firefox may ignore `zoom`; margins above still help.
    */
   [data-print-fit-page] {
     zoom: 0.94;
+  }
+
+  /** Wide crosstab: use landscape A4 when printing this report. */
+  [data-print-page="sales-budget-monthly-crosstab"] {
+    page: sales-budget-monthly-crosstab;
   }
 }
