@@ -104,6 +104,18 @@ export default function ReportsIndexPage() {
             </div>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/reports/pricing"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Product pricing</div>
+            <div className="text-sm opacity-75">
+              Unit prices (ex tax) for the open financial year — Loose Palm Oil (by customer type) and other
+              products; filter by effective date or show latest schedules.
+            </div>
+          </Link>
+        </li>
       </ul>
 
       <div className="hidden print:block">

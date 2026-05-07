@@ -50,6 +50,7 @@ const reportNav = [
   { href: "/reports/stock-on-hand", label: "Stock" },
   { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
   { href: "/reports/sales-budget-monthly-crosstab", label: "Budget phasing (monthly)" },
+  { href: "/reports/pricing", label: "Product pricing" },
 ] as const;
 
 export default async function AppLayout({

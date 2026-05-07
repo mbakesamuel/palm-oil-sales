@@ -32,6 +32,7 @@ export const PERMISSION_KEYS = [
   "route:/reports/stock-on-hand",
   "route:/reports/stock-vs-commitments",
   "route:/reports/sales-budget-monthly-crosstab",
+  "route:/reports/pricing",
   "ui:validate-documents",
   "ui:manage-access-control",
 ] as const;

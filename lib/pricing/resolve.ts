@@ -20,6 +20,7 @@ export async function resolveUnitPriceExTax(
   | { ok: true; unitPriceExTax: Prisma.Decimal; productName: string }
   | { ok: false; error: string }
 > {
+
   const dayIso = prismaDateToIso(asOfDate);
   const asOfStartUtc = new Date(`${dayIso}T00:00:00.000Z`);
 
@@ -27,6 +28,7 @@ export async function resolveUnitPriceExTax(
     where: { productId },
     select: { productName: true, productCatId: true },
   });
+  
   if (!product) {
     return { ok: false, error: `Product ${productId} was not found.` };
   }
