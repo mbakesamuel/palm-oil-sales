@@ -32,7 +32,7 @@ function shouldSkipRouteCheck(pathname: string): boolean {
  * navigation including client-side RSC requests. The `(app)` layout only sees `x-invoke-path`
  * intermittently; skipping checks when that header is missing would fail open.
  */
-export default async function middleware(request: NextRequest, event: NextFetchEvent) {
+export default async function proxy(request: NextRequest, event: NextFetchEvent) {
   const pathname = request.nextUrl.pathname;
 
   // IMPORTANT: avoid wrapping the logout route with Auth.js middleware.
