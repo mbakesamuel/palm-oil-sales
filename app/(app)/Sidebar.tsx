@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
 import { getRolePermissionsAction } from "@/app/(app)/setup/permissions/actions";
+import { SignOutButton } from "../forbidden/SignOutButton";
 
 type NavItem = { href: string; label: string };
 
@@ -324,7 +325,7 @@ export function Sidebar(props: {
             ) : (
               <div className="opacity-70">All sales points</div>
             )}
-            <button
+            {/* <button
               type="button"
               onClick={async () => {
                 await signOut();
@@ -333,7 +334,8 @@ export function Sidebar(props: {
               className="text-left w-full text-xs underline underline-offset-4 hover:opacity-100"
             >
               Sign out
-            </button>
+            </button> */}
+            <SignOutButton />
           </div>
         ) : null}
       </div>
