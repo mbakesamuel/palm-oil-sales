@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
@@ -145,7 +145,6 @@ export function Sidebar(props: {
     operationsNav,
     reportNav = [],
   } = props;
-  const router = useRouter();
   const pathname = usePathname();
   const { status, session, signOut } = useAuth();
   const [collapsed, setCollapsed] = React.useState(false);
@@ -329,8 +328,7 @@ export function Sidebar(props: {
               type="button"
               onClick={async () => {
                 await signOut();
-                router.push("/login");
-                router.refresh();
+                window.location.href = "/login";
               }}
               className="text-left w-full text-xs underline underline-offset-4 hover:opacity-100"
             >
