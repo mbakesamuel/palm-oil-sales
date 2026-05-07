@@ -32,7 +32,7 @@ function shouldSkipRouteCheck(pathname: string): boolean {
  * navigation including client-side RSC requests. The `(app)` layout only sees `x-invoke-path`
  * intermittently; skipping checks when that header is missing would fail open.
  */
-export default async function proxy(request: NextRequest, event: NextFetchEvent) {
+export default async function middleware(request: NextRequest, event: NextFetchEvent) {
   const pathname = request.nextUrl.pathname;
 
   // IMPORTANT: avoid wrapping the logout route with Auth.js middleware.
@@ -46,7 +46,7 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
     return res;
   }
 
-  // NOTE: Keep Proxy edge-safe. Do not call Prisma / DB-backed permission checks here.
+  // NOTE: Keep middleware edge-safe. Do not call Prisma / DB-backed permission checks here.
   // Route enforcement happens via a Node API probe, so users can’t bypass it by typing URLs.
   const wrapped = auth(async (req) => {
     const p = req.nextUrl.pathname;
@@ -89,7 +89,6 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
+

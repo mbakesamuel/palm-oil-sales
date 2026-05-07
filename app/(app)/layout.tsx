@@ -64,9 +64,10 @@ export default async function AppLayout({
   // `x-invoke-path` is forwarded by `proxy.ts`. In some deployments the platform may also provide
   // `x-matched-path`, so keep it as a fallback to avoid failing open.
   const pathname = (h.get(INVOKE_PATH_HEADER) ?? h.get("x-matched-path") ?? "").trim();
-  if (pathname) {
-    await assertRouteAllowedForPath(pathname, session.role);
+  if (!pathname) {
+    redirect("/forbidden");
   }
+  await assertRouteAllowedForPath(pathname, session.role);
 
   const [settings, openPeriod] = await Promise.all([
     getOrInitCompanySettings(),
