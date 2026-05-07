@@ -55,12 +55,11 @@ export function ProductPricingClient(props: {
   const { products, schedules, saveScheduleAction, deleteScheduleAction } = props;
   const router = useRouter();
 
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [productId, setProductId] = React.useState(() => String(products[0]?.productId ?? ""));
-  const [customerType, setCustomerType] = React.useState<string>(CustomerType.INDUSTRY);
-  const [effectiveFrom, setEffectiveFrom] = React.useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
+  const [productId, setProductId] = React.useState("");
+  const [customerType, setCustomerType] = React.useState<string>("");
+  const [effectiveFrom, setEffectiveFrom] = React.useState("");
   const [unitPriceExTax, setUnitPriceExTax] = React.useState("");
   const [banner, setBanner] = React.useState<{ type: "error" | "ok"; text: string } | null>(null);
   const [pendingDelete, setPendingDelete] = React.useState<{
@@ -73,19 +72,29 @@ export function ProductPricingClient(props: {
 
   function resetForm() {
     setEditingId(null);
-    setProductId(String(products[0]?.productId ?? ""));
-    setCustomerType(CustomerType.INDUSTRY);
-    setEffectiveFrom(new Date().toISOString().slice(0, 10));
+    setProductId("");
+    setCustomerType("");
+    setEffectiveFrom("");
     setUnitPriceExTax("");
+  }
+
+  function closeForm() {
+    setIsFormOpen(false);
+    resetForm();
+  }
+
+  function openAddForm() {
+    resetForm();
+    setIsFormOpen(true);
   }
 
   function startEdit(row: ScheduleRow) {
     setEditingId(row.id);
     setProductId(String(row.productId));
-    setCustomerType(row.customerType ?? CustomerType.INDUSTRY);
+    setCustomerType(row.customerType ?? "");
     setEffectiveFrom(row.effectiveFromIso);
     setUnitPriceExTax(row.unitPriceExTax);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setIsFormOpen(true);
   }
 
   return (
@@ -97,7 +106,7 @@ export function ProductPricingClient(props: {
           <span className="font-medium">Main</span> category products (category id{" "}
           {MAIN_PRODUCT_CATEGORY_ID}) are priced per customer type; other categories use one direct
           price per product. Operational screens resolve the latest row on or before the document
-          date. Only administrators can edit this page.
+          date. Only administrators can edit this page. Prices are those approved by the General Manager of the corporation
         </p>
         <p className="text-sm opacity-75">
           Manage the catalog under{" "}
@@ -117,122 +126,19 @@ export function ProductPricingClient(props: {
           Add products before scheduling prices.
         </div>
       ) : (
-        <form
-          className="space-y-4 max-w-xl rounded-lg border border-black/10 dark:border-white/10 p-4"
-          action={async (formData) => {
-            setBanner(null);
-            try {
-              const wasEditing = editingId != null;
-              await saveScheduleAction(formData);
-              resetForm();
-              router.refresh();
-              setBanner({
-                type: "ok",
-                text: wasEditing ? "Price updated." : "Price added.",
-              });
-            } catch (e) {
-              setBanner({
-                type: "error",
-                text: e instanceof Error ? e.message : "Could not save.",
-              });
-            }
-          }}
-        >
-          {editingId ? <input type="hidden" name="id" value={editingId} /> : null}
-          <div className="font-medium">{editingId ? "Edit price row" : "Add price row"}</div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium" htmlFor="pp-product">
-              Product
-            </label>
-            <select
-              id="pp-product"
-              name="productId"
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-              required
-            >
-              {products.map((p) => (
-                <option key={p.productId} value={String(p.productId)}>
-                  {p.productName} (cat {p.productCatId})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {isMainProduct ? (
-            <div className="grid gap-2">
-              <label className="text-sm font-medium" htmlFor="pp-customer-type">
-                Customer type
-              </label>
-              <select
-                id="pp-customer-type"
-                name="customerType"
-                value={customerType}
-                onChange={(e) => setCustomerType(e.target.value)}
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-                required
-              >
-                {CUSTOMER_TYPE_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {labelCustomerType(c)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <input type="hidden" name="customerType" value="" />
-          )}
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium" htmlFor="pp-effective">
-              Effective from
-            </label>
-            <input
-              id="pp-effective"
-              name="effectiveFrom"
-              type="date"
-              value={effectiveFrom}
-              onChange={(e) => setEffectiveFrom(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium" htmlFor="pp-price">
-              Unit price (ex tax)
-            </label>
-            <input
-              id="pp-price"
-              name="unitPriceExTax"
-              value={unitPriceExTax}
-              onChange={(e) => setUnitPriceExTax(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
-              inputMode="decimal"
-              required
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="submit"
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
-            >
-              {editingId ? "Save changes" : "Add"}
-            </button>
-            {editingId ? (
-              <button
-                type="button"
-                className="rounded-md border border-black/15 dark:border-white/15 px-4 py-2 text-sm"
-                onClick={resetForm}
-              >
-                Cancel edit
-              </button>
-            ) : null}
-          </div>
-        </form>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+            onClick={() => {
+              setBanner(null);
+              openAddForm();
+            }}
+          >
+            Add price row
+          </button>
+          <p className="text-sm opacity-75">Create or edit scheduled unit prices.</p>
+        </div>
       )}
 
       {banner ? (
@@ -244,6 +150,161 @@ export function ProductPricingClient(props: {
           }
         >
           {banner.text}
+        </div>
+      ) : null}
+
+      {isFormOpen ? (
+        <div
+          className="fixed inset-0 z-50 print:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingId ? "Edit price row" : "Add price row"}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeForm();
+          }}
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={closeForm}
+          />
+          <div className="relative mx-auto mt-24 w-[min(42rem,calc(100vw-2rem))] rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-black p-4 shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div className="font-medium">{editingId ? "Edit price row" : "Add price row"}</div>
+              <button
+                type="button"
+                className="rounded-md border border-black/15 dark:border-white/15 px-3 py-1.5 text-sm"
+                onClick={closeForm}
+              >
+                Close
+              </button>
+            </div>
+
+            <form
+              className="mt-4 space-y-4"
+              action={async (formData) => {
+                setBanner(null);
+                try {
+                  const wasEditing = editingId != null;
+                  await saveScheduleAction(formData);
+                  closeForm();
+                  router.refresh();
+                  setBanner({
+                    type: "ok",
+                    text: wasEditing ? "Price updated." : "Price added.",
+                  });
+                } catch (e) {
+                  setBanner({
+                    type: "error",
+                    text: e instanceof Error ? e.message : "Could not save.",
+                  });
+                }
+              }}
+            >
+              {editingId ? <input type="hidden" name="id" value={editingId} /> : null}
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="pp-product">
+                  Product
+                </label>
+                <select
+                  id="pp-product"
+                  name="productId"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  required
+                >
+                  <option value="" disabled>
+                    Select a product…
+                  </option>
+                  {products.map((p) => (
+                    <option key={p.productId} value={String(p.productId)}>
+                      {p.productName} (cat {p.productCatId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="pp-customer-type">
+                  Customer type
+                </label>
+                {!isMainProduct ? <input type="hidden" name="customerType" value="" /> : null}
+                <select
+                  id="pp-customer-type"
+                  name="customerType"
+                  value={isMainProduct ? customerType : ""}
+                  onChange={(e) => setCustomerType(e.target.value)}
+                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  disabled={!productId || !isMainProduct}
+                  required={!!productId && isMainProduct}
+                >
+                  <option value="" disabled>
+                    {!productId
+                      ? "Select a product first…"
+                      : isMainProduct
+                        ? "Select a customer type…"
+                        : "Only for Main-category products"}
+                  </option>
+                  {CUSTOMER_TYPE_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {labelCustomerType(c)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="pp-effective">
+                  Effective from
+                </label>
+                <input
+                  id="pp-effective"
+                  name="effectiveFrom"
+                  type="date"
+                  value={effectiveFrom}
+                  onChange={(e) => setEffectiveFrom(e.target.value)}
+                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  required
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="pp-price">
+                  Unit price (ex tax)
+                </label>
+                <input
+                  id="pp-price"
+                  name="unitPriceExTax"
+                  value={unitPriceExTax}
+                  onChange={(e) => setUnitPriceExTax(e.target.value)}
+                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  inputMode="decimal"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+                >
+                  {editingId ? "Save changes" : "Add"}
+                </button>
+                {editingId ? (
+                  <button
+                    type="button"
+                    className="rounded-md border border-black/15 dark:border-white/15 px-4 py-2 text-sm"
+                    onClick={resetForm}
+                  >
+                    Cancel edit
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </div>
         </div>
       ) : null}
 

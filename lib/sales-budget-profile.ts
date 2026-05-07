@@ -27,6 +27,7 @@ function defaultProfileData() {
 
 export async function getOrInitSalesBudgetMonthPhaseProfile() {
   const prisma = getPrismaClient();
+  
   const existing = await prismaRetry(
     () =>
       prisma.salesBudgetMonthPhaseProfile.findUnique({
@@ -34,6 +35,7 @@ export async function getOrInitSalesBudgetMonthPhaseProfile() {
       }),
     RETRY,
   );
+
   if (existing) return existing;
 
   try {

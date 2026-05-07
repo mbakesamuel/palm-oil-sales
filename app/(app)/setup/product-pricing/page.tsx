@@ -4,6 +4,7 @@ import {
   deleteProductUnitPriceSchedule,
   saveProductUnitPriceSchedule,
 } from "./actions";
+import { PricingReportPrintButton } from "@/app/(app)/setup/product-pricing/PricingReportPrintButton";
 import { ProductPricingClient } from "./ProductPricingClient";
 
 export const dynamic = "force-dynamic";
@@ -28,20 +29,27 @@ export default async function ProductPricingPage() {
     ),
   ]);
 
+  const scheduleModels = schedules.map((r) => ({
+    id: r.id,
+    productId: r.productId,
+    productName: r.product.productName,
+    productCatId: r.product.productCatId,
+    customerType: r.customerType,
+    effectiveFromIso: r.effectiveFrom.toISOString().slice(0, 10),
+    unitPriceExTax: r.unitPriceExTax.toString(),
+  }));
+
   return (
-    <ProductPricingClient
-      products={products}
-      schedules={schedules.map((r) => ({
-        id: r.id,
-        productId: r.productId,
-        productName: r.product.productName,
-        productCatId: r.product.productCatId,
-        customerType: r.customerType,
-        effectiveFromIso: r.effectiveFrom.toISOString().slice(0, 10),
-        unitPriceExTax: r.unitPriceExTax.toString(),
-      }))}
-      saveScheduleAction={saveProductUnitPriceSchedule}
-      deleteScheduleAction={deleteProductUnitPriceSchedule}
-    />
+    <div className="space-y-8">
+      <div className="flex items-center justify-end">
+        <PricingReportPrintButton />
+      </div>
+      <ProductPricingClient
+        products={products}
+        schedules={scheduleModels}
+        saveScheduleAction={saveProductUnitPriceSchedule}
+        deleteScheduleAction={deleteProductUnitPriceSchedule}
+      />
+    </div>
   );
 }
