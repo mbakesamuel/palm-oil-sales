@@ -147,7 +147,7 @@ export function Sidebar(props: {
     reportNav = [],
   } = props;
   const pathname = usePathname();
-  const { status, session, signOut } = useAuth();
+  const { status, session } = useAuth();
   const [collapsed, setCollapsed] = React.useState(false);
   const [perm, setPerm] = React.useState<Record<string, boolean> | null>(null);
 
@@ -325,17 +325,9 @@ export function Sidebar(props: {
             ) : (
               <div className="opacity-70">All sales points</div>
             )}
-            {/* <button
-              type="button"
-              onClick={async () => {
-                await signOut();
-                window.location.href = "/login";
-              }}
-              className="text-left w-full text-xs underline underline-offset-4 hover:opacity-100"
-            >
-              Sign out
-            </button> */}
-            <SignOutButton />
+            <div className="text-left w-full">
+              <SignOutButton />
+            </div>
           </div>
         ) : null}
       </div>
