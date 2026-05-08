@@ -9,7 +9,10 @@ import {
   previewPosTaxes,
   validateSale,
 } from "./actions";
-import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
+import {
+  previewProductUnitPrice,
+  previewProductVariantUnitPrice,
+} from "@/lib/pricing/preview-action";
 import { SalesClient } from "./SalesClient";
 import Link from "next/link";
 
@@ -39,7 +42,13 @@ export default async function PosPage() {
         select: {
           productId: true,
           productName: true,
+          isBottledPalmOil: true,
           productCat: { select: { productCat: true } },
+          variants: {
+            where: { isActive: true },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true, unitLabel: true },
+          },
         },
         take: 50,
       }),
@@ -93,6 +102,7 @@ export default async function PosPage() {
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
           previewProductUnitPriceAction={previewProductUnitPrice}
+          previewProductVariantUnitPriceAction={previewProductVariantUnitPrice}
         />
       )}
     </div>

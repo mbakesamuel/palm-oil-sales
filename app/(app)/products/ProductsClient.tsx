@@ -15,6 +15,7 @@ type ProductRow = {
   productName: string;
   productCode: string | null;
   productCatId: number;
+  isBottledPalmOil: boolean;
   productCat: { productCatId: number; productCat: string };
 };
 
@@ -36,6 +37,7 @@ export function ProductsClient(props: {
   const [productCatId, setProductCatId] = React.useState(
     () => String(categories[0]?.productCatId ?? ""),
   );
+  const [isBottledPalmOil, setIsBottledPalmOil] = React.useState(false);
 
   const productCatIdForSelect =
     editingId != null &&
@@ -49,6 +51,7 @@ export function ProductsClient(props: {
     setProductName("");
     setProductCode("");
     setProductCatId(String(categories[0]?.productCatId ?? ""));
+    setIsBottledPalmOil(false);
   }
 
   function startEdit(p: ProductRow) {
@@ -56,6 +59,7 @@ export function ProductsClient(props: {
     setProductName(p.productName);
     setProductCode(p.productCode ?? "");
     setProductCatId(String(p.productCatId));
+    setIsBottledPalmOil(p.isBottledPalmOil);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -145,6 +149,22 @@ export function ProductsClient(props: {
             </select>
           </div>
 
+          <label className="flex items-start gap-2 rounded-md border border-black/10 dark:border-white/10 p-3 text-sm">
+            <input
+              type="checkbox"
+              name="isBottledPalmOil"
+              checked={isBottledPalmOil}
+              onChange={(e) => setIsBottledPalmOil(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="font-medium">Bottled Palm Oil product</span>
+              <span className="block text-xs opacity-70">
+                Enables size variants, Bota-only sales, and the special stock transfer workflow.
+              </span>
+            </span>
+          </label>
+
           <div className="flex items-center gap-2">
             <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
               {editingId != null ? "Save product" : "Add product"}
@@ -181,7 +201,14 @@ export function ProductsClient(props: {
                   key={p.productId}
                   className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
                 >
-                  <div className="col-span-4 font-medium truncate">{p.productName}</div>
+                  <div className="col-span-4 font-medium truncate">
+                    {p.productName}
+                    {p.isBottledPalmOil ? (
+                      <span className="ml-2 rounded-full border border-amber-500/40 px-1.5 py-0.5 text-[10px] font-normal text-amber-800 dark:text-amber-200">
+                        BPO
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="col-span-3 truncate opacity-80">{p.productCat.productCat}</div>
                   <div className="col-span-2 truncate opacity-70">{p.productCode ?? "—"}</div>
                   <div className="col-span-3 flex items-center justify-end gap-2">

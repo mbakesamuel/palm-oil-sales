@@ -21,6 +21,7 @@ const setupNav = [
   { href: "/setup", label: "Setup" },
   { href: "/setup/sales-budget", label: "Sales budgets" },
   { href: "/setup/product-pricing", label: "Product pricing" },
+  { href: "/setup/bpo-variants", label: "BPO variants" },
   { href: "/setup/permissions", label: "Access control" },
   { href: "/users", label: "Users" },
   { href: "/customers", label: "Customers" },
@@ -38,6 +39,9 @@ const operationsNav = [
   { href: "/consignment-notes", label: "VehicleConsignment notes" },
   { href: "/pos", label: "Sales" },
   { href: "/stock/receive", label: "Stock In" },
+  { href: "/stock/bpo-receive", label: "BPO Stock In" },
+  { href: "/stock/bpo-consignments", label: "BPO consignments" },
+  { href: "/stock/bpo-outbound", label: "BPO Gift / Out" },
 ] as const;
 
 const reportNav = [
@@ -51,6 +55,7 @@ const reportNav = [
   { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
   { href: "/reports/sales-budget-monthly-crosstab", label: "Budget phasing (monthly)" },
   { href: "/reports/pricing", label: "Product pricing" },
+  { href: "/reports/bpo", label: "BPO monitor" },
 ] as const;
 
 export default async function AppLayout({

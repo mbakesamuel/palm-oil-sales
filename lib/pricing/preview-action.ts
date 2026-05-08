@@ -6,7 +6,10 @@ import {
   normalizeIsoDateInput,
   utcIsoDateToday,
 } from "@/lib/posting-calendar";
-import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
+import {
+  resolveUnitPriceExTax,
+  resolveVariantUnitPriceExTax,
+} from "@/lib/pricing/resolve";
 
 export async function previewProductUnitPrice(
   customerId: string,
@@ -38,6 +41,23 @@ export async function previewProductUnitPrice(
     customer.customerType,
     soldAt,
   );
+  if (!r.ok) return r;
+  return { ok: true, unitPriceExTax: r.unitPriceExTax.toString() };
+}
+
+export async function previewProductVariantUnitPrice(
+  productVariantId: string,
+  dateIsoRaw: string,
+): Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }> {
+  const prisma = getPrismaClient();
+  const dateIso = normalizeIsoDateInput(dateIsoRaw.trim()) ?? utcIsoDateToday();
+  const soldAt = noonUtcFromIsoDate(dateIso);
+  const variantId = String(productVariantId ?? "").trim();
+  if (!variantId) {
+    return { ok: false, error: "Select a Bottled Palm Oil variant." };
+  }
+
+  const r = await resolveVariantUnitPriceExTax(prisma, variantId, soldAt);
   if (!r.ok) return r;
   return { ok: true, unitPriceExTax: r.unitPriceExTax.toString() };
 }

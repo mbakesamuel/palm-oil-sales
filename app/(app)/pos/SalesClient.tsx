@@ -8,7 +8,7 @@ import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeri
 import { utcIsoDateToday } from "@/lib/posting-calendar";
 import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
-import { UserRole, ValidationStatus } from "@/lib/domain";
+import { ValidationStatus } from "@/lib/domain";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 import type {
@@ -28,10 +28,19 @@ type Customer = {
 type Product = {
   productId: number;
   productName: string;
+  isBottledPalmOil: boolean;
   productCat: { productCat: string };
+  variants: Array<{ id: string; name: string; unitLabel: string }>;
 };
 
-type Line = { productId: string; qtyKg: string; unitPricePerKg: string };
+type Line = {
+  productId: string;
+  productVariantId?: string;
+  qtyKg: string;
+  qtyUnits?: string;
+  unitPricePerKg: string;
+  unitPricePerUnit?: string;
+};
 
 type Payment = { method: "CASH" | "CHEQUE"; amount: string; chequeNo?: string; bank?: string };
 
@@ -75,6 +84,10 @@ export function SalesClient(props: {
     productId: number,
     dateIso: string,
   ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
+  previewProductVariantUnitPriceAction: (
+    productVariantId: string,
+    dateIso: string,
+  ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
 }) {
   const {
     customers,
@@ -87,6 +100,7 @@ export function SalesClient(props: {
     validateSaleAction,
     deleteSaleAction,
     previewProductUnitPriceAction,
+    previewProductVariantUnitPriceAction,
   } = props;
 
   const wp = useWorkingPeriod();
@@ -116,8 +130,11 @@ export function SalesClient(props: {
   const [lines, setLines] = React.useState<Line[]>(() => [
     {
       productId: "",
+      productVariantId: "",
       qtyKg: "0",
+      qtyUnits: "0",
       unitPricePerKg: "0",
+      unitPricePerUnit: "0",
     },
   ]);
   const [payments, setPayments] = React.useState<Payment[]>(() => [
@@ -245,7 +262,7 @@ export function SalesClient(props: {
     previewPosTaxesAction,
   ]);
 
-  const lineProductKey = lines.map((l) => l.productId).join(",");
+  const lineProductKey = lines.map((l) => `${l.productId}:${l.productVariantId ?? ""}`).join(",");
 
   React.useEffect(() => {
     if (saleId != null) return;
@@ -262,7 +279,10 @@ export function SalesClient(props: {
         lines.map(async (l, idx) => {
           const pid = Number.parseInt(l.productId, 10);
           if (!Number.isFinite(pid)) return;
-          const r = await previewProductUnitPriceAction(customerId, pid, transactionDate);
+          const product = products.find((p) => p.productId === pid);
+          const r = product?.isBottledPalmOil
+            ? await previewProductVariantUnitPriceAction(l.productVariantId ?? "", transactionDate)
+            : await previewProductUnitPriceAction(customerId, pid, transactionDate);
           if (!alive) return;
           if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
           else errs[idx] = r.error;
@@ -272,7 +292,9 @@ export function SalesClient(props: {
       setLinePriceErrors(errs);
       setLines((prev) =>
         prev.map((row, i) =>
-          priceByIdx[i] != null ? { ...row, unitPricePerKg: priceByIdx[i]! } : row,
+          priceByIdx[i] != null
+            ? { ...row, unitPricePerKg: priceByIdx[i]!, unitPricePerUnit: priceByIdx[i]! }
+            : row,
         ),
       );
     })();
@@ -286,14 +308,20 @@ export function SalesClient(props: {
     lineProductKey,
     authStatus,
     session?.userId,
+    products,
     previewProductUnitPriceAction,
+    previewProductVariantUnitPriceAction,
   ]);
 
   const customer = customers.find((c) => c.id === customerId);
-  const net = lines.reduce(
-    (sum, l) => sum + parseDec(l.qtyKg) * parseDec(l.unitPricePerKg),
-    0,
-  );
+  const net = lines.reduce((sum, l) => {
+    const product = products.find((p) => String(p.productId) === l.productId);
+    const qty = product?.isBottledPalmOil ? parseDec(l.qtyUnits ?? l.qtyKg) : parseDec(l.qtyKg);
+    const price = product?.isBottledPalmOil
+      ? parseDec(l.unitPricePerUnit ?? l.unitPricePerKg)
+      : parseDec(l.unitPricePerKg);
+    return sum + qty * price;
+  }, 0);
 
   const taxDisplayRows = React.useMemo(() => {
     if (saleId != null && loadedAppliedTaxes) {
@@ -327,6 +355,14 @@ export function SalesClient(props: {
       ? workingMonthDateBounds(wp.workingCalendarYear, wp.workingCalendarMonth)
       : null;
 
+  function productForLine(line: Line) {
+    return products.find((p) => String(p.productId) === line.productId) ?? null;
+  }
+
+  function firstVariantIdForProduct(productId: string) {
+    return products.find((p) => String(p.productId) === productId)?.variants[0]?.id ?? "";
+  }
+
   const deliveryOrderSaveBlock = React.useMemo(() => {
     const trimmed = deliveryOrderNo.trim();
     if (!trimmed) {
@@ -351,6 +387,13 @@ export function SalesClient(props: {
     for (const l of lines) {
       const pid = Number.parseInt(l.productId, 10);
       if (!l.productId || !Number.isFinite(pid)) continue;
+      const product = products.find((p) => p.productId === pid);
+      if (product?.isBottledPalmOil) {
+        return {
+          block: true,
+          hint: "Delivery order control is not available for Bottled Palm Oil variant sales.",
+        };
+      }
       const qty = parseDec(l.qtyKg);
       if (qty <= 0) continue;
       saleQtyByProduct.set(pid, (saleQtyByProduct.get(pid) ?? 0) + qty);
@@ -378,6 +421,7 @@ export function SalesClient(props: {
     doLookupData,
     customerId,
     lines,
+    products,
   ]);
 
   function resetNew() {
@@ -399,8 +443,11 @@ export function SalesClient(props: {
     setLines([
       {
         productId: "",
+        productVariantId: "",
         qtyKg: "0",
+        qtyUnits: "0",
         unitPricePerKg: "0",
+        unitPricePerUnit: "0",
       },
     ]);
     setPayments([{ method: "CASH", amount: "0" }]);
@@ -433,14 +480,20 @@ export function SalesClient(props: {
       s.lines.length > 0
         ? s.lines.map((l) => ({
             productId: String(l.productId),
+            productVariantId: l.productVariantId ?? "",
             qtyKg: l.qtyKg,
+            qtyUnits: l.qtyUnits ?? l.qtyKg,
             unitPricePerKg: l.unitPricePerKg,
+            unitPricePerUnit: l.unitPricePerUnit ?? l.unitPricePerKg,
           }))
         : [
             {
               productId: "",
+              productVariantId: "",
               qtyKg: "0",
+              qtyUnits: "0",
               unitPricePerKg: "0",
+              unitPricePerUnit: "0",
             },
           ],
     );
@@ -498,6 +551,18 @@ export function SalesClient(props: {
         setBanner({
           type: "error",
           text: "Select a product on every line.",
+        });
+        return;
+      }
+      if (
+        lines.some((l) => {
+          const product = productForLine(l);
+          return product?.isBottledPalmOil && !String(l.productVariantId ?? "").trim();
+        })
+      ) {
+        setBanner({
+          type: "error",
+          text: "Select a Bottled Palm Oil size on every BPO line.",
         });
         return;
       }
@@ -947,8 +1012,11 @@ export function SalesClient(props: {
                   ...prev,
                   {
                     productId: "",
+                    productVariantId: "",
                     qtyKg: "0",
+                    qtyUnits: "0",
                     unitPricePerKg: "0",
+                    unitPricePerUnit: "0",
                   },
                 ])
               }
@@ -961,17 +1029,20 @@ export function SalesClient(props: {
             <Link href="/setup/product-pricing" className="underline underline-offset-4">
               Product pricing
             </Link>{" "}
-            for the customer type and transaction date.
+            or BPO variant pricing for the transaction date.
           </p>
 
           <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
               <div className="col-span-5">Product</div>
-              <div className="col-span-3">Qty (kg)</div>
-              <div className="col-span-3">Price / kg (ex tax)</div>
+              <div className="col-span-3">Qty</div>
+              <div className="col-span-3">Price (ex tax)</div>
               <div className="col-span-1" />
             </div>
-            {lines.map((l, idx) => (
+            {lines.map((l, idx) => {
+              const selectedProduct = productForLine(l);
+              const isBpoLine = Boolean(selectedProduct?.isBottledPalmOil);
+              return (
               <div
                 key={idx}
                 className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-start"
@@ -983,7 +1054,14 @@ export function SalesClient(props: {
                     onChange={(e) =>
                       setLines((prev) =>
                         prev.map((x, i) =>
-                          i === idx ? { ...x, productId: e.target.value } : x,
+                          i === idx
+                            ? {
+                                ...x,
+                                productId: e.target.value,
+                                productVariantId: firstVariantIdForProduct(e.target.value),
+                                qtyUnits: x.qtyUnits ?? x.qtyKg,
+                              }
+                            : x,
                         ),
                       )
                     }
@@ -997,29 +1075,62 @@ export function SalesClient(props: {
                       </option>
                     ))}
                   </select>
+                  {isBpoLine ? (
+                    <select
+                      className="mt-2 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                      value={l.productVariantId ?? ""}
+                      onChange={(e) =>
+                        setLines((prev) =>
+                          prev.map((x, i) =>
+                            i === idx ? { ...x, productVariantId: e.target.value } : x,
+                          ),
+                        )
+                      }
+                      required
+                    >
+                      <option value="" disabled>
+                        Select BPO size
+                      </option>
+                      {selectedProduct?.variants.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name} ({v.unitLabel})
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
                 </div>
                 <div className="col-span-3">
                   <input
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                    value={l.qtyKg}
+                    value={isBpoLine ? l.qtyUnits ?? l.qtyKg : l.qtyKg}
                     inputMode="decimal"
                     onChange={(e) =>
                       setLines((prev) =>
                         prev.map((x, i) =>
-                          i === idx ? { ...x, qtyKg: e.target.value } : x,
+                          i === idx
+                            ? isBpoLine
+                              ? { ...x, qtyUnits: e.target.value, qtyKg: "0" }
+                              : { ...x, qtyKg: e.target.value }
+                            : x,
                         ),
                       )
                     }
                   />
+                  <p className="mt-1 text-[10px] opacity-70">
+                    {isBpoLine ? "Qty (units)" : "Qty (kg)"}
+                  </p>
                 </div>
                 <div className="col-span-3 space-y-0.5 min-w-0 pt-0.5">
                   <input
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.06] px-2 py-1"
-                    value={l.unitPricePerKg}
+                    value={isBpoLine ? l.unitPricePerUnit ?? l.unitPricePerKg : l.unitPricePerKg}
                     inputMode="decimal"
                     readOnly
                     title="Resolved from product pricing schedules"
                   />
+                  <p className="text-[10px] opacity-70">
+                    {isBpoLine ? "Price / unit (ex tax)" : "Price / kg (ex tax)"}
+                  </p>
                   {linePriceErrors[idx] ? (
                     <p className="text-[10px] text-amber-800 dark:text-amber-200/90 leading-snug">
                       {linePriceErrors[idx]}
@@ -1039,7 +1150,8 @@ export function SalesClient(props: {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

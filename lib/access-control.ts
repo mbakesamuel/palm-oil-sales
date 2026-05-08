@@ -22,12 +22,23 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/delivery-orders"] = true;
   base["route:/pos"] = true;
   base["route:/stock/receive"] = true;
+  base["route:/stock/bpo-receive"] = true;
+  base["route:/stock/bpo-consignments"] = true;
+  base["route:/stock/bpo-outbound"] = true;
   // Operational: same users who receive stock need tank/location setup in the sidebar.
   base["route:/storage-locations"] = true;
 
   // Vehicle consignment notes: clerks draft, supervisors validate (admin gets all keys below).
   if (role === UserRole.CLERK || role === UserRole.SUPERVISOR) {
     base["route:/consignment-notes"] = true;
+  }
+
+  if (role === UserRole.CLERK_IN_CHARGE_BPO) {
+    base["route:/stock/bpo-receive"] = true;
+    base["route:/stock/bpo-consignments"] = true;
+    base["route:/stock/bpo-outbound"] = true;
+    base["route:/reports"] = true;
+    base["route:/reports/bpo"] = true;
   }
 
   if (role === UserRole.DIRECTOR || role === UserRole.MANAGER) {
@@ -46,6 +57,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/stock-vs-commitments"] = true;
   base["route:/reports/sales-budget-monthly-crosstab"] = true;
   base["route:/reports/pricing"] = true;
+  base["route:/reports/bpo"] = true;
 
   // Validation buttons visible to supervisors and above (still server-enforced elsewhere).
   base["ui:validate-documents"] =

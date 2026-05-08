@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "UserRole" ADD VALUE 'CLERK_IN_CHARGE_BPO';

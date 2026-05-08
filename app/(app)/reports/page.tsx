@@ -116,6 +116,17 @@ export default function ReportsIndexPage() {
             </div>
           </Link>
         </li>
+        <li>
+          <Link
+            href="/reports/bpo"
+            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            <div className="font-medium">Bottled Palm Oil monitor</div>
+            <div className="text-sm opacity-75">
+              BPO stock, two-stage consignments, Bota sales, gift/out movements, and discrepancies.
+            </div>
+          </Link>
+        </li>
       </ul>
 
       <div className="hidden print:block">

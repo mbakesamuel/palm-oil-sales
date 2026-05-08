@@ -27,15 +27,19 @@ import {
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
 import { applyFefoStockDeduction, StockInsufficientError } from "@/lib/stock-fefo";
+import { applyBpoStockDeduction, BpoStockInsufficientError, getBotaSalesPointId } from "@/lib/bpo";
 import type { SalePrintModel } from "@/components/SalePrint";
-import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
+import { resolveUnitPriceExTax, resolveVariantUnitPriceExTax } from "@/lib/pricing/resolve";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 type PosLineInput = {
   productId: string;
+  productVariantId?: string;
   qtyKg: string;
+  qtyUnits?: string;
   unitPricePerKg: string;
+  unitPricePerUnit?: string;
 };
 
 type PosPaymentInput = {
@@ -79,10 +83,14 @@ export type LoadedSaleView = {
   grossAmount: string;
   lines: Array<{
     productId: number;
+    productVariantId: string | null;
     productName: string;
+    variantName: string | null;
     productCat: string;
     qtyKg: string;
+    qtyUnits: string | null;
     unitPricePerKg: string;
+    unitPricePerUnit: string | null;
     lineNet: string;
     lineVat: string;
     lineGross: string;
@@ -225,34 +233,70 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   let net = d(0);
   let preparedLines: Array<{
     productId: number;
+    productVariantId: string | null;
+    isBottledPalmOil: boolean;
     qtyKg: Prisma.Decimal;
-    unitPricePerKg: Prisma.Decimal;
+    qtyUnits: Prisma.Decimal | null;
+    unitPrice: Prisma.Decimal;
     lineNet: Prisma.Decimal;
   }> = [];
   try {
     preparedLines = [];
+    const botaSalesPointId = await getBotaSalesPointId(prisma);
     for (const l of lines) {
       if (!l.productId) throw new Error("Each line must have a product.");
       const productId = Number.parseInt(l.productId, 10);
       if (!Number.isFinite(productId)) throw new Error("Invalid product selected.");
-      const qty = d(l.qtyKg);
-      if (qty.lte(0)) throw new Error("Qty must be > 0.");
-      const priced = await resolveUnitPriceExTax(
-        prisma,
-        productId,
-        customer.customerType,
-        soldAt,
-      );
-      if (!priced.ok) throw new Error(priced.error);
-      const price = money2(priced.unitPriceExTax);
+      const product = await prisma.product.findUnique({
+        where: { productId },
+        select: { productName: true, isBottledPalmOil: true },
+      });
+      if (!product) throw new Error("Product not found.");
+
+      let productVariantId: string | null = null;
+      let qtyKg = d(0);
+      let qtyUnits: Prisma.Decimal | null = null;
+      let price: Prisma.Decimal;
+
+      if (product.isBottledPalmOil) {
+        if (botaSalesPointId == null || effectiveSalesPointId !== botaSalesPointId) {
+          throw new Error("Only Bota sales point is allowed to sell Bottled Palm Oil.");
+        }
+        productVariantId = String(l.productVariantId ?? "").trim();
+        if (!productVariantId) {
+          throw new Error(`Select a Bottled Palm Oil size for ${product.productName}.`);
+        }
+        qtyUnits = d(String(l.qtyUnits ?? l.qtyKg));
+        if (qtyUnits.lte(0)) throw new Error("Bottled Palm Oil quantity must be > 0.");
+        const priced = await resolveVariantUnitPriceExTax(prisma, productVariantId, soldAt);
+        if (!priced.ok) throw new Error(priced.error);
+        if (priced.productId !== productId) {
+          throw new Error("Selected Bottled Palm Oil size does not belong to this product.");
+        }
+        price = money2(priced.unitPriceExTax);
+      } else {
+        qtyKg = d(l.qtyKg);
+        if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
+        const priced = await resolveUnitPriceExTax(
+          prisma,
+          productId,
+          customer.customerType,
+          soldAt,
+        );
+        if (!priced.ok) throw new Error(priced.error);
+        price = money2(priced.unitPriceExTax);
+      }
       if (price.lt(0)) throw new Error("Unit price must be >= 0.");
-      const lineNet = money2(qty.mul(price));
+      const lineNet = money2((qtyUnits ?? qtyKg).mul(price));
       net = net.add(lineNet);
 
       preparedLines.push({
         productId,
-        qtyKg: qty,
-        unitPricePerKg: price,
+        productVariantId,
+        isBottledPalmOil: product.isBottledPalmOil,
+        qtyKg,
+        qtyUnits,
+        unitPrice: price,
         lineNet,
       });
     }
@@ -261,6 +305,12 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   }
 
   if (deliveryOrderNo) {
+    if (preparedLines.some((l) => l.isBottledPalmOil)) {
+      return {
+        ok: false,
+        error: "Delivery order control is not available for Bottled Palm Oil variant sales.",
+      };
+    }
     const productRows = await prisma.product.findMany({
       where: { productId: { in: [...new Set(preparedLines.map((l) => l.productId))] } },
       select: { productId: true, productName: true },
@@ -310,8 +360,11 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     }
     return {
       productId: l.productId,
+      productVariantId: l.productVariantId,
       qtyKg: l.qtyKg,
-      unitPricePerKg: l.unitPricePerKg,
+      qtyUnits: l.qtyUnits,
+      unitPricePerKg: l.unitPrice,
+      unitPricePerUnit: l.isBottledPalmOil ? l.unitPrice : null,
       lineNet: l.lineNet,
       lineVat,
       lineGross: money2(l.lineNet.add(lineVat)),
@@ -462,7 +515,13 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       validatedBy: { select: { id: true, name: true } },
       salesPoint: { select: { id: true, name: true } },
       appliedTaxes: { orderBy: { id: "asc" } },
-      lines: { include: { product: { select: { productName: true, productCat: { select: { productCat: true } } } } }, orderBy: { id: "asc" } },
+      lines: {
+        include: {
+          product: { select: { productName: true, productCat: { select: { productCat: true } } } },
+          productVariant: { select: { name: true } },
+        },
+        orderBy: { id: "asc" },
+      },
       payments: { orderBy: { id: "asc" } },
     },
   });
@@ -506,10 +565,14 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     grossAmount: row.grossAmount.toString(),
     lines: row.lines.map((l) => ({
       productId: l.productId,
+      productVariantId: l.productVariantId,
       productName: l.product.productName,
+      variantName: l.productVariant?.name ?? null,
       productCat: l.product.productCat.productCat,
       qtyKg: l.qtyKg.toString(),
+      qtyUnits: l.qtyUnits?.toString() ?? null,
       unitPricePerKg: l.unitPricePerKg.toString(),
+      unitPricePerUnit: l.unitPricePerUnit?.toString() ?? null,
       lineNet: l.lineNet.toString(),
       lineVat: l.lineVat.toString(),
       lineGross: l.lineGross.toString(),
@@ -635,7 +698,10 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
           where: { id },
           include: {
             lines: {
-              include: { product: { select: { productName: true } } },
+              include: {
+                product: { select: { productName: true, isBottledPalmOil: true } },
+                productVariant: { select: { name: true } },
+              },
             },
           },
         });
@@ -646,7 +712,28 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
             "Cannot validate: this invoice has no sales point. Stock is tracked per collection point.",
           );
         }
-        await applyFefoStockDeduction(tx, sale.salesPointId, sale.lines);
+        const standardLines = sale.lines.filter((l) => !l.product.isBottledPalmOil);
+        const bpoLines = sale.lines.filter((l) => l.product.isBottledPalmOil);
+        if (standardLines.length > 0) {
+          await applyFefoStockDeduction(tx, sale.salesPointId, standardLines);
+        }
+        if (bpoLines.length > 0) {
+          await applyBpoStockDeduction(
+            tx,
+            sale.salesPointId,
+            bpoLines.map((l) => {
+              if (!l.productVariantId || !l.qtyUnits) {
+                throw new Error("Bottled Palm Oil sale line is missing variant quantity.");
+              }
+              return {
+                saleLineId: l.id,
+                productVariantId: l.productVariantId,
+                qtyUnits: l.qtyUnits,
+                label: `${l.product.productName}${l.productVariant ? ` - ${l.productVariant.name}` : ""}`,
+              };
+            }),
+          );
+        }
         await tx.sale.update({
           where: { id },
           data: {
@@ -659,7 +746,7 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   } catch (e) {
-    if (e instanceof StockInsufficientError) {
+    if (e instanceof StockInsufficientError || e instanceof BpoStockInsufficientError) {
       return { ok: false, error: e.message };
     }
     throw e;

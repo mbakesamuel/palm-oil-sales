@@ -16,6 +16,7 @@ export async function createProduct(formData: FormData) {
   const productName = String(formData.get("productName") ?? "").trim();
   const productCodeRaw = String(formData.get("productCode") ?? "").trim();
   const productCatIdRaw = String(formData.get("productCatId") ?? "").trim();
+  const isBottledPalmOil = String(formData.get("isBottledPalmOil") ?? "") === "on";
 
   if (!productName) throw new Error("Product name is required.");
   if (!productCatIdRaw) throw new Error("Category is required.");
@@ -28,6 +29,7 @@ export async function createProduct(formData: FormData) {
       productName,
       productCode: productCodeRaw || null,
       productCatId,
+      isBottledPalmOil,
     },
   });
 
@@ -41,6 +43,7 @@ export async function updateProduct(formData: FormData) {
   const productName = String(formData.get("productName") ?? "").trim();
   const productCodeRaw = String(formData.get("productCode") ?? "").trim();
   const productCatIdRaw = String(formData.get("productCatId") ?? "").trim();
+  const isBottledPalmOil = String(formData.get("isBottledPalmOil") ?? "") === "on";
 
   const productId = Number.parseInt(idRaw, 10);
   if (!Number.isFinite(productId)) throw new Error("Invalid product.");
@@ -56,6 +59,7 @@ export async function updateProduct(formData: FormData) {
       productName,
       productCode: productCodeRaw || null,
       productCatId,
+      isBottledPalmOil,
     },
   });
 
@@ -84,6 +88,7 @@ export async function deleteProduct(formData: FormData) {
           batches: true,
           saleLines: true,
           deliveryOrderDetails: true,
+          variants: true,
         },
       },
     },
@@ -91,10 +96,13 @@ export async function deleteProduct(formData: FormData) {
   if (!counts) throw new Error("Product not found.");
 
   const n =
-    counts._count.batches + counts._count.saleLines + counts._count.deliveryOrderDetails;
+    counts._count.batches +
+    counts._count.saleLines +
+    counts._count.deliveryOrderDetails +
+    counts._count.variants;
   if (n > 0) {
     throw new Error(
-      "Cannot delete this product while it is used on batches, sales, or delivery orders.",
+      "Cannot delete this product while it is used on batches, sales, delivery orders, or variants.",
     );
   }
 

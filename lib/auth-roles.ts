@@ -5,7 +5,11 @@ import { UserRole } from "@/lib/domain";
  * Server actions enforce posting scope for these roles via `lib/auth-sales-point-scope`.
  */
 export function roleRequiresSalesPoint(role: UserRole): boolean {
-  return role === UserRole.CLERK || role === UserRole.SUPERVISOR;
+  return (
+    role === UserRole.CLERK ||
+    role === UserRole.SUPERVISOR ||
+    role === UserRole.CLERK_IN_CHARGE_BPO
+  );
 }
 
 /**
@@ -20,6 +24,11 @@ export function canValidateDocuments(role: UserRole): boolean {
     role === UserRole.SENIOR_SUPERVISOR ||
     role === UserRole.SUPERVISOR
   );
+}
+
+/** Validate BPO consignment receipt/outbound workflows without granting general invoice validation. */
+export function canValidateBpoDocuments(role: UserRole): boolean {
+  return canValidateDocuments(role) || role === UserRole.CLERK_IN_CHARGE_BPO;
 }
 
 /** Draft delivery orders: created / edited / deleted while still pending. */

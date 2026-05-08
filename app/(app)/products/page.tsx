@@ -19,6 +19,7 @@ export default async function ProductsPage() {
         productName: true,
         productCode: true,
         productCatId: true,
+        isBottledPalmOil: true,
         productCat: { select: { productCatId: true, productCat: true } },
       },
     }),

@@ -17,6 +17,7 @@ const ROLES: UserRole[] = [
   UserRole.SENIOR_SUPERVISOR,
   UserRole.SUPERVISOR,
   UserRole.CLERK,
+  UserRole.CLERK_IN_CHARGE_BPO,
 ];
 
 function groupForKey(key: PermissionKey): string {
@@ -38,13 +39,14 @@ export function PermissionsClient() {
     if (status !== "ready") return;
     if (!session?.userId) return;
     if (!isAdmin) return;
-    setMap(null);
-    void getRolePermissionsAction(role as unknown as any).then((m) => {
+    window.queueMicrotask(() => setMap(null));
+    void getRolePermissionsAction(role as Parameters<typeof getRolePermissionsAction>[0]).then((m) => {
       setMap(m as unknown as Record<string, boolean>);
     });
   }, [status, session?.userId, isAdmin, role]);
 
-  if (status !== "ready") return <div className="text-sm opacity-70">Loading…</div>;
+  if (status !== "ready")
+    return <div className="text-sm opacity-70">Loading…</div>;
   if (!session?.userId) return <div className="text-sm">Login required.</div>;
   if (!isAdmin) {
     return (
@@ -55,11 +57,14 @@ export function PermissionsClient() {
   }
 
   const keys = [...PERMISSION_KEYS] as PermissionKey[];
-  const grouped = keys.reduce((acc, k) => {
-    const g = groupForKey(k);
-    (acc[g] ??= []).push(k);
-    return acc;
-  }, {} as Record<string, PermissionKey[]>);
+  const grouped = keys.reduce(
+    (acc, k) => {
+      const g = groupForKey(k);
+      (acc[g] ??= []).push(k);
+      return acc;
+    },
+    {} as Record<string, PermissionKey[]>,
+  );
 
   async function toggle(key: PermissionKey, allowed: boolean) {
     if (!session?.userId) return;
@@ -83,7 +88,7 @@ export function PermissionsClient() {
       const fd = new FormData();
       fd.set("role", role);
       await resetRolePermissions(fd);
-      const next = await getRolePermissionsAction(role as unknown as any);
+      const next = await getRolePermissionsAction(role as Parameters<typeof getRolePermissionsAction>[0]);
       setMap(next as unknown as Record<string, boolean>);
     } finally {
       setBusyKey(null);
@@ -122,13 +127,19 @@ export function PermissionsClient() {
       ) : (
         <div className="space-y-4">
           {Object.entries(grouped).map(([group, list]) => (
-            <section key={group} className="rounded-lg border border-black/10 dark:border-white/10 p-4">
+            <section
+              key={group}
+              className="rounded-lg border border-black/10 dark:border-white/10 p-4"
+            >
               <div className="font-medium text-sm">{group}</div>
               <div className="mt-3 grid gap-2">
                 {list.map((key) => {
                   const allowed = Boolean(map[key]);
                   return (
-                    <label key={key} className="flex items-center justify-between gap-3 text-sm">
+                    <label
+                      key={key}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
                       <span className="font-mono text-xs">{key}</span>
                       <input
                         type="checkbox"
@@ -147,4 +158,3 @@ export function PermissionsClient() {
     </div>
   );
 }
-

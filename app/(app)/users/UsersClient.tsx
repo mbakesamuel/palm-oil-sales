@@ -24,6 +24,7 @@ const ROLE_OPTIONS: UserRole[] = [
   UserRole.SENIOR_SUPERVISOR,
   UserRole.SUPERVISOR,
   UserRole.CLERK,
+  UserRole.CLERK_IN_CHARGE_BPO,
 ];
 
 export function UsersClient(props: {
@@ -274,7 +275,7 @@ export function UsersClient(props: {
             onChange={(e) => {
               const v = e.target.value;
               setRole(v === "" ? "" : (v as UserRole));
-              if (v !== UserRole.CLERK && v !== UserRole.SUPERVISOR) {
+              if (!roleRequiresSalesPoint(v as UserRole)) {
                 setSalesPointId("");
               }
             }}
