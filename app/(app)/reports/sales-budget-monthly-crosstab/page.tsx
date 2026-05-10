@@ -9,6 +9,7 @@ import { computeMonthlyBudgetQtyKgByFiscalMonth } from "@/lib/sales-budget-phase
 import { fiscalPeriodForCalendarMonth, monthName } from "@/lib/fiscal";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import { PrintButton } from "@/components/PrintButton";
+import { ReportHeader } from "@/components/ReportHeader";
 import { ReportSignatory } from "@/components/ReportSignatory";
 import { getServerSession } from "@/lib/auth-server";
 
@@ -152,10 +153,6 @@ export default async function SalesBudgetMonthlyCrosstabPage({
   const grandTotal = colTotals.reduce((s, c) => s.add(c), z);
 
   const generated = new Date();
-  const logoSrc =
-    settings.logoUrl && settings.logoUrl.trim() !== ""
-      ? settings.logoUrl.trim()
-      : "/cdc-logo-svg.svg";
 
   const hasAnyBudget = budgets.length > 0;
 
@@ -165,23 +162,12 @@ export default async function SalesBudgetMonthlyCrosstabPage({
       data-print-page="sales-budget-monthly-crosstab"
     >
       <div className="space-y-3 print:block">
-        <div className="w-full">
-          <div className="relative flex min-h-8 items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
-            <img
-              src={logoSrc}
-              alt=""
-              className="absolute left-0 top-1/2 h-8 max-h-8 w-auto max-w-[72px] -translate-y-1/2 object-contain"
-            />
-            <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
-              {settings.companyName}
-            </h1>
-          </div>
-          <p className="mt-1 text-center text-sm opacity-80">{settings.department}</p>
-          <p className="mt-1 text-center text-sm opacity-80">
-            Sales budget — monthly phasing crosstab (kg)
-          </p>
-        </div>
+        <ReportHeader
+          companyName={settings.companyName}
+          department={settings.department}
+          logoSrc={settings.logoUrl}
+          title="Sales budget — monthly phasing crosstab (kg)"
+        />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm opacity-80">

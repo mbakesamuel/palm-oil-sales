@@ -4,7 +4,7 @@ import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { getBotaSalesPointId } from "@/lib/bpo";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
-import { BpoMovementStatus, Prisma } from "@prisma/client";
+import { BpoMovementStatus, Prisma, UserRole } from "@prisma/client";
 import {
   botaValidateBpoConsignment,
   createBpoConsignmentVoucher,
@@ -23,6 +23,13 @@ export default async function BpoConsignmentsPage() {
   const scoped = roleRequiresSalesPoint(session.role);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const botaSalesPointId = await getBotaSalesPointId(prisma);
+  const isBotaBpoClerk =
+    session.role === UserRole.CLERK_IN_CHARGE_BPO &&
+    assignedSalesPointId != null &&
+    assignedSalesPointId === botaSalesPointId;
+  const movementStatusFilter = isBotaBpoClerk
+    ? BpoMovementStatus.SENDER_VALIDATED
+    : { not: BpoMovementStatus.REJECTED };
 
   const stockScope =
     scoped && assignedSalesPointId != null
@@ -49,12 +56,13 @@ export default async function BpoConsignmentsPage() {
       prisma.bpoStockMovement.findMany({
         where: scoped && assignedSalesPointId != null
           ? {
+              status: movementStatusFilter,
               OR: [
                 { sourceSalesPointId: assignedSalesPointId },
                 { destinationSalesPointId: assignedSalesPointId },
               ],
             }
-          : {},
+          : { status: movementStatusFilter },
         orderBy: [{ createdAt: "desc" }],
         take: 100,
         include: {
@@ -151,11 +159,32 @@ export default async function BpoConsignmentsPage() {
         discrepancyNote: m.discrepancyNote,
         canSenderValidate:
           m.status === "DRAFT" &&
+          session.role === UserRole.SUPERVISOR &&
           (!scoped || m.sourceSalesPointId === assignedSalesPointId),
         canBotaValidate:
           m.status === "SENDER_VALIDATED" &&
           botaSalesPointId != null &&
+          (session.role === UserRole.SENIOR_SUPERVISOR ||
+            session.role === UserRole.MANAGER ||
+            session.role === UserRole.ADMIN) &&
           (!scoped || assignedSalesPointId === botaSalesPointId),
+        canReject:
+          m.status !== BpoMovementStatus.VALIDATED &&
+          m.status !== BpoMovementStatus.REJECTED &&
+          ((session.role === UserRole.SUPERVISOR &&
+            botaSalesPointId != null &&
+            assignedSalesPointId !== botaSalesPointId &&
+            (!scoped || m.sourceSalesPointId === assignedSalesPointId)) ||
+            (session.role === UserRole.CLERK_IN_CHARGE_BPO &&
+              botaSalesPointId != null &&
+              assignedSalesPointId === botaSalesPointId &&
+              m.destinationSalesPointId === botaSalesPointId)),
+        canPrintReceiptVoucher:
+          m.status === BpoMovementStatus.SENDER_VALIDATED &&
+          session.role === UserRole.CLERK_IN_CHARGE_BPO &&
+          botaSalesPointId != null &&
+          assignedSalesPointId === botaSalesPointId &&
+          m.destinationSalesPointId === botaSalesPointId,
         lines: m.lines.map((l) => ({
           id: l.id,
           productVariantId: l.productVariantId,
@@ -167,6 +196,15 @@ export default async function BpoConsignmentsPage() {
       botaSalesPointId={botaSalesPointId}
       defaultSourceSalesPointId={assignedSalesPointId}
       salesPointLocked={scoped}
+      canCreateVoucher={
+        session.role !== UserRole.SENIOR_SUPERVISOR &&
+        session.role !== UserRole.MANAGER
+      }
+      canPrintCreatedVoucher={
+        session.role === UserRole.CLERK &&
+        assignedSalesPointId != null &&
+        assignedSalesPointId !== botaSalesPointId
+      }
       createAction={createBpoConsignmentVoucher}
       senderValidateAction={senderValidateBpoConsignment}
       botaValidateAction={botaValidateBpoConsignment}

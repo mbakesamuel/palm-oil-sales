@@ -39,9 +39,9 @@ const operationsNav = [
   { href: "/consignment-notes", label: "VehicleConsignment notes" },
   { href: "/pos", label: "Sales" },
   { href: "/stock/receive", label: "Stock In" },
-  { href: "/stock/bpo-receive", label: "BPO Stock In" },
-  { href: "/stock/bpo-consignments", label: "BPO consignments" },
-  { href: "/stock/bpo-outbound", label: "BPO Gift / Out" },
+  { href: "/stock/bpo-receive", label: "Bottled Palms Oil Stock" },
+  { href: "/stock/bpo-consignments", label: "Bottled Palms Oil Consignments" },
+  { href: "/stock/bpo-outbound", label: "Bottled Palms Oil Gift / Out" },
 ] as const;
 
 const reportNav = [
@@ -53,9 +53,14 @@ const reportNav = [
   { href: "/reports/do-commitment-crosstab", label: "Commitments" },
   { href: "/reports/stock-on-hand", label: "Stock" },
   { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
-  { href: "/reports/sales-budget-monthly-crosstab", label: "Budget phasing (monthly)" },
+  {
+    href: "/reports/sales-budget-monthly-crosstab",
+    label: "Budget phasing (monthly)",
+  },
   { href: "/reports/pricing", label: "Product pricing" },
   { href: "/reports/bpo", label: "BPO monitor" },
+  { href: "/reports/bpo-sales-crosstab", label: "BPO sales crosstab" },
+  { href: "/reports/bpo-stock-cross", label: "BPO stock cross" },
 ] as const;
 
 export default async function AppLayout({
@@ -69,7 +74,11 @@ export default async function AppLayout({
   const h = await headers();
   // `x-invoke-path` is forwarded by `proxy.ts`. In some deployments the platform may also provide
   // `x-matched-path`, so keep it as a fallback to avoid failing open.
-  const pathname = (h.get(INVOKE_PATH_HEADER) ?? h.get("x-matched-path") ?? "").trim();
+  const pathname = (
+    h.get(INVOKE_PATH_HEADER) ??
+    h.get("x-matched-path") ??
+    ""
+  ).trim();
   if (!pathname) {
     redirect("/forbidden");
   }

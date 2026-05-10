@@ -4,7 +4,7 @@ import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { getBotaSalesPointId } from "@/lib/bpo";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
-import { createBpoOutboundMovement } from "./actions";
+import { createBpoOutboundMovement, createBpoOutboundSale } from "./actions";
 import { BpoOutboundClient } from "./BpoOutboundClient";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export default async function BpoOutboundPage() {
   const scoped = roleRequiresSalesPoint(session.role);
   const canPost = botaSalesPointId != null && (!scoped || session.salesPoint?.id === botaSalesPointId);
 
-  const [variants, movements] = await Promise.all([
+  const [variants, movements, sales] = await Promise.all([
     prismaRetry(() =>
       prisma.productVariant.findMany({
         where: { isActive: true, product: { isBottledPalmOil: true } },
@@ -36,6 +36,32 @@ export default async function BpoOutboundPage() {
         take: 50,
         include: {
           lines: {
+            include: {
+              productVariant: {
+                select: { name: true, product: { select: { productName: true } } },
+              },
+            },
+          },
+        },
+      }),
+    ),
+    prismaRetry(() =>
+      prisma.sale.findMany({
+        where: {
+          ...(botaSalesPointId != null ? { salesPointId: botaSalesPointId } : {}),
+          lines: { some: { product: { isBottledPalmOil: true } } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          payments: { orderBy: { id: "asc" }, select: { method: true } },
+          bpoEmployeeCreditSale: {
+            include: {
+              employee: { select: { matricule: true, name: true, estate: true } },
+            },
+          },
+          lines: {
+            where: { product: { isBottledPalmOil: true } },
             include: {
               productVariant: {
                 select: { name: true, product: { select: { productName: true } } },
@@ -63,9 +89,28 @@ export default async function BpoOutboundPage() {
           qtyUnits: (l.postedQtyUnits ?? l.actualQtyUnits ?? l.voucherQtyUnits).toString(),
         })),
       }))}
+      sales={sales.map((s) => ({
+        id: s.id,
+        invoiceNo: s.invoiceNo,
+        soldAtIso: s.soldAt.toISOString().slice(0, 10),
+        paymentMethod: s.payments.some((p) => p.method === "CREDIT") ? "CREDIT" : "CASH",
+        customerName: s.customerNameSnapshot,
+        grossAmount: s.grossAmount.toString(),
+        employeeLabel: s.bpoEmployeeCreditSale
+          ? `${s.bpoEmployeeCreditSale.employee.matricule} · ${s.bpoEmployeeCreditSale.employee.name} · ${s.bpoEmployeeCreditSale.employee.estate}`
+          : null,
+        lines: s.lines.map((l) => ({
+          variantLabel: l.productVariant
+            ? `${l.productVariant.product.productName} - ${l.productVariant.name}`
+            : "Bottled Palm Oil",
+          qtyUnits: l.qtyUnits?.toString() ?? "0",
+          lineGross: l.lineGross.toString(),
+        })),
+      }))}
       canPost={canPost}
       botaAvailable={botaSalesPointId != null}
       createAction={createBpoOutboundMovement}
+      createSaleAction={createBpoOutboundSale}
     />
   );
 }

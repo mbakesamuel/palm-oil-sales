@@ -9,6 +9,7 @@ datasource db {
 enum PaymentMethod {
   CASH
   CHEQUE
+  CREDIT
 }
 
 enum UserRole {
@@ -55,6 +56,11 @@ enum BpoMovementStatus {
   SENDER_VALIDATED
   VALIDATED
   REJECTED
+}
+
+enum BpoEmployeeCollectedProduct {
+  LOOSE_PALM_OIL
+  BOTTLED_PALM_OIL
 }
 
 enum TaxRegimeKind {
@@ -240,6 +246,21 @@ model Customer {
   @@index([taxRegimeId])
 }
 
+model Employee {
+  id        String   @id @default(cuid())
+  matricule String   @unique
+  name      String
+  estate    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bpoCreditSales BpoEmployeeCreditSale[]
+
+  @@index([name])
+  @@index([estate])
+}
+
 /// Catalog of tax levies (e.g. VAT). Rates vary over time via TaxRateSchedule.
 model TaxType {
   id        String   @id @default(cuid())
@@ -362,6 +383,7 @@ model ProductVariant {
   bpoMovementLines BpoStockMovementLine[]
   saleLines        SaleLine[]
   bpoAllocations   BpoSaleLineBatchAllocation[]
+  bpoEmployeeCreditSales BpoEmployeeCreditSale[]
 
   @@unique([productId, name])
   @@index([productId, isActive])
@@ -484,6 +506,7 @@ model Sale {
   payments        Payment[]
   appliedTaxes    SaleAppliedTax[]
   consignmentNote VehicleConsignmentNote?
+  bpoEmployeeCreditSale BpoEmployeeCreditSale?
 
   @@index([soldAt])
   @@index([customerId, soldAt])
@@ -533,6 +556,28 @@ model Payment {
 
   @@index([saleId])
   @@index([method, paidAt])
+}
+
+model BpoEmployeeCreditSale {
+  id                              String                      @id @default(cuid())
+  saleId                          String                      @unique
+  employeeId                      String
+  collectedProduct                BpoEmployeeCollectedProduct
+  productVariantId                String?
+  rationPeriodYear                Int?
+  rationPeriodMonth               Int?
+  rationLimitUnitsSnapshot        Decimal?                    @db.Decimal(14, 3)
+  rationUsedBeforeUnitsSnapshot   Decimal?                    @db.Decimal(14, 3)
+  rationBalanceAfterUnitsSnapshot Decimal?                    @db.Decimal(14, 3)
+  createdAt                       DateTime                    @default(now())
+  updatedAt                       DateTime                    @updatedAt
+
+  sale           Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([employeeId, rationPeriodYear, rationPeriodMonth, collectedProduct])
+  @@index([productVariantId])
 }
 
 model SalesPoint {

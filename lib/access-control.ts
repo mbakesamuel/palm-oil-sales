@@ -58,6 +58,18 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/sales-budget-monthly-crosstab"] = true;
   base["route:/reports/pricing"] = true;
   base["route:/reports/bpo"] = true;
+  base["route:/reports/bpo-sales-crosstab"] =
+    role === UserRole.ADMIN ||
+    role === UserRole.DIRECTOR ||
+    role === UserRole.MANAGER ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.CLERK_IN_CHARGE_BPO;
+  base["route:/reports/bpo-stock-cross"] =
+    role === UserRole.ADMIN ||
+    role === UserRole.DIRECTOR ||
+    role === UserRole.MANAGER ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.CLERK_IN_CHARGE_BPO;
 
   // Validation buttons visible to supervisors and above (still server-enforced elsewhere).
   base["ui:validate-documents"] =

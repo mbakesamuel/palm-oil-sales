@@ -51,7 +51,7 @@ export function BpoVariantsClient(props: {
   return (
     <div className="space-y-8">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Bottled Palm Oil variants</h1>
+        <h1 className="text-2xl font-semibold">Bottled Palm Oil Category</h1>
         <p className="text-sm opacity-75">
           Manage BPO bottle sizes and their approved ex-tax prices by effective date.
         </p>
@@ -149,7 +149,7 @@ export function BpoVariantsClient(props: {
             <h2 className="font-semibold">{priceDraft ? "Edit price" : "Add variant price"}</h2>
             {priceDraft ? <input type="hidden" name="id" value={priceDraft.id} /> : null}
             <div className="grid gap-1">
-              <label className="text-sm font-medium">Variant</label>
+              <label className="text-sm font-medium">Category</label>
               <select
                 name="productVariantId"
                 defaultValue={defaultVariantId}

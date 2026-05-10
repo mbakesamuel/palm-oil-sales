@@ -5,6 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { UserRole } from "@prisma/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
@@ -38,36 +39,11 @@ function NavGroup(props: {
   config: NavGroupConfig;
   pathname: string;
   collapsed: boolean;
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const { config, pathname, collapsed } = props;
-  const { id, label, items, collapsedHref, collapsedAbbrev, collapsedTitle, overview } = config;
-  const storageKey = `sidebar_group_${id}_open`;
-  const [open, setOpen] = React.useState(true);
-
-  React.useEffect(() => {
-    try {
-      const v = localStorage.getItem(storageKey);
-      if (v === "0" || v === "1") setOpen(v === "1");
-    } catch {
-      // ignore
-    }
-  }, [storageKey]);
-
-  React.useEffect(() => {
-    if (groupContainsPath(pathname, items, overview?.href)) {
-      setOpen(true);
-    }
-  }, [pathname, items, overview?.href]);
-
-  function toggle() {
-    setOpen((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem(storageKey, next ? "1" : "0");
-      } catch {}
-      return next;
-    });
-  }
+  const { config, pathname, collapsed, open, onToggle } = props;
+  const { label, items, collapsedHref, collapsedAbbrev, collapsedTitle, overview } = config;
 
   if (collapsed) {
     return (
@@ -88,7 +64,7 @@ function NavGroup(props: {
     <div className="rounded-md border border-black/5 dark:border-white/5">
       <button
         type="button"
-        onClick={toggle}
+        onClick={onToggle}
         className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-black/5 dark:hover:bg-white/5"
         aria-expanded={open}
       >
@@ -156,7 +132,7 @@ export function Sidebar(props: {
     if (!session?.role) return;
     let alive = true;
     setPerm(null);
-    void getRolePermissionsAction(session.role as unknown as any).then((m) => {
+    void getRolePermissionsAction(session.role as UserRole).then((m) => {
       if (!alive) return;
       setPerm(m as unknown as Record<string, boolean>);
     });
@@ -229,6 +205,27 @@ export function Sidebar(props: {
     };
   }, [filteredReportNav]);
 
+  const navGroups = React.useMemo(
+    () => [setupGroup, operationsGroup, reportsGroup].filter((group) => group != null),
+    [operationsGroup, reportsGroup, setupGroup],
+  );
+
+  const groupIdForPath = React.useCallback(
+    (path: string) =>
+      navGroups.find((group) =>
+        groupContainsPath(path, group.items, group.overview?.href),
+      )?.id ?? null,
+    [navGroups],
+  );
+
+  const [openGroupId, setOpenGroupId] = React.useState<string | null>(() =>
+    groupIdForPath(pathname),
+  );
+
+  React.useEffect(() => {
+    setOpenGroupId(groupIdForPath(pathname));
+  }, [groupIdForPath, pathname]);
+
   React.useEffect(() => {
     try {
       setCollapsed(localStorage.getItem("sidebar_collapsed") === "1");
@@ -294,10 +291,40 @@ export function Sidebar(props: {
           </Link>
         ))}
 
-        <NavGroup config={setupGroup} pathname={pathname} collapsed={collapsed} />
-        <NavGroup config={operationsGroup} pathname={pathname} collapsed={collapsed} />
+        <NavGroup
+          config={setupGroup}
+          pathname={pathname}
+          collapsed={collapsed}
+          open={openGroupId === setupGroup.id}
+          onToggle={() =>
+            setOpenGroupId((current) =>
+              current === setupGroup.id ? null : setupGroup.id,
+            )
+          }
+        />
+        <NavGroup
+          config={operationsGroup}
+          pathname={pathname}
+          collapsed={collapsed}
+          open={openGroupId === operationsGroup.id}
+          onToggle={() =>
+            setOpenGroupId((current) =>
+              current === operationsGroup.id ? null : operationsGroup.id,
+            )
+          }
+        />
         {reportsGroup ? (
-          <NavGroup config={reportsGroup} pathname={pathname} collapsed={collapsed} />
+          <NavGroup
+            config={reportsGroup}
+            pathname={pathname}
+            collapsed={collapsed}
+            open={openGroupId === reportsGroup.id}
+            onToggle={() =>
+              setOpenGroupId((current) =>
+                current === reportsGroup.id ? null : reportsGroup.id,
+              )
+            }
+          />
         ) : null}
       </nav>
 

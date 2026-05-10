@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
+import { ReportHeader } from "@/components/ReportHeader";
 import { ReportSignatory } from "@/components/ReportSignatory";
 import { Prisma, ValidationStatus } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
@@ -286,29 +287,16 @@ export default async function CustomerDeliveryMonitorPage(props: {
   const grandDoQty = summaryRows.reduce((acc, r) => acc + r.doTotalQty, 0);
 
   const generated = new Date();
-  const logoSrc =
-    settings.logoUrl && settings.logoUrl.trim() !== ""
-      ? settings.logoUrl.trim()
-      : "/cdc-logo-svg.svg";
 
   return (
     <div className="space-y-6">
       <div className="space-y-3 print:block">
-        <div className="w-full">
-          <div className="relative flex min-h-8 items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
-            <img
-              src={logoSrc}
-              alt=""
-              className="absolute left-0 top-1/2 h-8 w-auto max-h-8 max-w-[72px] -translate-y-1/2 object-contain"
-            />
-            <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
-              {settings.companyName}
-            </h1>
-          </div>
-          <p className="mt-1 text-center text-sm opacity-80">{settings.department}</p>
-          <p className="mt-1 text-center text-sm opacity-80">Delivery orders by customer</p>
-        </div>
+        <ReportHeader
+          companyName={settings.companyName}
+          department={settings.department}
+          logoSrc={settings.logoUrl}
+          title="Delivery orders by customer"
+        />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             {scopedToSalesPoint ? (
@@ -551,10 +539,6 @@ export default async function CustomerDeliveryMonitorPage(props: {
                   const doTotalQty = o.details.reduce(
                     (acc, d) => acc + d.orderQty,
                     0,
-                  );
-                  const invoicedGross = validated.reduce(
-                    (acc, s) => acc.add(s.grossAmount),
-                    z,
                   );
 
                   return (

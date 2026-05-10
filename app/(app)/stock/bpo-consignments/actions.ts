@@ -16,10 +16,40 @@ import {
 } from "@/lib/bpo";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
-import { BpoMovementStatus, BpoMovementType, Prisma, UserRole } from "@prisma/client";
+import { BpoMovementStatus, BpoMovementType, Prisma, UserRole, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-export type BpoMutationResult = { ok: true } | { ok: false; error: string };
+export type BpoMutationResult =
+  | { ok: true; id?: string; voucherNo?: string }
+  | { ok: false; error: string };
+
+export type BpoConsignmentPrintPayload = {
+  id: string;
+  voucherNo: string;
+  status: BpoMovementStatus;
+  movementDateIso: string;
+  sourceSalesPointName: string;
+  destinationSalesPointName: string;
+  note: string | null;
+  discrepancyNote: string | null;
+  createdByName: string;
+  senderValidatedByName: string | null;
+  botaValidatedByName: string | null;
+  senderValidatedAtIso: string | null;
+  botaValidatedAtIso: string | null;
+  postedAtIso: string | null;
+  lines: Array<{
+    id: string;
+    variantLabel: string;
+    voucherQtyUnits: string;
+    actualQtyUnits: string | null;
+    postedQtyUnits: string | null;
+  }>;
+};
+
+export type BpoPrintResult =
+  | { ok: true; data: BpoConsignmentPrintPayload }
+  | { ok: false; error: string };
 
 type VoucherLineInput = { productVariantId: string; qtyUnits: string; actualQtyUnits?: string };
 
@@ -38,6 +68,11 @@ function parseDate(raw: string): Date {
   const s = String(raw ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00.000Z`);
   return new Date();
+}
+
+function endOfUtcDate(date: Date): Date {
+  const iso = date.toISOString().slice(0, 10);
+  return new Date(`${iso}T23:59:59.999Z`);
 }
 
 async function nextVoucherNo(prisma: ReturnType<typeof getPrismaClient>) {
@@ -68,22 +103,66 @@ async function availableBpoUnitsByVariant(
   prisma: ReturnType<typeof getPrismaClient> | Prisma.TransactionClient,
   salesPointId: number,
   variantIds: string[],
+  asOfDate: Date,
   excludeMovementId?: string,
 ) {
   const uniqueVariantIds = [...new Set(variantIds)];
-  const [batches, openMovements] = await Promise.all([
+  const asOfEnd = endOfUtcDate(asOfDate);
+  const [directReceipts, validatedMovements, saleLines, openMovements] = await Promise.all([
     prisma.bpoStockBatch.findMany({
       where: {
         salesPointId,
         productVariantId: { in: uniqueVariantIds },
-        qtyRemainingUnits: { gt: 0 },
+        sourceMovementLineId: null,
+        receivedAt: { lte: asOfEnd },
       },
-      select: { productVariantId: true, qtyRemainingUnits: true },
+      select: { productVariantId: true, qtyReceivedUnits: true },
+    }),
+    prisma.bpoStockMovement.findMany({
+      where: {
+        status: BpoMovementStatus.VALIDATED,
+        movementDate: { lte: asOfEnd },
+        OR: [{ sourceSalesPointId: salesPointId }, { destinationSalesPointId: salesPointId }],
+        movementType: {
+          in: [
+            BpoMovementType.CONSIGNMENT_TRANSFER,
+            BpoMovementType.GIFT,
+            BpoMovementType.OTHER_OUT,
+          ],
+        },
+      },
+      select: {
+        movementType: true,
+        sourceSalesPointId: true,
+        destinationSalesPointId: true,
+        lines: {
+          where: { productVariantId: { in: uniqueVariantIds } },
+          select: {
+            productVariantId: true,
+            postedQtyUnits: true,
+            actualQtyUnits: true,
+            voucherQtyUnits: true,
+          },
+        },
+      },
+    }),
+    prisma.saleLine.findMany({
+      where: {
+        productVariantId: { in: uniqueVariantIds },
+        product: { isBottledPalmOil: true },
+        sale: {
+          salesPointId,
+          status: ValidationStatus.VALIDATED,
+          soldAt: { lte: asOfEnd },
+        },
+      },
+      select: { productVariantId: true, qtyUnits: true },
     }),
     prisma.bpoStockMovement.findMany({
       where: {
         sourceSalesPointId: salesPointId,
         status: { in: [BpoMovementStatus.DRAFT, BpoMovementStatus.SENDER_VALIDATED] },
+        movementDate: { lte: asOfEnd },
         ...(excludeMovementId ? { id: { not: excludeMovementId } } : {}),
       },
       select: {
@@ -95,11 +174,33 @@ async function availableBpoUnitsByVariant(
     }),
   ]);
 
-  const physical = new Map<string, Prisma.Decimal>();
-  for (const b of batches) {
-    physical.set(
-      b.productVariantId,
-      (physical.get(b.productVariantId) ?? new Prisma.Decimal(0)).add(b.qtyRemainingUnits),
+  const ledger = new Map<string, Prisma.Decimal>();
+  for (const receipt of directReceipts) {
+    ledger.set(
+      receipt.productVariantId,
+      (ledger.get(receipt.productVariantId) ?? new Prisma.Decimal(0)).add(receipt.qtyReceivedUnits),
+    );
+  }
+  for (const movement of validatedMovements) {
+    for (const line of movement.lines) {
+      const qty = line.postedQtyUnits ?? line.actualQtyUnits ?? line.voucherQtyUnits;
+      const current = ledger.get(line.productVariantId) ?? new Prisma.Decimal(0);
+      if (movement.movementType === BpoMovementType.CONSIGNMENT_TRANSFER) {
+        if (movement.sourceSalesPointId === salesPointId) {
+          ledger.set(line.productVariantId, current.sub(qty));
+        } else if (movement.destinationSalesPointId === salesPointId) {
+          ledger.set(line.productVariantId, current.add(qty));
+        }
+      } else if (movement.sourceSalesPointId === salesPointId) {
+        ledger.set(line.productVariantId, current.sub(qty));
+      }
+    }
+  }
+  for (const saleLine of saleLines) {
+    if (!saleLine.productVariantId || !saleLine.qtyUnits) continue;
+    ledger.set(
+      saleLine.productVariantId,
+      (ledger.get(saleLine.productVariantId) ?? new Prisma.Decimal(0)).sub(saleLine.qtyUnits),
     );
   }
   const reserved = new Map<string, Prisma.Decimal>();
@@ -114,7 +215,7 @@ async function availableBpoUnitsByVariant(
 
   const available = new Map<string, Prisma.Decimal>();
   for (const variantId of uniqueVariantIds) {
-    const qty = (physical.get(variantId) ?? new Prisma.Decimal(0)).sub(
+    const qty = (ledger.get(variantId) ?? new Prisma.Decimal(0)).sub(
       reserved.get(variantId) ?? new Prisma.Decimal(0),
     );
     available.set(variantId, qty.gt(0) ? qty : new Prisma.Decimal(0));
@@ -126,6 +227,7 @@ async function assertBpoAvailability(
   prisma: ReturnType<typeof getPrismaClient> | Prisma.TransactionClient,
   salesPointId: number,
   lines: Array<{ productVariantId: string; qtyUnits: Prisma.Decimal }>,
+  movementDate: Date,
   excludeMovementId?: string,
 ) {
   const requested = new Map<string, Prisma.Decimal>();
@@ -144,13 +246,14 @@ async function assertBpoAvailability(
     prisma,
     salesPointId,
     [...requested.keys()],
+    movementDate,
     excludeMovementId,
   );
 
   for (const [variantId, qty] of requested) {
     const avail = available.get(variantId) ?? new Prisma.Decimal(0);
     if (qty.gt(avail)) {
-      return `Insufficient available BPO stock for ${labelById.get(variantId) ?? "selected variant"} at source sales point. Requested ${qty.toDecimalPlaces(3).toString()} units; available ${avail.toDecimalPlaces(3).toString()} units.`;
+      return `Insufficient available BPO stock for ${labelById.get(variantId) ?? "selected variant"} at source sales point as at ${movementDate.toISOString().slice(0, 10)}. Requested ${qty.toDecimalPlaces(3).toString()} units; available ${avail.toDecimalPlaces(3).toString()} units.`;
     }
   }
   return null;
@@ -161,6 +264,63 @@ function revalidateBpo() {
   revalidatePath("/reports/bpo");
   revalidatePath("/reports/stock-on-hand");
   revalidatePath("/pos");
+}
+
+function canValidateBotaConsignment(role: UserRole) {
+  return (
+    role === UserRole.ADMIN ||
+    role === UserRole.MANAGER ||
+    role === UserRole.SENIOR_SUPERVISOR
+  );
+}
+
+function mapBpoPrintPayload(
+  movement: NonNullable<Awaited<ReturnType<typeof loadBpoPrintMovement>>>,
+): BpoConsignmentPrintPayload {
+  return {
+    id: movement.id,
+    voucherNo: movement.voucherNo,
+    status: movement.status,
+    movementDateIso: movement.movementDate.toISOString().slice(0, 10),
+    sourceSalesPointName: movement.sourceSalesPoint?.name ?? "-",
+    destinationSalesPointName: movement.destinationSalesPoint?.name ?? "-",
+    note: movement.note,
+    discrepancyNote: movement.discrepancyNote,
+    createdByName: movement.createdBy.name,
+    senderValidatedByName: movement.senderValidatedBy?.name ?? null,
+    botaValidatedByName: movement.botaValidatedBy?.name ?? null,
+    senderValidatedAtIso: movement.senderValidatedAt?.toISOString() ?? null,
+    botaValidatedAtIso: movement.botaValidatedAt?.toISOString() ?? null,
+    postedAtIso: movement.postedAt?.toISOString() ?? null,
+    lines: movement.lines.map((line) => ({
+      id: line.id,
+      variantLabel: `${line.productVariant.product.productName} - ${line.productVariant.name}`,
+      voucherQtyUnits: line.voucherQtyUnits.toString(),
+      actualQtyUnits: line.actualQtyUnits?.toString() ?? null,
+      postedQtyUnits: line.postedQtyUnits?.toString() ?? null,
+    })),
+  };
+}
+
+function loadBpoPrintMovement(prisma: ReturnType<typeof getPrismaClient>, id: string) {
+  return prisma.bpoStockMovement.findUnique({
+    where: { id },
+    include: {
+      sourceSalesPoint: { select: { name: true } },
+      destinationSalesPoint: { select: { name: true } },
+      createdBy: { select: { name: true } },
+      senderValidatedBy: { select: { name: true } },
+      botaValidatedBy: { select: { name: true } },
+      lines: {
+        include: {
+          productVariant: {
+            select: { name: true, product: { select: { productName: true } } },
+          },
+        },
+        orderBy: { id: "asc" },
+      },
+    },
+  });
 }
 
 export async function createBpoConsignmentVoucher(formData: FormData): Promise<BpoMutationResult> {
@@ -187,17 +347,18 @@ export async function createBpoConsignmentVoucher(formData: FormData): Promise<B
     if (variantCount !== new Set(lines.map((l) => l.productVariantId)).size) {
       return { ok: false, error: "One or more lines are not Bottled Palm Oil variants." };
     }
-    const availabilityErr = await assertBpoAvailability(prisma, sourceSalesPointId, lines);
+    const movementDate = parseDate(String(formData.get("movementDate") ?? ""));
+    const availabilityErr = await assertBpoAvailability(prisma, sourceSalesPointId, lines, movementDate);
     if (availabilityErr) return { ok: false, error: availabilityErr };
     const voucherNo = await nextVoucherNo(prisma);
-    await prisma.bpoStockMovement.create({
+    const movement = await prisma.bpoStockMovement.create({
       data: {
         movementType: BpoMovementType.CONSIGNMENT_TRANSFER,
         status: BpoMovementStatus.DRAFT,
         voucherNo,
         sourceSalesPointId,
         destinationSalesPointId: botaId,
-        movementDate: parseDate(String(formData.get("movementDate") ?? "")),
+        movementDate,
         note: String(formData.get("note") ?? "").trim() || null,
         createdByUserId: actor.id,
         lines: {
@@ -209,7 +370,7 @@ export async function createBpoConsignmentVoucher(formData: FormData): Promise<B
       },
     });
     revalidateBpo();
-    return { ok: true };
+    return { ok: true, id: movement.id, voucherNo: movement.voucherNo };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not create voucher." };
   }
@@ -230,6 +391,7 @@ export async function senderValidateBpoConsignment(formData: FormData): Promise<
         status: true,
         sourceSalesPointId: true,
         movementType: true,
+        movementDate: true,
         lines: { select: { productVariantId: true, voucherQtyUnits: true } },
       },
     });
@@ -245,6 +407,7 @@ export async function senderValidateBpoConsignment(formData: FormData): Promise<
         productVariantId: l.productVariantId,
         qtyUnits: l.voucherQtyUnits,
       })),
+      row.movementDate,
       id,
     );
     if (availabilityErr) return { ok: false, error: availabilityErr };
@@ -268,8 +431,8 @@ export async function botaValidateBpoConsignment(formData: FormData): Promise<Bp
   try {
     await assertPermissionKey("route:/stock/bpo-consignments");
     const { actor, session } = await requireActor(prisma);
-    if (!canValidateBpoDocuments(session.role as UserRole)) {
-      return { ok: false, error: "Only authorized supervisors/managers can validate Bota receipt." };
+    if (!canValidateBotaConsignment(session.role as UserRole)) {
+      return { ok: false, error: "Only senior supervisors and managers can validate Bota receipt." };
     }
     const botaId = await ensureBotaSalesPointId(prisma);
     const botaAccessErr = salesPointErrorForResource(actor, botaId);
@@ -277,7 +440,7 @@ export async function botaValidateBpoConsignment(formData: FormData): Promise<Bp
     const id = String(formData.get("id") ?? "").trim();
     const actuals = parseLines(String(formData.get("lines") ?? "[]"));
     const actualByVariant = new Map(actuals.map((l) => [l.productVariantId, l.actualQtyUnits ?? l.qtyUnits]));
-    await prismaRetry(() =>
+    const validated = await prismaRetry(() =>
       prisma.$transaction(
         async (tx) => {
           const movement = await tx.bpoStockMovement.findUnique({
@@ -344,7 +507,7 @@ export async function botaValidateBpoConsignment(formData: FormData): Promise<Bp
               });
             }
           }
-          await tx.bpoStockMovement.update({
+          const updated = await tx.bpoStockMovement.update({
             where: { id },
             data: {
               status: BpoMovementStatus.VALIDATED,
@@ -353,16 +516,77 @@ export async function botaValidateBpoConsignment(formData: FormData): Promise<Bp
               postedAt: new Date(),
               discrepancyNote: String(formData.get("discrepancyNote") ?? "").trim() || null,
             },
+            select: { id: true, voucherNo: true },
           });
+          return updated;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
     revalidateBpo();
-    return { ok: true };
+    return { ok: true, id: validated.id, voucherNo: validated.voucherNo };
   } catch (e) {
     if (e instanceof BpoStockInsufficientError) return { ok: false, error: e.message };
     return { ok: false, error: e instanceof Error ? e.message : "Could not validate Bota receipt." };
+  }
+}
+
+export async function loadBpoConsignmentVoucherPrint(id: string): Promise<BpoPrintResult> {
+  const prisma = getPrismaClient();
+  try {
+    await assertPermissionKey("route:/stock/bpo-consignments");
+    const { actor } = await requireActor(prisma);
+    const movement = await loadBpoPrintMovement(prisma, id.trim());
+    if (!movement || movement.movementType !== BpoMovementType.CONSIGNMENT_TRANSFER) {
+      return { ok: false, error: "Voucher not found." };
+    }
+    const accessErr = salesPointErrorForResource(actor, movement.sourceSalesPointId);
+    if (accessErr) return { ok: false, error: accessErr };
+    return { ok: true, data: mapBpoPrintPayload(movement) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not load voucher print." };
+  }
+}
+
+export async function loadBpoConsignmentReceiptVoucherPrint(id: string): Promise<BpoPrintResult> {
+  const prisma = getPrismaClient();
+  try {
+    await assertPermissionKey("route:/stock/bpo-consignments");
+    const { actor } = await requireActor(prisma);
+    const botaId = await ensureBotaSalesPointId(prisma);
+    const movement = await loadBpoPrintMovement(prisma, id.trim());
+    if (!movement || movement.movementType !== BpoMovementType.CONSIGNMENT_TRANSFER) {
+      return { ok: false, error: "Voucher not found." };
+    }
+    if (movement.status !== BpoMovementStatus.SENDER_VALIDATED || movement.destinationSalesPointId !== botaId) {
+      return { ok: false, error: "Receipt voucher is only available for sender-validated Bota transfers." };
+    }
+    const accessErr = salesPointErrorForResource(actor, botaId);
+    if (accessErr) return { ok: false, error: accessErr };
+    return { ok: true, data: mapBpoPrintPayload(movement) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not load receipt voucher print." };
+  }
+}
+
+export async function loadBpoConsignmentConfirmationPrint(id: string): Promise<BpoPrintResult> {
+  const prisma = getPrismaClient();
+  try {
+    await assertPermissionKey("route:/stock/bpo-consignments");
+    const { actor } = await requireActor(prisma);
+    const botaId = await ensureBotaSalesPointId(prisma);
+    const movement = await loadBpoPrintMovement(prisma, id.trim());
+    if (!movement || movement.movementType !== BpoMovementType.CONSIGNMENT_TRANSFER) {
+      return { ok: false, error: "Voucher not found." };
+    }
+    if (movement.status !== BpoMovementStatus.VALIDATED || movement.destinationSalesPointId !== botaId) {
+      return { ok: false, error: "Confirmation receipt is only available for validated Bota transfers." };
+    }
+    const accessErr = salesPointErrorForResource(actor, botaId);
+    if (accessErr) return { ok: false, error: accessErr };
+    return { ok: true, data: mapBpoPrintPayload(movement) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not load confirmation print." };
   }
 }
 

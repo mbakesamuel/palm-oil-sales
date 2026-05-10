@@ -3,6 +3,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
+import { ReportHeader } from "@/components/ReportHeader";
 import { ReportSignatory } from "@/components/ReportSignatory";
 import { Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
@@ -33,28 +34,15 @@ export default async function StockOnHandReportPage() {
 
   if (scopedToSalesPoint && assignedSalesPointId == null) {
     const settings = await getOrInitCompanySettings();
-    const logoSrc =
-      settings.logoUrl && settings.logoUrl.trim() !== ""
-        ? settings.logoUrl.trim()
-        : "/cdc-logo-svg.svg";
     return (
       <div className="space-y-6 max-w-xl">
         <div className="space-y-3 print:block">
-          <div className="w-full">
-            <div className="relative flex min-h-8 items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
-              <img
-                src={logoSrc}
-                alt=""
-                className="absolute left-0 top-1/2 h-8 max-h-8 w-auto max-w-[72px] -translate-y-1/2 object-contain"
-              />
-              <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
-                {settings.companyName}
-              </h1>
-            </div>
-            <p className="mt-1 text-center text-sm opacity-80">{settings.department}</p>
-            <p className="mt-1 text-center text-sm opacity-80">Stock on hand</p>
-          </div>
+          <ReportHeader
+            companyName={settings.companyName}
+            department={settings.department}
+            logoSrc={settings.logoUrl}
+            title="Stock on hand"
+          />
         </div>
         <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200">
           Your role is tied to a sales point, but none is assigned. Ask an administrator.
@@ -208,33 +196,19 @@ export default async function StockOnHandReportPage() {
         })()
       : null;
 
-  const logoSrc =
-    settings.logoUrl && settings.logoUrl.trim() !== ""
-      ? settings.logoUrl.trim()
-      : "/cdc-logo-svg.svg";
-
   return (
     <div className="space-y-8">
       <div className="space-y-3 print:block">
-        <div className="w-full">
-          <div className="relative flex min-h-8 items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
-            <img
-              src={logoSrc}
-              alt=""
-              className="absolute left-0 top-1/2 h-8 max-h-8 w-auto max-w-[72px] -translate-y-1/2 object-contain"
-            />
-            <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
-              {settings.companyName}
-            </h1>
-          </div>
-          <p className="mt-1 text-center text-sm opacity-80">{settings.department}</p>
-          <p className="mt-1 text-center text-sm opacity-80">
-            {scopedToSalesPoint && assignedSalesPointName
+        <ReportHeader
+          companyName={settings.companyName}
+          department={settings.department}
+          logoSrc={settings.logoUrl}
+          title={
+            scopedToSalesPoint && assignedSalesPointName
               ? `Stock on hand at ${assignedSalesPointName}`
-              : "Stock on Hand All Sales Points"}
-          </p>
-        </div>
+              : "Stock on Hand All Sales Points"
+          }
+        />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             {scopedToSalesPoint ? (

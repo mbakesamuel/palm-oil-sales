@@ -34,7 +34,11 @@ function fmtKg(d: Prisma.Decimal) {
 function formatPaymentMethods(payments: { method: PaymentMethod }[]): string {
   if (payments.length === 0) return "—";
   return payments
-    .map((p) => (p.method === PaymentMethod.CHEQUE ? "Cheque" : "Cash"))
+    .map((p) => {
+      if (p.method === PaymentMethod.CHEQUE) return "Cheque";
+      if (p.method === PaymentMethod.CREDIT) return "Credit";
+      return "Cash";
+    })
     .join("; ");
 }
 

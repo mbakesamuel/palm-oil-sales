@@ -49,6 +49,17 @@ function parseDec(s: string) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function linesFromDeliveryOrderProducts(data: DeliveryOrderLookupDto): Line[] {
+  return data.perProduct.map((row) => ({
+    productId: String(row.productId),
+    productVariantId: "",
+    qtyKg: "0",
+    qtyUnits: "0",
+    unitPricePerKg: "0",
+    unitPricePerUnit: "0",
+  }));
+}
+
 function legacyAppliedTaxesFromSale(s: LoadedSaleView): LoadedSaleView["appliedTaxes"] {
   if (s.appliedTaxes.length > 0) return s.appliedTaxes;
   const v = parseDec(s.vatAmount);
@@ -161,9 +172,15 @@ export function SalesClient(props: {
   const [linePriceErrors, setLinePriceErrors] = React.useState<Record<number, string>>({});
 
   React.useEffect(() => {
-    if (session?.salesPoint?.id != null) {
-      setSalesPointId(String(session.salesPoint.id));
-    }
+    const sessionSalesPointId = session?.salesPoint?.id;
+    if (sessionSalesPointId == null) return;
+    let alive = true;
+    window.queueMicrotask(() => {
+      if (alive) setSalesPointId(String(sessionSalesPointId));
+    });
+    return () => {
+      alive = false;
+    };
   }, [session?.salesPoint?.id]);
 
   React.useEffect(() => {
@@ -172,47 +189,72 @@ export function SalesClient(props: {
       wp.workingCalendarYear,
       wp.workingCalendarMonth,
     );
-    setTransactionDate((prev) => {
-      if (prev < minIso) return minIso;
-      if (prev > maxIso) return maxIso;
-      return prev;
+    let alive = true;
+    window.queueMicrotask(() => {
+      if (!alive) return;
+      setTransactionDate((prev) => {
+        if (prev < minIso) return minIso;
+        if (prev > maxIso) return maxIso;
+        return prev;
+      });
     });
+    return () => {
+      alive = false;
+    };
   }, [wp.openFinancialYear, wp.workingCalendarYear, wp.workingCalendarMonth]);
 
   React.useEffect(() => {
     const no = deliveryOrderNo.trim();
-    if (!no) {
-      setDoLookupData(null);
-      setDoLookupError(null);
-      setDoLookupBusy(false);
-      return;
-    }
-    setDoLookupBusy(true);
-    setDoLookupError(null);
     let alive = true;
+    const updateLookupState = (fn: () => void) => {
+      window.queueMicrotask(() => {
+        if (alive) fn();
+      });
+    };
+    if (!no) {
+      updateLookupState(() => {
+        setDoLookupData(null);
+        setDoLookupError(null);
+        setDoLookupBusy(false);
+      });
+      return () => {
+        alive = false;
+      };
+    }
     if (authStatus !== "ready") {
-      setDoLookupBusy(false);
-      setDoLookupData(null);
-      setDoLookupError(null);
+      updateLookupState(() => {
+        setDoLookupBusy(false);
+        setDoLookupData(null);
+        setDoLookupError(null);
+      });
       return () => {
         alive = false;
       };
     }
     const actorId = session?.userId?.trim() ?? "";
     if (!actorId) {
-      setDoLookupBusy(false);
-      setDoLookupData(null);
-      setDoLookupError("Login required to check delivery orders.");
+      updateLookupState(() => {
+        setDoLookupBusy(false);
+        setDoLookupData(null);
+        setDoLookupError("Login required to check delivery orders.");
+      });
       return () => {
         alive = false;
       };
     }
+    updateLookupState(() => {
+      setDoLookupBusy(true);
+      setDoLookupError(null);
+    });
     const t = window.setTimeout(() => {
       void lookupDeliveryOrderAction(no, customerId).then((r) => {
         if (!alive) return;
         if (r.ok) {
           setDoLookupData(r.data);
           setDoLookupError(null);
+          if (saleId == null) {
+            setLines(linesFromDeliveryOrderProducts(r.data));
+          }
         } else {
           setDoLookupData(null);
           setDoLookupError(r.error);
@@ -229,17 +271,23 @@ export function SalesClient(props: {
     deliveryOrderNo,
     customerId,
     lookupDeliveryOrderAction,
+    saleId,
     session?.userId,
   ]);
 
   React.useEffect(() => {
+    let alive = true;
     if (saleId != null) return;
     if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
-      setTaxPreviewRows([]);
-      setTaxPreviewError(null);
-      return;
+      window.queueMicrotask(() => {
+        if (!alive) return;
+        setTaxPreviewRows([]);
+        setTaxPreviewError(null);
+      });
+      return () => {
+        alive = false;
+      };
     }
-    let alive = true;
     void previewPosTaxesAction(customerId, transactionDate).then((res) => {
       if (!alive) return;
       if (res.ok) {
@@ -265,18 +313,30 @@ export function SalesClient(props: {
   const lineProductKey = lines.map((l) => `${l.productId}:${l.productVariantId ?? ""}`).join(",");
 
   React.useEffect(() => {
+    let alive = true;
     if (saleId != null) return;
     if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
-      setLinePriceErrors({});
-      return;
+      window.queueMicrotask(() => {
+        if (alive) setLinePriceErrors({});
+      });
+      return () => {
+        alive = false;
+      };
     }
-    let alive = true;
-    setLinePriceErrors({});
+    window.queueMicrotask(() => {
+      if (alive) setLinePriceErrors({});
+    });
     void (async () => {
       const errs: Record<number, string> = {};
       const priceByIdx: Record<number, string> = {};
+      const priceInputs = lineProductKey
+        ? lineProductKey.split(",").map((key) => {
+            const [productId, productVariantId = ""] = key.split(":");
+            return { productId, productVariantId };
+          })
+        : [];
       await Promise.all(
-        lines.map(async (l, idx) => {
+        priceInputs.map(async (l, idx) => {
           const pid = Number.parseInt(l.productId, 10);
           if (!Number.isFinite(pid)) return;
           const product = products.find((p) => p.productId === pid);
@@ -363,7 +423,12 @@ export function SalesClient(props: {
     return products.find((p) => String(p.productId) === productId)?.variants[0]?.id ?? "";
   }
 
-  const deliveryOrderSaveBlock = React.useMemo(() => {
+  const deliveryOrderControlsItems =
+    saleId == null &&
+    deliveryOrderNo.trim() !== "" &&
+    doLookupData != null;
+
+  const deliveryOrderSaveBlock = (() => {
     const trimmed = deliveryOrderNo.trim();
     if (!trimmed) {
       return { block: false as boolean, hint: null as string | null };
@@ -414,15 +479,7 @@ export function SalesClient(props: {
       }
     }
     return { block: false, hint: null };
-  }, [
-    deliveryOrderNo,
-    doLookupBusy,
-    doLookupError,
-    doLookupData,
-    customerId,
-    lines,
-    products,
-  ]);
+  })();
 
   function resetNew() {
     setSaleId(null);
@@ -1006,7 +1063,8 @@ export function SalesClient(props: {
             <h3 className="text-base font-semibold">Items</h3>
             <button
               type="button"
-              className="text-sm underline underline-offset-4"
+              className="text-sm underline underline-offset-4 disabled:opacity-50 disabled:no-underline"
+              disabled={deliveryOrderControlsItems}
               onClick={() =>
                 setLines((prev) => [
                   ...prev,
@@ -1065,6 +1123,7 @@ export function SalesClient(props: {
                         ),
                       )
                     }
+                    disabled={deliveryOrderControlsItems}
                   >
                     <option value="" disabled>
                       Select Product
@@ -1122,7 +1181,7 @@ export function SalesClient(props: {
                 </div>
                 <div className="col-span-3 space-y-0.5 min-w-0 pt-0.5">
                   <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/[0.06] px-2 py-1"
+                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-black/3 dark:bg-white/6 px-2 py-1"
                     value={isBpoLine ? l.unitPricePerUnit ?? l.unitPricePerKg : l.unitPricePerKg}
                     inputMode="decimal"
                     readOnly
@@ -1144,7 +1203,7 @@ export function SalesClient(props: {
                     onClick={() =>
                       setLines((prev) => prev.filter((_, i) => i !== idx))
                     }
-                    disabled={lines.length === 1}
+                    disabled={lines.length === 1 || deliveryOrderControlsItems}
                   >
                     Remove
                   </button>

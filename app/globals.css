@@ -41,6 +41,14 @@ body {
   margin-right: 10mm;
 }
 
+@page bpo-sales-crosstab {
+  size: A4 landscape;
+  margin-top: 5mm;
+  margin-bottom: 5mm;
+  margin-left: 10mm;
+  margin-right: 10mm;
+}
+
 @media print {
   /*
    * Slight zoom on the consignment note only (Chromium / Edge print — helps one-page fit).
@@ -53,5 +61,9 @@ body {
   /** Wide crosstab: use landscape A4 when printing this report. */
   [data-print-page="sales-budget-monthly-crosstab"] {
     page: sales-budget-monthly-crosstab;
+  }
+
+  [data-print-page="bpo-sales-crosstab"] {
+    page: bpo-sales-crosstab;
   }
 }
