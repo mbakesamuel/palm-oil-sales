@@ -18,6 +18,7 @@ export default async function UsersPage() {
         isActive: true,
         salesPointId: true,
         salesPoint: { select: { id: true, name: true } },
+        service: true,
       },
     }),
     prisma.salesPoint.findMany({

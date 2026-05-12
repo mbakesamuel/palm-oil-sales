@@ -9,10 +9,7 @@ import {
   previewPosTaxes,
   validateSale,
 } from "./actions";
-import {
-  previewProductUnitPrice,
-  previewProductVariantUnitPrice,
-} from "@/lib/pricing/preview-action";
+import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 import { SalesClient } from "./SalesClient";
 import Link from "next/link";
 
@@ -38,17 +35,12 @@ export default async function PosPage() {
     ),
     prismaRetry(() =>
       prisma.product.findMany({
+        where: { isBottledPalmOil: false },
         orderBy: [{ productName: "asc" }],
         select: {
           productId: true,
           productName: true,
-          isBottledPalmOil: true,
           productCat: { select: { productCat: true } },
-          variants: {
-            where: { isActive: true },
-            orderBy: { name: "asc" },
-            select: { id: true, name: true, unitLabel: true },
-          },
         },
         take: 50,
       }),
@@ -67,7 +59,7 @@ export default async function PosPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Sales</h1>
         <p className="text-sm opacity-75">
-          Payments allowed: cash, cheque. No credit sales.
+          Payments: cash, cheque, or bank traite (no credit sales).
         </p>
       </div>
 
@@ -102,7 +94,6 @@ export default async function PosPage() {
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
           previewProductUnitPriceAction={previewProductUnitPrice}
-          previewProductVariantUnitPriceAction={previewProductVariantUnitPrice}
         />
       )}
     </div>

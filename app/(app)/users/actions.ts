@@ -39,6 +39,7 @@ export async function saveUser(formData: FormData) {
   const role = parseRole(String(formData.get("role") ?? ""));
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
+  const service = String(formData.get("service") ?? "").trim() || null;
 
   if (!username) throw new Error("Username is required.");
   if (!name) throw new Error("Display name is required.");
@@ -65,6 +66,7 @@ export async function saveUser(formData: FormData) {
           username,
           name,
           role,
+          service,
           salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
         },
       });
@@ -76,6 +78,7 @@ export async function saveUser(formData: FormData) {
           name,
           passwordPlain: password,
           role,
+          service,
           salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
         },
       });
@@ -93,6 +96,7 @@ export async function saveUser(formData: FormData) {
         name,
         passwordPlain: password,
         role,
+        service,
         salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
       },
     });

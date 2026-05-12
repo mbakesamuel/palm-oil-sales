@@ -10,6 +10,7 @@ enum PaymentMethod {
   CASH
   CHEQUE
   CREDIT
+  TRAITE
 }
 
 enum UserRole {
@@ -192,6 +193,8 @@ model User {
   /// Required for roles tied to a single sales point (e.g. clerk, sales supervisor).
   salesPointId  Int?
   salesPoint    SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  /// Optional service / sub-unit within the department (e.g. retail desk).
+  service       String?
   isActive      Boolean     @default(true)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -547,8 +550,12 @@ model Payment {
   method    PaymentMethod
   amount    Decimal       @db.Decimal(14, 2)
   chequeNo  String?
-  /// Drawee bank (cheque); optional, mainly for reporting
+  /// Drawee bank (cheque or traite); optional, mainly for reporting
   bank      String?
+  /// Bank traite / bill reference when method is TRAITE
+  traiteNo         String?
+  traiteIssuedOn   DateTime? @db.Date
+  traiteMaturityOn DateTime? @db.Date
   paidAt    DateTime      @default(now())
   createdAt DateTime      @default(now())
 

@@ -1,3 +1,4 @@
+import { resolveCompanyLogoSrc } from "@/lib/company-logo";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { LoginForm } from "./LoginForm";
 
@@ -12,7 +13,7 @@ export default async function LoginPage() {
       <LoginForm
         companyName={settings.companyName}
         department={settings.department}
-        logoSrc="/cdc-logo-svg.svg"
+        logoSrc={resolveCompanyLogoSrc(settings.logoUrl)}
       />
     </div>
   );

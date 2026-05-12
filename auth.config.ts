@@ -73,6 +73,7 @@ export default {
           username: string;
           displayName: string;
           salesPoint: { id: number; name: string } | null;
+          service?: string | null;
         };
         token.sub = u.id;
         token.userId = u.id;
@@ -80,6 +81,7 @@ export default {
         token.username = u.username;
         token.displayName = u.displayName;
         token.salesPoint = u.salesPoint;
+        token.service = u.service ?? null;
       }
       return token;
     },
@@ -90,6 +92,10 @@ export default {
       session.role = token.role as UserRole;
       session.salesPoint =
         (token.salesPoint as { id: number; name: string } | null | undefined) ?? null;
+      session.service =
+        typeof token.service === "string" && token.service.trim() !== ""
+          ? token.service.trim()
+          : null;
       if (session.user) {
         session.user.id = token.userId as string;
         session.user.name = session.displayName;

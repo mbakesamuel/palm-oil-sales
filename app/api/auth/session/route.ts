@@ -20,6 +20,8 @@ export async function GET() {
         displayName: s.displayName,
         role: s.role,
         salesPoint: s.salesPoint,
+        service:
+          typeof s.service === "string" && s.service.trim() !== "" ? s.service.trim() : null,
       },
     },
     { headers: { "Cache-Control": "no-store, max-age=0" } },

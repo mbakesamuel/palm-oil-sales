@@ -14,7 +14,7 @@ export default async function SetupPage() {
   const users = await prisma.user.findMany({
     where: { isActive: true },
     orderBy: [{ role: "asc" }, { username: "asc" }],
-    select: { id: true, username: true, name: true, role: true },
+    select: { id: true, username: true, name: true, role: true, service: true },
   });
 
   return (
@@ -70,6 +70,13 @@ export default async function SetupPage() {
           />
           <div className="text-xs opacity-70">
             Shown in the app shell, delivery order PDFs, and confirm dialogs (e.g. division or unit name).
+            {" "}
+            Optional <span className="font-medium">service</span> lines (e.g. retail counter) are{" "}
+            <span className="font-medium">per user</span> and edited under{" "}
+            <a className="underline underline-offset-4" href="/users">
+              Users
+            </a>
+            ; department stays company-wide.
           </div>
         </div>
 
@@ -179,7 +186,7 @@ export default async function SetupPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">User accounts</h2>
         <p className="text-sm opacity-75">
-          Administrators manage usernames, passwords, roles, and sales points under{" "}
+          Administrators manage usernames, passwords, roles, sales points, and optional per-user service under{" "}
           <a className="underline underline-offset-4" href="/users">
             Users
           </a>
@@ -198,13 +205,20 @@ export default async function SetupPage() {
           ) : (
             <ul className="text-sm space-y-1">
               {users.map((u) => (
-                <li key={u.id} className="flex items-center justify-between gap-3">
-                  <span>
-                    <span className="font-mono text-xs opacity-80">{u.username}</span>
-                    <span className="mx-1 opacity-40">·</span>
-                    {u.name}
-                  </span>
-                  <span className="opacity-70">{u.role}</span>
+                <li key={u.id} className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <div className="min-w-0">
+                    <span>
+                      <span className="font-mono text-xs opacity-80">{u.username}</span>
+                      <span className="mx-1 opacity-40">·</span>
+                      {u.name}
+                    </span>
+                    {u.service?.trim() ? (
+                      <div className="text-xs opacity-70 truncate" title={u.service}>
+                        Service: {u.service}
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="opacity-70 shrink-0">{u.role}</span>
                 </li>
               ))}
             </ul>

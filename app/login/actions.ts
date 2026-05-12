@@ -23,12 +23,15 @@ async function loadAuthSessionByUsername(username: string): Promise<AuthSession 
   if (!user?.isActive) return null;
   const salesPoint =
     user.salesPoint != null ? { id: user.salesPoint.id, name: user.salesPoint.name } : null;
+  const service =
+    typeof user.service === "string" && user.service.trim() !== "" ? user.service.trim() : null;
   return {
     userId: user.id,
     username: user.username,
     displayName: user.name,
     role: user.role as UserRole,
     salesPoint,
+    service,
   };
 }
 

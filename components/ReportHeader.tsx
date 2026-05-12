@@ -1,13 +1,12 @@
+import { resolveCompanyLogoSrc } from "@/lib/company-logo";
+
 export function ReportHeader(props: {
   companyName: string;
   department?: string | null;
   logoSrc?: string | null;
   title: string;
 }) {
-  const logoSrc =
-    props.logoSrc && props.logoSrc.trim() !== ""
-      ? props.logoSrc.trim()
-      : "/cdc-logo-svg.svg";
+  const logoSrc = resolveCompanyLogoSrc(props.logoSrc);
 
   return (
     <div className="w-full mb-8">

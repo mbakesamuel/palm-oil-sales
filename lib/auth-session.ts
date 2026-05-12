@@ -17,6 +17,8 @@ export type AuthSession = {
   displayName: string;
   role: UserRole;
   salesPoint: AuthSalesPoint | null;
+  /** Optional sub-unit / service line (from `User.service`). */
+  service: string | null;
 };
 
 export function parseAuthSession(raw: string | null): AuthSession | null {
@@ -39,12 +41,17 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
         salesPoint = { id: sp.id, name: sp.name };
       }
     }
+    let service: string | null = null;
+    if (typeof o.service === "string" && o.service.trim() !== "") {
+      service = o.service.trim();
+    }
     return {
       userId: o.userId.trim(),
       username: o.username.trim(),
       displayName,
       role: o.role as UserRole,
       salesPoint,
+      service,
     };
   } catch {
     return null;

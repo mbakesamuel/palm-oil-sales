@@ -44,6 +44,8 @@ export type BpoMovementStatus =
 export const PaymentMethod = {
   CASH: "CASH",
   CHEQUE: "CHEQUE",
+  CREDIT: "CREDIT",
+  TRAITE: "TRAITE",
 } as const;
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 

@@ -8,7 +8,7 @@ import {
   getOpenFinancialYearPeriod,
   toOpenFinancialYearForPosting,
 } from "@/lib/financial-year";
-import { noonUtcFromIsoDate, normalizeIsoDateInput, utcIsoDateToday } from "@/lib/posting-calendar";
+import { noonUtcFromIsoDate, normalizeIsoDateInput, prismaDateToIso, utcIsoDateToday } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 import { legacyVatSnapshotFromResolved } from "@/lib/tax/resolve";
@@ -27,9 +27,9 @@ import {
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
 import { applyFefoStockDeduction, StockInsufficientError } from "@/lib/stock-fefo";
-import { applyBpoStockDeduction, BpoStockInsufficientError, getBotaSalesPointId } from "@/lib/bpo";
+import { applyBpoStockDeduction, BpoStockInsufficientError } from "@/lib/bpo";
 import type { SalePrintModel } from "@/components/SalePrint";
-import { resolveUnitPriceExTax, resolveVariantUnitPriceExTax } from "@/lib/pricing/resolve";
+import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -43,10 +43,13 @@ type PosLineInput = {
 };
 
 type PosPaymentInput = {
-  method: "CASH" | "CHEQUE";
+  method: "CASH" | "CHEQUE" | "TRAITE";
   amount: string;
   chequeNo?: string;
   bank?: string;
+  traiteNo?: string;
+  traiteIssuedOn?: string;
+  traiteMaturityOn?: string;
 };
 
 export type SaveSaleResult =
@@ -100,6 +103,9 @@ export type LoadedSaleView = {
     amount: string;
     chequeNo: string | null;
     bank: string | null;
+    traiteNo: string | null;
+    traiteIssuedOn: string | null;
+    traiteMaturityOn: string | null;
     paidAtIso: string;
   }>;
   appliedTaxes: Array<{
@@ -234,7 +240,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   let preparedLines: Array<{
     productId: number;
     productVariantId: string | null;
-    isBottledPalmOil: boolean;
     qtyKg: Prisma.Decimal;
     qtyUnits: Prisma.Decimal | null;
     unitPrice: Prisma.Decimal;
@@ -242,7 +247,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   }> = [];
   try {
     preparedLines = [];
-    const botaSalesPointId = await getBotaSalesPointId(prisma);
     for (const l of lines) {
       if (!l.productId) throw new Error("Each line must have a product.");
       const productId = Number.parseInt(l.productId, 10);
@@ -252,50 +256,32 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         select: { productName: true, isBottledPalmOil: true },
       });
       if (!product) throw new Error("Product not found.");
-
-      let productVariantId: string | null = null;
-      let qtyKg = d(0);
-      let qtyUnits: Prisma.Decimal | null = null;
-      let price: Prisma.Decimal;
-
       if (product.isBottledPalmOil) {
-        if (botaSalesPointId == null || effectiveSalesPointId !== botaSalesPointId) {
-          throw new Error("Only Bota sales point is allowed to sell Bottled Palm Oil.");
-        }
-        productVariantId = String(l.productVariantId ?? "").trim();
-        if (!productVariantId) {
-          throw new Error(`Select a Bottled Palm Oil size for ${product.productName}.`);
-        }
-        qtyUnits = d(String(l.qtyUnits ?? l.qtyKg));
-        if (qtyUnits.lte(0)) throw new Error("Bottled Palm Oil quantity must be > 0.");
-        const priced = await resolveVariantUnitPriceExTax(prisma, productVariantId, soldAt);
-        if (!priced.ok) throw new Error(priced.error);
-        if (priced.productId !== productId) {
-          throw new Error("Selected Bottled Palm Oil size does not belong to this product.");
-        }
-        price = money2(priced.unitPriceExTax);
-      } else {
-        qtyKg = d(l.qtyKg);
-        if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
-        const priced = await resolveUnitPriceExTax(
-          prisma,
-          productId,
-          customer.customerType,
-          soldAt,
+        throw new Error(
+          `Bottled Palm Oil ("${product.productName}") is not sold on this page. Post it from Stock → Bottled Palms Oil Gift / Out.`,
         );
-        if (!priced.ok) throw new Error(priced.error);
-        price = money2(priced.unitPriceExTax);
       }
+
+      const qtyKg = d(l.qtyKg);
+      if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
+      const priced = await resolveUnitPriceExTax(
+        prisma,
+        productId,
+        customer.customerType,
+        soldAt,
+      );
+      if (!priced.ok) throw new Error(priced.error);
+      const price = money2(priced.unitPriceExTax);
+
       if (price.lt(0)) throw new Error("Unit price must be >= 0.");
-      const lineNet = money2((qtyUnits ?? qtyKg).mul(price));
+      const lineNet = money2(qtyKg.mul(price));
       net = net.add(lineNet);
 
       preparedLines.push({
         productId,
-        productVariantId,
-        isBottledPalmOil: product.isBottledPalmOil,
+        productVariantId: null,
         qtyKg,
-        qtyUnits,
+        qtyUnits: null,
         unitPrice: price,
         lineNet,
       });
@@ -305,12 +291,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   }
 
   if (deliveryOrderNo) {
-    if (preparedLines.some((l) => l.isBottledPalmOil)) {
-      return {
-        ok: false,
-        error: "Delivery order control is not available for Bottled Palm Oil variant sales.",
-      };
-    }
     const productRows = await prisma.product.findMany({
       where: { productId: { in: [...new Set(preparedLines.map((l) => l.productId))] } },
       select: { productId: true, productName: true },
@@ -364,7 +344,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       qtyKg: l.qtyKg,
       qtyUnits: l.qtyUnits,
       unitPricePerKg: l.unitPrice,
-      unitPricePerUnit: l.isBottledPalmOil ? l.unitPrice : null,
+      unitPricePerUnit: null,
       lineNet: l.lineNet,
       lineVat,
       lineGross: money2(l.lineNet.add(lineVat)),
@@ -377,6 +357,9 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     amount: Prisma.Decimal;
     chequeNo: string | null;
     bank: string | null;
+    traiteNo: string | null;
+    traiteIssuedOn: Date | null;
+    traiteMaturityOn: Date | null;
   }> = [];
   try {
     preparedPayments = payments
@@ -385,17 +368,57 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         const amount = money2(d(p.amount));
         if (amount.lte(0)) throw new Error("Payment amount must be > 0.");
 
-        const method = p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH;
-        const chequeNo = method === PaymentMethod.CHEQUE ? String(p.chequeNo ?? "").trim() : "";
-        const bankRaw = method === PaymentMethod.CHEQUE ? String(p.bank ?? "").trim() : "";
-        const bank = bankRaw ? bankRaw : null;
+        const rawMethod = String(p.method ?? "").toUpperCase();
+        if (rawMethod === "CREDIT") {
+          throw new Error("Credit payments cannot be created from this screen.");
+        }
+        const method =
+          rawMethod === "CHEQUE"
+            ? PaymentMethod.CHEQUE
+            : rawMethod === "TRAITE"
+              ? PaymentMethod.TRAITE
+              : PaymentMethod.CASH;
 
-        if (method === PaymentMethod.CHEQUE && !chequeNo) {
-          throw new Error("Cheque number is required for cheque payments.");
+        let chequeNo: string | null = null;
+        let bank: string | null = null;
+        let traiteNo: string | null = null;
+        let traiteIssuedOn: Date | null = null;
+        let traiteMaturityOn: Date | null = null;
+
+        if (method === PaymentMethod.CHEQUE) {
+          chequeNo = String(p.chequeNo ?? "").trim() || null;
+          const bankRaw = String(p.bank ?? "").trim();
+          bank = bankRaw ? bankRaw : null;
+          if (!chequeNo) {
+            throw new Error("Cheque number is required for cheque payments.");
+          }
+        } else if (method === PaymentMethod.TRAITE) {
+          traiteNo = String(p.traiteNo ?? "").trim() || null;
+          const bankRaw = String(p.bank ?? "").trim();
+          bank = bankRaw ? bankRaw : null;
+          const issuedIso = normalizeIsoDateInput(String(p.traiteIssuedOn ?? ""));
+          const maturityIso = normalizeIsoDateInput(String(p.traiteMaturityOn ?? ""));
+          if (!traiteNo) throw new Error("Traite number is required for traite payments.");
+          if (!bank) throw new Error("Bank is required for traite payments.");
+          if (!issuedIso) throw new Error("Traite date issued is required.");
+          if (!maturityIso) throw new Error("Traite maturity date is required.");
+          traiteIssuedOn = noonUtcFromIsoDate(issuedIso);
+          traiteMaturityOn = noonUtcFromIsoDate(maturityIso);
+          if (traiteMaturityOn < traiteIssuedOn) {
+            throw new Error("Traite maturity date cannot be before the date issued.");
+          }
         }
 
         paidTotal = paidTotal.add(amount);
-        return { method, amount, chequeNo: chequeNo || null, bank };
+        return {
+          method,
+          amount,
+          chequeNo,
+          bank,
+          traiteNo,
+          traiteIssuedOn,
+          traiteMaturityOn,
+        };
       });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid payments." };
@@ -437,6 +460,9 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
           amount: p.amount,
           chequeNo: p.chequeNo,
           bank: p.bank,
+          traiteNo: p.traiteNo,
+          traiteIssuedOn: p.traiteIssuedOn,
+          traiteMaturityOn: p.traiteMaturityOn,
           paidAt: soldAt,
         })),
       },
@@ -582,6 +608,9 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       amount: p.amount.toString(),
       chequeNo: p.chequeNo ?? null,
       bank: p.bank ?? null,
+      traiteNo: p.traiteNo ?? null,
+      traiteIssuedOn: p.traiteIssuedOn ? prismaDateToIso(p.traiteIssuedOn) : null,
+      traiteMaturityOn: p.traiteMaturityOn ? prismaDateToIso(p.traiteMaturityOn) : null,
       paidAtIso: p.paidAt.toISOString(),
     })),
     appliedTaxes: row.appliedTaxes.map((t) => ({
@@ -868,6 +897,9 @@ export async function loadSalePrintById(
       amount: p.amount.toString(),
       chequeNo: p.chequeNo ?? null,
       bank: p.bank ?? null,
+      traiteNo: p.traiteNo ?? null,
+      traiteIssuedOn: p.traiteIssuedOn ? prismaDateToIso(p.traiteIssuedOn) : null,
+      traiteMaturityOn: p.traiteMaturityOn ? prismaDateToIso(p.traiteMaturityOn) : null,
       paidAtIso: p.paidAt.toISOString(),
     })),
   };

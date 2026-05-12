@@ -9,6 +9,21 @@ function moneyLabel(value: string | null | undefined) {
   return `${n.toLocaleString("en-US", { maximumFractionDigits: 0 })} XAF`;
 }
 
+function formatIsoDateOnly(iso: string | null | undefined) {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return iso;
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00.000Z`));
+  } catch {
+    return iso;
+  }
+}
+
 function formatDisplayDate(iso: string) {
   try {
     return new Intl.DateTimeFormat("en-GB", {
@@ -55,6 +70,9 @@ export type SalePrintModel = {
     amount: string;
     chequeNo: string | null;
     bank: string | null;
+    traiteNo: string | null;
+    traiteIssuedOn: string | null;
+    traiteMaturityOn: string | null;
     paidAtIso: string;
   }>;
 };
@@ -194,14 +212,33 @@ export function SalePrint(props: {
             <tbody>
               {sale.payments.map((p, i) => (
                 <tr key={i} className="border-b border-black/10">
-                  <td className="py-2">{p.method}</td>
+                  <td className="py-2">
+                    {p.method === "TRAITE"
+                      ? "Traite"
+                      : p.method === "CHEQUE"
+                        ? "Cheque"
+                        : p.method === "CREDIT"
+                          ? "Credit"
+                          : p.method === "CASH"
+                            ? "Cash"
+                            : p.method}
+                  </td>
                   <td className="py-2">{formatDisplayDate(p.paidAtIso)}</td>
                   <td className="py-2 text-right tabular-nums">{moneyLabel(p.amount)}</td>
                   <td className="py-2 text-xs opacity-90">
                     {(() => {
                       const bits: string[] = [];
-                      if (p.chequeNo) bits.push(`Chq: ${p.chequeNo}`);
-                      if (p.bank) bits.push(`Bank: ${p.bank}`);
+                      if (p.method === "TRAITE") {
+                        if (p.traiteNo) bits.push(`Traite: ${p.traiteNo}`);
+                        if (p.bank) bits.push(`Bank: ${p.bank}`);
+                        if (p.traiteIssuedOn)
+                          bits.push(`Issued: ${formatIsoDateOnly(p.traiteIssuedOn)}`);
+                        if (p.traiteMaturityOn)
+                          bits.push(`Matures: ${formatIsoDateOnly(p.traiteMaturityOn)}`);
+                      } else {
+                        if (p.chequeNo) bits.push(`Chq: ${p.chequeNo}`);
+                        if (p.bank) bits.push(`Bank: ${p.bank}`);
+                      }
                       return bits.length > 0 ? bits.join(" · ") : "—";
                     })()}
                   </td>

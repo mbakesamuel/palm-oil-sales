@@ -37,6 +37,7 @@ function formatPaymentMethods(payments: { method: PaymentMethod }[]): string {
     .map((p) => {
       if (p.method === PaymentMethod.CHEQUE) return "Cheque";
       if (p.method === PaymentMethod.CREDIT) return "Credit";
+      if (p.method === PaymentMethod.TRAITE) return "Traite";
       return "Cash";
     })
     .join("; ");

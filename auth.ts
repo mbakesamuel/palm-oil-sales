@@ -50,6 +50,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             ? { id: user.salesPoint.id, name: user.salesPoint.name }
             : null;
 
+        const service =
+          typeof user.service === "string" && user.service.trim() !== ""
+            ? user.service.trim()
+            : null;
+
         return {
           id: user.id,
           name: displayName,
@@ -58,6 +63,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           username: user.username,
           displayName,
           salesPoint,
+          service,
         };
       },
     }),

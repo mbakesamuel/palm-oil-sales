@@ -30,7 +30,11 @@ function pathMatchesItem(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function groupContainsPath(pathname: string, items: NavItem[], overviewHref?: string) {
+function groupContainsPath(
+  pathname: string,
+  items: NavItem[],
+  overviewHref?: string,
+) {
   if (overviewHref && pathMatchesItem(pathname, overviewHref)) return true;
   return items.some((item) => pathMatchesItem(pathname, item.href));
 }
@@ -43,7 +47,14 @@ function NavGroup(props: {
   onToggle: () => void;
 }) {
   const { config, pathname, collapsed, open, onToggle } = props;
-  const { label, items, collapsedHref, collapsedAbbrev, collapsedTitle, overview } = config;
+  const {
+    label,
+    items,
+    collapsedHref,
+    collapsedAbbrev,
+    collapsedTitle,
+    overview,
+  } = config;
 
   if (collapsed) {
     return (
@@ -92,7 +103,9 @@ function NavGroup(props: {
               href={item.href}
               className={[
                 "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
-                pathMatchesItem(pathname, item.href) ? "bg-black/5 dark:bg-white/10" : "",
+                pathMatchesItem(pathname, item.href)
+                  ? "bg-black/5 dark:bg-white/10"
+                  : "",
               ].join(" ")}
             >
               {item.label}
@@ -206,7 +219,10 @@ export function Sidebar(props: {
   }, [filteredReportNav]);
 
   const navGroups = React.useMemo(
-    () => [setupGroup, operationsGroup, reportsGroup].filter((group) => group != null),
+    () =>
+      [setupGroup, operationsGroup, reportsGroup].filter(
+        (group) => group != null,
+      ),
     [operationsGroup, reportsGroup, setupGroup],
   );
 
@@ -256,7 +272,9 @@ export function Sidebar(props: {
         <div className={collapsed ? "hidden lg:block" : ""}>
           <div className="font-semibold leading-tight">{brand}</div>
           {department ? (
-            <div className="text-[11px] opacity-70 mt-0.5 leading-snug">{department}</div>
+            <div className="text-[11px] opacity-70 mt-0.5 leading-snug">
+              {department}
+            </div>
           ) : null}
           <div className="text-xs opacity-70 mt-1">{subtitle}</div>
         </div>
@@ -280,12 +298,17 @@ export function Sidebar(props: {
             className={[
               "rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5",
               collapsed ? "lg:px-2 lg:text-center" : "",
-              pathMatchesItem(pathname, item.href) ? "bg-black/5 dark:bg-white/10" : "",
+              pathMatchesItem(pathname, item.href)
+                ? "bg-black/5 dark:bg-white/10"
+                : "",
             ].join(" ")}
             title={collapsed ? item.label : undefined}
           >
             <span className={collapsed ? "lg:hidden" : ""}>{item.label}</span>
-            <span className={collapsed ? "hidden lg:inline" : "hidden"} aria-hidden>
+            <span
+              className={collapsed ? "hidden lg:inline" : "hidden"}
+              aria-hidden
+            >
               {item.label.slice(0, 2).toUpperCase()}
             </span>
           </Link>
@@ -339,14 +362,32 @@ export function Sidebar(props: {
             <div className="font-medium truncate" title={session.displayName}>
               {session.displayName}
             </div>
-            <div className="opacity-60 truncate text-[11px]" title={session.username}>
+            {session.service?.trim() ? (
+              <div
+                className="opacity-70 truncate text-[11px]"
+                title={session.service}
+              >
+                {session.service}
+              </div>
+            ) : null}
+
+            <div
+              className="opacity-60 truncate text-[11px]"
+              title={session.username}
+            >
               @{session.username}
             </div>
-            <div className="opacity-70 truncate" title={roleLabel(session.role)}>
+            <div
+              className="opacity-70 truncate"
+              title={roleLabel(session.role)}
+            >
               {roleLabel(session.role)}
             </div>
             {session.salesPoint ? (
-              <div className="opacity-70 truncate" title={session.salesPoint.name}>
+              <div
+                className="opacity-70 truncate"
+                title={session.salesPoint.name}
+              >
                 {session.salesPoint.name}
               </div>
             ) : (

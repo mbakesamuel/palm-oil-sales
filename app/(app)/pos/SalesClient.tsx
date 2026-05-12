@@ -4,7 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeriodContext";
+import {
+  useWorkingPeriod,
+  workingMonthDateBounds,
+} from "@/contexts/WorkingPeriodContext";
 import { utcIsoDateToday } from "@/lib/posting-calendar";
 import { useAuth } from "@/contexts/AuthContext";
 import { canValidateDocuments } from "@/lib/auth-roles";
@@ -28,9 +31,7 @@ type Customer = {
 type Product = {
   productId: number;
   productName: string;
-  isBottledPalmOil: boolean;
   productCat: { productCat: string };
-  variants: Array<{ id: string; name: string; unitLabel: string }>;
 };
 
 type Line = {
@@ -42,7 +43,15 @@ type Line = {
   unitPricePerUnit?: string;
 };
 
-type Payment = { method: "CASH" | "CHEQUE"; amount: string; chequeNo?: string; bank?: string };
+type Payment = {
+  method: "CASH" | "CHEQUE" | "TRAITE" | "CREDIT";
+  amount: string;
+  chequeNo?: string;
+  bank?: string;
+  traiteNo?: string;
+  traiteIssuedOn?: string;
+  traiteMaturityOn?: string;
+};
 
 function parseDec(s: string) {
   const n = Number.parseFloat(String(s ?? "").replace(",", "."));
@@ -54,21 +63,19 @@ function linesFromDeliveryOrderProducts(data: DeliveryOrderLookupDto): Line[] {
     productId: String(row.productId),
     productVariantId: "",
     qtyKg: "0",
-    qtyUnits: "0",
     unitPricePerKg: "0",
-    unitPricePerUnit: "0",
   }));
 }
 
-function legacyAppliedTaxesFromSale(s: LoadedSaleView): LoadedSaleView["appliedTaxes"] {
+function legacyAppliedTaxesFromSale(
+  s: LoadedSaleView,
+): LoadedSaleView["appliedTaxes"] {
   if (s.appliedTaxes.length > 0) return s.appliedTaxes;
   const v = parseDec(s.vatAmount);
   if (v <= 0) return [];
   const netNum = parseDec(s.netAmount);
   const rate = netNum > 0 ? String(v / netNum) : "0";
-  return [
-    { code: VAT_TAX_CODE, label: "VAT", rate, amount: s.vatAmount },
-  ];
+  return [{ code: VAT_TAX_CODE, label: "VAT", rate, amount: s.vatAmount }];
 }
 
 export function SalesClient(props: {
@@ -78,7 +85,9 @@ export function SalesClient(props: {
   previewPosTaxesAction: (
     customerId: string,
     transactionIso: string,
-  ) => Promise<{ ok: true; taxes: PosTaxPreviewRow[] } | { ok: false; error: string }>;
+  ) => Promise<
+    { ok: true; taxes: PosTaxPreviewRow[] } | { ok: false; error: string }
+  >;
   saveSaleAction: (formData: FormData) => Promise<SaveSaleResult>;
   loadSaleByInvoiceNo: (invoiceNo: string) => Promise<LoadedSaleView | null>;
   lookupDeliveryOrderAction: (
@@ -94,11 +103,9 @@ export function SalesClient(props: {
     customerId: string,
     productId: number,
     dateIso: string,
-  ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
-  previewProductVariantUnitPriceAction: (
-    productVariantId: string,
-    dateIso: string,
-  ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
+  ) => Promise<
+    { ok: true; unitPriceExTax: string } | { ok: false; error: string }
+  >;
 }) {
   const {
     customers,
@@ -111,7 +118,6 @@ export function SalesClient(props: {
     validateSaleAction,
     deleteSaleAction,
     previewProductUnitPriceAction,
-    previewProductVariantUnitPriceAction,
   } = props;
 
   const wp = useWorkingPeriod();
@@ -143,9 +149,7 @@ export function SalesClient(props: {
       productId: "",
       productVariantId: "",
       qtyKg: "0",
-      qtyUnits: "0",
       unitPricePerKg: "0",
-      unitPricePerUnit: "0",
     },
   ]);
   const [payments, setPayments] = React.useState<Payment[]>(() => [
@@ -153,12 +157,20 @@ export function SalesClient(props: {
   ]);
   const [transactionDate, setTransactionDate] = React.useState(utcIsoDateToday);
 
-  const [taxPreviewRows, setTaxPreviewRows] = React.useState<PosTaxPreviewRow[]>([]);
-  const [taxPreviewError, setTaxPreviewError] = React.useState<string | null>(null);
+  const [taxPreviewRows, setTaxPreviewRows] = React.useState<
+    PosTaxPreviewRow[]
+  >([]);
+  const [taxPreviewError, setTaxPreviewError] = React.useState<string | null>(
+    null,
+  );
   /** When set, invoice is loaded and tax rows come from server snapshots (not live preview). */
   const [loadedAppliedTaxes, setLoadedAppliedTaxes] = React.useState<
     LoadedSaleView["appliedTaxes"] | null
   >(null);
+  const [loadedTotals, setLoadedTotals] = React.useState<{
+    netAmount: string;
+    grossAmount: string;
+  } | null>(null);
 
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
@@ -169,7 +181,9 @@ export function SalesClient(props: {
     id: string;
     invoiceNo: string;
   } | null>(null);
-  const [linePriceErrors, setLinePriceErrors] = React.useState<Record<number, string>>({});
+  const [linePriceErrors, setLinePriceErrors] = React.useState<
+    Record<number, string>
+  >({});
 
   React.useEffect(() => {
     const sessionSalesPointId = session?.salesPoint?.id;
@@ -310,7 +324,7 @@ export function SalesClient(props: {
     previewPosTaxesAction,
   ]);
 
-  const lineProductKey = lines.map((l) => `${l.productId}:${l.productVariantId ?? ""}`).join(",");
+  const lineProductKey = lines.map((l) => l.productId).join(",");
 
   React.useEffect(() => {
     let alive = true;
@@ -329,20 +343,18 @@ export function SalesClient(props: {
     void (async () => {
       const errs: Record<number, string> = {};
       const priceByIdx: Record<number, string> = {};
-      const priceInputs = lineProductKey
-        ? lineProductKey.split(",").map((key) => {
-            const [productId, productVariantId = ""] = key.split(":");
-            return { productId, productVariantId };
-          })
+      const productIds = lineProductKey
+        ? lineProductKey.split(",").filter((id) => id.trim() !== "")
         : [];
       await Promise.all(
-        priceInputs.map(async (l, idx) => {
-          const pid = Number.parseInt(l.productId, 10);
+        productIds.map(async (productId, idx) => {
+          const pid = Number.parseInt(productId, 10);
           if (!Number.isFinite(pid)) return;
-          const product = products.find((p) => p.productId === pid);
-          const r = product?.isBottledPalmOil
-            ? await previewProductVariantUnitPriceAction(l.productVariantId ?? "", transactionDate)
-            : await previewProductUnitPriceAction(customerId, pid, transactionDate);
+          const r = await previewProductUnitPriceAction(
+            customerId,
+            pid,
+            transactionDate,
+          );
           if (!alive) return;
           if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
           else errs[idx] = r.error;
@@ -353,7 +365,7 @@ export function SalesClient(props: {
       setLines((prev) =>
         prev.map((row, i) =>
           priceByIdx[i] != null
-            ? { ...row, unitPricePerKg: priceByIdx[i]!, unitPricePerUnit: priceByIdx[i]! }
+            ? { ...row, unitPricePerKg: priceByIdx[i]! }
             : row,
         ),
       );
@@ -368,20 +380,14 @@ export function SalesClient(props: {
     lineProductKey,
     authStatus,
     session?.userId,
-    products,
     previewProductUnitPriceAction,
-    previewProductVariantUnitPriceAction,
   ]);
 
   const customer = customers.find((c) => c.id === customerId);
-  const net = lines.reduce((sum, l) => {
-    const product = products.find((p) => String(p.productId) === l.productId);
-    const qty = product?.isBottledPalmOil ? parseDec(l.qtyUnits ?? l.qtyKg) : parseDec(l.qtyKg);
-    const price = product?.isBottledPalmOil
-      ? parseDec(l.unitPricePerUnit ?? l.unitPricePerKg)
-      : parseDec(l.unitPricePerKg);
-    return sum + qty * price;
-  }, 0);
+  const net = lines.reduce(
+    (sum, l) => sum + parseDec(l.qtyKg) * parseDec(l.unitPricePerKg),
+    0,
+  );
 
   const taxDisplayRows = React.useMemo(() => {
     if (saleId != null && loadedAppliedTaxes) {
@@ -400,8 +406,13 @@ export function SalesClient(props: {
     }));
   }, [saleId, loadedAppliedTaxes, taxPreviewRows, net]);
 
-  const totalTax = Math.round(taxDisplayRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+  const totalTax =
+    Math.round(taxDisplayRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
   const gross = Math.round((net + totalTax) * 100) / 100;
+  const displayNet =
+    saleId != null && loadedTotals ? parseDec(loadedTotals.netAmount) : net;
+  const displayGross =
+    saleId != null && loadedTotals ? parseDec(loadedTotals.grossAmount) : gross;
   const vatChargedHint =
     saleId != null && loadedAppliedTaxes
       ? loadedAppliedTaxes.some(
@@ -415,18 +426,8 @@ export function SalesClient(props: {
       ? workingMonthDateBounds(wp.workingCalendarYear, wp.workingCalendarMonth)
       : null;
 
-  function productForLine(line: Line) {
-    return products.find((p) => String(p.productId) === line.productId) ?? null;
-  }
-
-  function firstVariantIdForProduct(productId: string) {
-    return products.find((p) => String(p.productId) === productId)?.variants[0]?.id ?? "";
-  }
-
   const deliveryOrderControlsItems =
-    saleId == null &&
-    deliveryOrderNo.trim() !== "" &&
-    doLookupData != null;
+    saleId == null && deliveryOrderNo.trim() !== "" && doLookupData != null;
 
   const deliveryOrderSaveBlock = (() => {
     const trimmed = deliveryOrderNo.trim();
@@ -452,13 +453,6 @@ export function SalesClient(props: {
     for (const l of lines) {
       const pid = Number.parseInt(l.productId, 10);
       if (!l.productId || !Number.isFinite(pid)) continue;
-      const product = products.find((p) => p.productId === pid);
-      if (product?.isBottledPalmOil) {
-        return {
-          block: true,
-          hint: "Delivery order control is not available for Bottled Palm Oil variant sales.",
-        };
-      }
       const qty = parseDec(l.qtyKg);
       if (qty <= 0) continue;
       saleQtyByProduct.set(pid, (saleQtyByProduct.get(pid) ?? 0) + qty);
@@ -481,6 +475,7 @@ export function SalesClient(props: {
     return { block: false, hint: null };
   })();
 
+  //reset the new sale state to enable creation of a new sale
   function resetNew() {
     setSaleId(null);
     setInvoiceNo("");
@@ -502,9 +497,7 @@ export function SalesClient(props: {
         productId: "",
         productVariantId: "",
         qtyKg: "0",
-        qtyUnits: "0",
         unitPricePerKg: "0",
-        unitPricePerUnit: "0",
       },
     ]);
     setPayments([{ method: "CASH", amount: "0" }]);
@@ -514,16 +507,19 @@ export function SalesClient(props: {
     setTaxPreviewError(null);
     setLinePriceErrors({});
     setBanner(null);
+    setLoadedTotals(null);
   }
 
+  //apply the loaded sale to the state to enable display of the sale details
   function applyLoaded(s: LoadedSaleView, bannerText?: string) {
     setSaleId(s.id);
     setInvoiceNo(s.invoiceNo);
     setLookupNo(s.invoiceNo);
     setSoldAtIso(s.soldAtIso);
     setTransactionDate(
-      (s.dateIssuedIso ? s.dateIssuedIso.slice(0, 10) : s.soldAtIso.slice(0, 10)) ||
-        utcIsoDateToday(),
+      (s.dateIssuedIso
+        ? s.dateIssuedIso.slice(0, 10)
+        : s.soldAtIso.slice(0, 10)) || utcIsoDateToday(),
     );
     setReferenceNumber(s.referenceNumber ?? "");
     setVehicleNumber(s.vehicleNumber ?? "");
@@ -533,6 +529,7 @@ export function SalesClient(props: {
     setValidatedByName(s.validatedByName ?? "");
     setValidatedAtIso(s.validatedAtIso ?? "");
     setCustomerId(s.customerId);
+    setLoadedTotals({ netAmount: s.netAmount, grossAmount: s.grossAmount });
     setLines(
       s.lines.length > 0
         ? s.lines.map((l) => ({
@@ -548,19 +545,27 @@ export function SalesClient(props: {
               productId: "",
               productVariantId: "",
               qtyKg: "0",
-              qtyUnits: "0",
               unitPricePerKg: "0",
-              unitPricePerUnit: "0",
             },
           ],
     );
     setPayments(
       s.payments.length > 0
         ? s.payments.map((p) => ({
-            method: p.method === "CHEQUE" ? "CHEQUE" : "CASH",
+            method:
+              p.method === "CHEQUE"
+                ? "CHEQUE"
+                : p.method === "TRAITE"
+                  ? "TRAITE"
+                  : p.method === "CREDIT"
+                    ? "CREDIT"
+                    : "CASH",
             amount: p.amount,
             chequeNo: p.chequeNo ?? undefined,
             bank: p.bank ?? undefined,
+            traiteNo: p.traiteNo ?? undefined,
+            traiteIssuedOn: p.traiteIssuedOn ?? undefined,
+            traiteMaturityOn: p.traiteMaturityOn ?? undefined,
           }))
         : [{ method: "CASH", amount: "0" }],
     );
@@ -582,15 +587,16 @@ export function SalesClient(props: {
         setBanner({ type: "error", text: "Login required." });
         return;
       }
-      const data = await loadSaleByInvoiceNo(lookupNo);
+      const data = await loadSaleByInvoiceNo(lookupNo); //calling the server action to load the sale by invoice number
       if (!data) {
+        //if no sale matches the invoice number, or the user cannot access it, show an error banner
         setBanner({
           type: "error",
           text: "No sale matches that invoice number, or you cannot access it.",
         });
         return;
       }
-      applyLoaded(data);
+      applyLoaded(data); //apply the loaded sale to the state
     } finally {
       setBusy(null);
     }
@@ -608,18 +614,6 @@ export function SalesClient(props: {
         setBanner({
           type: "error",
           text: "Select a product on every line.",
-        });
-        return;
-      }
-      if (
-        lines.some((l) => {
-          const product = productForLine(l);
-          return product?.isBottledPalmOil && !String(l.productVariantId ?? "").trim();
-        })
-      ) {
-        setBanner({
-          type: "error",
-          text: "Select a Bottled Palm Oil size on every BPO line.",
         });
         return;
       }
@@ -848,7 +842,9 @@ export function SalesClient(props: {
                 {vatChargedHint ? " · VAT may apply" : ""}
               </div>
               {saleId == null && taxPreviewError ? (
-                <div className="text-amber-800 dark:text-amber-300">{taxPreviewError}</div>
+                <div className="text-amber-800 dark:text-amber-300">
+                  {taxPreviewError}
+                </div>
               ) : null}
               {saleId == null &&
               !taxPreviewError &&
@@ -904,7 +900,8 @@ export function SalesClient(props: {
                   ))}
                 </select>
                 <div className="text-xs opacity-70">
-                  Optional for manager/admin sessions without a fixed sales point.
+                  Optional for manager/admin sessions without a fixed sales
+                  point.
                 </div>
               </>
             )}
@@ -984,7 +981,9 @@ export function SalesClient(props: {
                     </p>
                     <p>
                       <span className="opacity-70">Customer on D.O.</span>{" "}
-                      <span className="font-medium">{doLookupData.customerName}</span>
+                      <span className="font-medium">
+                        {doLookupData.customerName}
+                      </span>
                     </p>
                     <p>
                       <span className="opacity-70">Ordered (total)</span>{" "}
@@ -1072,9 +1071,7 @@ export function SalesClient(props: {
                     productId: "",
                     productVariantId: "",
                     qtyKg: "0",
-                    qtyUnits: "0",
                     unitPricePerKg: "0",
-                    unitPricePerUnit: "0",
                   },
                 ])
               }
@@ -1084,10 +1081,13 @@ export function SalesClient(props: {
           </div>
           <p className="text-xs opacity-70">
             Price / kg (ex tax) is resolved from{" "}
-            <Link href="/setup/product-pricing" className="underline underline-offset-4">
+            <Link
+              href="/setup/product-pricing"
+              className="underline underline-offset-4"
+            >
               Product pricing
             </Link>{" "}
-            or BPO variant pricing for the transaction date.
+            for the transaction date.
           </p>
 
           <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
@@ -1097,10 +1097,7 @@ export function SalesClient(props: {
               <div className="col-span-3">Price (ex tax)</div>
               <div className="col-span-1" />
             </div>
-            {lines.map((l, idx) => {
-              const selectedProduct = productForLine(l);
-              const isBpoLine = Boolean(selectedProduct?.isBottledPalmOil);
-              return (
+            {lines.map((l, idx) => (
               <div
                 key={idx}
                 className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-start"
@@ -1116,8 +1113,7 @@ export function SalesClient(props: {
                             ? {
                                 ...x,
                                 productId: e.target.value,
-                                productVariantId: firstVariantIdForProduct(e.target.value),
-                                qtyUnits: x.qtyUnits ?? x.qtyKg,
+                                productVariantId: "",
                               }
                             : x,
                         ),
@@ -1134,62 +1130,31 @@ export function SalesClient(props: {
                       </option>
                     ))}
                   </select>
-                  {isBpoLine ? (
-                    <select
-                      className="mt-2 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                      value={l.productVariantId ?? ""}
-                      onChange={(e) =>
-                        setLines((prev) =>
-                          prev.map((x, i) =>
-                            i === idx ? { ...x, productVariantId: e.target.value } : x,
-                          ),
-                        )
-                      }
-                      required
-                    >
-                      <option value="" disabled>
-                        Select BPO size
-                      </option>
-                      {selectedProduct?.variants.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name} ({v.unitLabel})
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
                 </div>
                 <div className="col-span-3">
                   <input
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                    value={isBpoLine ? l.qtyUnits ?? l.qtyKg : l.qtyKg}
+                    value={l.qtyKg}
                     inputMode="decimal"
                     onChange={(e) =>
                       setLines((prev) =>
                         prev.map((x, i) =>
-                          i === idx
-                            ? isBpoLine
-                              ? { ...x, qtyUnits: e.target.value, qtyKg: "0" }
-                              : { ...x, qtyKg: e.target.value }
-                            : x,
+                          i === idx ? { ...x, qtyKg: e.target.value } : x,
                         ),
                       )
                     }
                   />
-                  <p className="mt-1 text-[10px] opacity-70">
-                    {isBpoLine ? "Qty (units)" : "Qty (kg)"}
-                  </p>
+                  <p className="mt-1 text-[10px] opacity-70">Qty (kg)</p>
                 </div>
                 <div className="col-span-3 space-y-0.5 min-w-0 pt-0.5">
                   <input
                     className="w-full rounded-md border border-black/10 dark:border-white/10 bg-black/3 dark:bg-white/6 px-2 py-1"
-                    value={isBpoLine ? l.unitPricePerUnit ?? l.unitPricePerKg : l.unitPricePerKg}
+                    value={l.unitPricePerKg}
                     inputMode="decimal"
                     readOnly
                     title="Resolved from product pricing schedules"
                   />
-                  <p className="text-[10px] opacity-70">
-                    {isBpoLine ? "Price / unit (ex tax)" : "Price / kg (ex tax)"}
-                  </p>
+                  <p className="text-[10px] opacity-70">Price / kg (ex tax)</p>
                   {linePriceErrors[idx] ? (
                     <p className="text-[10px] text-amber-800 dark:text-amber-200/90 leading-snug">
                       {linePriceErrors[idx]}
@@ -1209,8 +1174,29 @@ export function SalesClient(props: {
                   </button>
                 </div>
               </div>
-              );
-            })}
+            ))}
+
+            <div className="rounded-lg p-4 text-sm">
+              <div className="flex justify-between">
+                <span className="opacity-70">Net (ex tax)</span>
+                <span className="tabular-nums">{displayNet.toFixed(2)}</span>
+              </div>
+              {taxDisplayRows.map((row) => (
+                <div key={row.key} className="flex justify-between">
+                  <span className="opacity-70">
+                    {row.label} ({row.ratePercentLabel}%)
+                  </span>
+                  <span className="tabular-nums">{row.amount.toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-semibold border-t border-black/10 dark:border-white/10 pt-2 mt-2">
+                <span>Gross</span>
+                <span className="tabular-nums">{displayGross.toFixed(2)}</span>
+              </div>
+              <div className="text-xs opacity-70 mt-2">
+                Payments total: {paid.toFixed(2)} (must equal gross).
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1233,122 +1219,200 @@ export function SalesClient(props: {
             </button>
           </div>
 
-          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
-              <div className="col-span-2">Method</div>
-              <div className="col-span-2">Amount</div>
-              <div className="col-span-2">Cheque #</div>
-              <div className="col-span-5">Bank</div>
+          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden divide-y divide-black/10 dark:divide-white/10">
+            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 bg-black/2 dark:bg-white/3">
+              <div className="col-span-3">Method</div>
+              <div className="col-span-3">Amount</div>
+              <div className="col-span-5">Instrument / bank</div>
               <div className="col-span-1" />
             </div>
             {payments.map((p, idx) => (
-              <div
-                key={idx}
-                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
-              >
-                <div className="col-span-2">
-                  <select
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                    value={p.method}
-                    onChange={(e) =>
-                      setPayments((prev) =>
-                        prev.map((x, i) =>
-                          i === idx
-                            ? {
-                                ...x,
-                                method: e.target.value as Payment["method"],
-                              }
-                            : x,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="CASH">Cash</option>
-                    <option value="CHEQUE">Cheque</option>
-                  </select>
+              <div key={idx} className="px-3 py-3 space-y-2 text-sm">
+                <div className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-3">
+                    <select
+                      className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                      value={p.method}
+                      onChange={(e) =>
+                        setPayments((prev) =>
+                          prev.map((x, i) =>
+                            i === idx
+                              ? {
+                                  ...x,
+                                  method: e.target.value as Payment["method"],
+                                  chequeNo: undefined,
+                                  bank: undefined,
+                                  traiteNo: undefined,
+                                  traiteIssuedOn: undefined,
+                                  traiteMaturityOn: undefined,
+                                }
+                              : x,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="TRAITE">Traite</option>
+                      <option value="CREDIT" disabled>
+                        Credit
+                      </option>
+                    </select>
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                      value={p.amount}
+                      inputMode="decimal"
+                      onChange={(e) =>
+                        setPayments((prev) =>
+                          prev.map((x, i) =>
+                            i === idx ? { ...x, amount: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="col-span-5 text-xs opacity-70 pt-0.5">
+                    {p.method === "CHEQUE"
+                      ? "Cheque number and drawee bank below."
+                      : p.method === "TRAITE"
+                        ? "Traite details and bank below."
+                        : "No instrument fields for cash."}
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <button
+                      type="button"
+                      className="text-xs underline underline-offset-4 opacity-80"
+                      onClick={() =>
+                        setPayments((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      disabled={payments.length === 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <div className="col-span-2">
-                  <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                    value={p.amount}
-                    inputMode="decimal"
-                    onChange={(e) =>
-                      setPayments((prev) =>
-                        prev.map((x, i) =>
-                          i === idx ? { ...x, amount: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                </div>
-                <div className="col-span-2">
-                  <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                    value={p.chequeNo ?? ""}
-                    placeholder={p.method === "CHEQUE" ? "Cheque number" : ""}
-                    disabled={p.method !== "CHEQUE"}
-                    onChange={(e) =>
-                      setPayments((prev) =>
-                        prev.map((x, i) =>
-                          i === idx ? { ...x, chequeNo: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                </div>
-                <div className="col-span-5">
-                  <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
-                    value={p.bank ?? ""}
-                    placeholder={p.method === "CHEQUE" ? "Drawee bank" : ""}
-                    disabled={p.method !== "CHEQUE"}
-                    onChange={(e) =>
-                      setPayments((prev) =>
-                        prev.map((x, i) =>
-                          i === idx ? { ...x, bank: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                </div>
-                <div className="col-span-1 flex justify-end">
-                  <button
-                    type="button"
-                    className="text-xs underline underline-offset-4 opacity-80"
-                    onClick={() =>
-                      setPayments((prev) => prev.filter((_, i) => i !== idx))
-                    }
-                    disabled={payments.length === 1}
-                  >
-                    Remove
-                  </button>
-                </div>
+                {p.method === "CHEQUE" ? (
+                  <div className="grid grid-cols-12 gap-2 items-center pl-0 sm:pl-1">
+                    <div className="col-span-12 sm:col-span-4">
+                      <label className="text-[10px] font-medium opacity-70 block mb-0.5">
+                        Cheque #
+                      </label>
+                      <input
+                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        value={p.chequeNo ?? ""}
+                        placeholder="Cheque number"
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, chequeNo: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="col-span-12 sm:col-span-8">
+                      <label className="text-[10px] font-medium opacity-70 block mb-0.5">
+                        Bank
+                      </label>
+                      <input
+                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        value={p.bank ?? ""}
+                        placeholder="Drawee bank"
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, bank: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {p.method === "TRAITE" ? (
+                  <div className="grid grid-cols-12 gap-2 items-end pl-0 sm:pl-1">
+                    <div className="col-span-12 sm:col-span-3">
+                      <label className="text-[10px] font-medium opacity-70 block mb-0.5">
+                        Traite no.
+                      </label>
+                      <input
+                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        value={p.traiteNo ?? ""}
+                        placeholder="Traite number"
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, traiteNo: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="col-span-12 sm:col-span-3">
+                      <label className="text-[10px] font-medium opacity-70 block mb-0.5">
+                        Bank
+                      </label>
+                      <input
+                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        value={p.bank ?? ""}
+                        placeholder="Issuing bank"
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, bank: e.target.value } : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="col-span-12 sm:col-span-3">
+                      <label className="text-[10px] font-medium opacity-70 block mb-0.5">
+                        Date issued
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        value={p.traiteIssuedOn ?? ""}
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx
+                                ? { ...x, traiteIssuedOn: e.target.value }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="col-span-12 sm:col-span-3">
+                      <label className="text-[10px] font-medium opacity-70 block mb-0.5">
+                        Maturity
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        value={p.traiteMaturityOn ?? ""}
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx
+                                ? { ...x, traiteMaturityOn: e.target.value }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
         </section>
 
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
-          <div className="flex justify-between">
-            <span className="opacity-70">Net (ex tax)</span>
-            <span className="tabular-nums">{net.toFixed(2)}</span>
-          </div>
-          {taxDisplayRows.map((row) => (
-            <div key={row.key} className="flex justify-between">
-              <span className="opacity-70">
-                {row.label} ({row.ratePercentLabel}%)
-              </span>
-              <span className="tabular-nums">{row.amount.toFixed(2)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between font-semibold border-t border-black/10 dark:border-white/10 pt-2 mt-2">
-            <span>Gross</span>
-            <span className="tabular-nums">{gross.toFixed(2)}</span>
-          </div>
-          <div className="text-xs opacity-70 mt-2">
-            Payments total: {paid.toFixed(2)} (must equal gross).
-          </div>
-        </div>
+        {/* place summary of the payments here */}
 
         <div className="flex flex-col gap-2">
           {saleId == null &&
@@ -1365,51 +1429,51 @@ export function SalesClient(props: {
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={
-              busy !== null ||
-              saleId != null ||
-              !vehicleNumber.trim() ||
-              deliveryOrderSaveBlock.block ||
-              Boolean(taxPreviewError)
-            }
-            onClick={() => void onSaveSale()}
-            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {busy === "save"
-              ? "Saving…"
-              : saleId != null
-                ? "Loaded (read-only)"
-                : "Save sale (create invoice)"}
-          </button>
-          {saleId && saleStatus === ValidationStatus.PENDING && session ? (
-            canValidateDocuments(session.role) ? (
+            <button
+              type="button"
+              disabled={
+                busy !== null ||
+                saleId != null ||
+                !vehicleNumber.trim() ||
+                deliveryOrderSaveBlock.block ||
+                Boolean(taxPreviewError)
+              }
+              onClick={() => void onSaveSale()}
+              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              {busy === "save"
+                ? "Saving…"
+                : saleId != null
+                  ? "Loaded (read-only)"
+                  : "Save sale (create invoice)"}
+            </button>
+            {saleId && saleStatus === ValidationStatus.PENDING && session ? (
+              canValidateDocuments(session.role) ? (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void onValidate()}
+                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                >
+                  {busy === "validate" ? "Validating…" : "Validate invoice"}
+                </button>
+              ) : null
+            ) : null}
+            {saleId ? (
               <button
                 type="button"
                 disabled={busy !== null}
-                onClick={() => void onValidate()}
-                className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                onClick={() =>
+                  setPendingDelete({
+                    id: saleId,
+                    invoiceNo: invoiceNo || `ID ${saleId}`,
+                  })
+                }
+                className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-600/10 disabled:opacity-50"
               >
-                {busy === "validate" ? "Validating…" : "Validate invoice"}
+                Delete invoice
               </button>
-            ) : null
-          ) : null}
-          {saleId ? (
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() =>
-                setPendingDelete({
-                  id: saleId,
-                  invoiceNo: invoiceNo || `ID ${saleId}`,
-                })
-              }
-              className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-600/10 disabled:opacity-50"
-            >
-              Delete invoice
-            </button>
-          ) : null}
+            ) : null}
           </div>
         </div>
       </section>

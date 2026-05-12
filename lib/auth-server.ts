@@ -8,11 +8,15 @@ export async function getServerSession(): Promise<ClientSession | null> {
   if (!session?.userId) return null;
 
   const salesPoint = session.salesPoint as AuthSalesPoint | null;
+  const serviceRaw = session.service;
+  const service =
+    typeof serviceRaw === "string" && serviceRaw.trim() !== "" ? serviceRaw.trim() : null;
   return {
     userId: session.userId,
     username: session.username,
     displayName: session.displayName,
     role: session.role,
     salesPoint,
+    service,
   };
 }

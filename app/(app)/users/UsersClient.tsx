@@ -15,6 +15,7 @@ type UserRow = {
   isActive: boolean;
   salesPointId: number | null;
   salesPoint: { id: number; name: string } | null;
+  service: string | null;
 };
 
 const ROLE_OPTIONS: UserRole[] = [
@@ -44,6 +45,7 @@ export function UsersClient(props: {
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [role, setRole] = React.useState<UserRole | "">("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
+  const [service, setService] = React.useState("");
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
     text: string;
@@ -63,6 +65,7 @@ export function UsersClient(props: {
     setConfirmPassword("");
     setRole("");
     setSalesPointId("");
+    setService("");
     setBanner(null);
   }
 
@@ -73,6 +76,7 @@ export function UsersClient(props: {
     setPassword("");
     setRole(u.role);
     setSalesPointId(u.salesPointId != null ? String(u.salesPointId) : "");
+    setService(u.service ?? "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -222,6 +226,23 @@ export function UsersClient(props: {
         </div>
 
         <div className="grid gap-2">
+          <label className="text-sm font-medium" htmlFor="service">
+            Service (optional)
+          </label>
+          <input
+            id="service"
+            name="service"
+            value={service}
+            onChange={(e) => setService(e.target.value)}
+            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            placeholder="e.g. Retail desk, within your department"
+          />
+          <div className="text-xs opacity-70">
+            Sub-unit or service line for this user (shown in the app after sign-in).
+          </div>
+        </div>
+
+        <div className="grid gap-2">
           <label className="text-sm font-medium" htmlFor="password">
             Password{" "}
             {editingId ? (
@@ -351,8 +372,9 @@ export function UsersClient(props: {
             <div className="col-span-2">Name</div>
             <div className="col-span-2">Role</div>
             <div className="col-span-2">Sales point</div>
+            <div className="col-span-1">Service</div>
             <div className="col-span-1">Active</div>
-            <div className="col-span-3 text-right">Actions</div>
+            <div className="col-span-2 text-right">Actions</div>
           </div>
           {users.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No users yet.</div>
@@ -376,8 +398,11 @@ export function UsersClient(props: {
                   <div className="col-span-2 truncate text-xs opacity-80">
                     {u.salesPoint?.name ?? "—"}
                   </div>
+                  <div className="col-span-1 truncate text-xs opacity-80" title={u.service ?? ""}>
+                    {u.service?.trim() ? u.service : "—"}
+                  </div>
                   <div className="col-span-1">{u.isActive ? "Yes" : "No"}</div>
-                  <div className="col-span-3 flex justify-end gap-2 flex-wrap">
+                  <div className="col-span-2 flex justify-end gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => startEdit(u)}
