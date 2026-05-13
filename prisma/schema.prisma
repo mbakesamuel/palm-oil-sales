@@ -146,20 +146,27 @@ model ProductSalesBudget {
   @@map("ProductSalesBudget")
 }
 
+/// Company-wide UI palette preset (Setup). Applied via `data-ui-theme` on `<html>`.
+enum UiThemePreset {
+  default
+  agro
+}
+
 model CompanySettings {
-  id                   String   @id @default("default")
+  id                   String         @id @default("default")
   companyName          String
   /// Public path (e.g. `/logo.png`) or absolute image URL for branding.
   logoUrl              String?
   department           String?
   phone                String?
   address              String?
-  vatRate              Decimal  @db.Decimal(5, 4) // 0.1925 for 19.25%
-  invoicePrefix        String   @default("PO")
+  vatRate              Decimal        @db.Decimal(5, 4) // 0.1925 for 19.25%
+  invoicePrefix        String         @default("PO")
   /// 1 = January. Financial month 1 begins in this calendar month.
-  fiscalYearStartMonth Int      @default(1)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  fiscalYearStartMonth Int            @default(1)
+  uiThemePreset        UiThemePreset  @default(default)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 }
 
 model InvoiceSequence {

@@ -22,7 +22,8 @@ export default async function SetupPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Setup</h1>
         <p className="text-sm opacity-75">
-          Configure your company info, department, VAT rate, invoice prefix, and when your financial year starts.
+          Configure your company info, department, VAT rate, invoice prefix, financial year, and optional agro-themed
+          appearance.
         </p>
       </div>
 
@@ -35,7 +36,7 @@ export default async function SetupPage() {
             id="companyName"
             name="companyName"
             defaultValue={settings.companyName}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             required
           />
         </div>
@@ -49,7 +50,7 @@ export default async function SetupPage() {
             name="logoUrl"
             defaultValue={settings.logoUrl ?? ""}
             placeholder="e.g. /cdc-logo-svg.svg or https://…"
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
           />
           <div className="text-xs opacity-70">
             Use a path to a file in <span className="font-mono">public</span> (starts with{" "}
@@ -66,7 +67,7 @@ export default async function SetupPage() {
             name="department"
             defaultValue={settings.department ?? ""}
             placeholder="e.g. Commercial department"
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
           />
           <div className="text-xs opacity-70">
             Shown in the app shell, delivery order PDFs, and confirm dialogs (e.g. division or unit name).
@@ -88,7 +89,7 @@ export default async function SetupPage() {
             id="phone"
             name="phone"
             defaultValue={settings.phone ?? ""}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
           />
         </div>
 
@@ -100,7 +101,7 @@ export default async function SetupPage() {
             id="address"
             name="address"
             defaultValue={settings.address ?? ""}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
           />
         </div>
 
@@ -112,7 +113,7 @@ export default async function SetupPage() {
             id="vatRate"
             name="vatRate"
             defaultValue={String(settings.vatRate)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             inputMode="decimal"
             required
           />
@@ -127,7 +128,7 @@ export default async function SetupPage() {
             id="invoicePrefix"
             name="invoicePrefix"
             defaultValue={settings.invoicePrefix}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             required
           />
         </div>
@@ -140,7 +141,7 @@ export default async function SetupPage() {
             id="fiscalYearStartMonth"
             name="fiscalYearStartMonth"
             defaultValue={String(settings.fiscalYearStartMonth)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             required
           >
             {Array.from({ length: 12 }, (_, i) => {
@@ -158,7 +159,25 @@ export default async function SetupPage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-black/10 dark:border-white/10 bg-black/2 dark:bg-white/3 px-4 py-3 text-sm space-y-1">
+        <div className="grid gap-2">
+          <label className="text-sm font-medium" htmlFor="uiThemePreset">
+            Appearance (theme)
+          </label>
+          <select
+            id="uiThemePreset"
+            name="uiThemePreset"
+            defaultValue={settings.uiThemePreset}
+            className="rounded-md border border-border bg-transparent px-3 py-2"
+          >
+            <option value="default">Neutral (default)</option>
+            <option value="agro">Agro — green and yellow</option>
+          </select>
+          <div className="text-xs opacity-70">
+            Company-wide look for the web app. Users see the change after save (or on next visit).
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-accent/30 px-4 py-3 text-sm space-y-1">
           <div className="font-medium">Today’s fiscal period (preview, from start month)</div>
           <p className="opacity-90">
             FY <span className="font-semibold tabular-nums">{formatFinancialYearLabel(currentFy.financialYear, settings.fiscalYearStartMonth)}</span>
@@ -178,7 +197,7 @@ export default async function SetupPage() {
           </p>
         </div>
 
-        <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+        <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
           Save settings
         </button>
       </form>
@@ -197,7 +216,7 @@ export default async function SetupPage() {
           <span className="font-mono text-xs">clerk</span> (clerk is tied to the first sales point if
           one exists).
         </p>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4">
+        <div className="rounded-lg border border-border p-4">
           {users.length === 0 ? (
             <div className="text-sm opacity-75">
               No users yet. Saving settings will create default Admin and Clerk users.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { uiThemePresetToDataAttribute } from "@/lib/ui-theme";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -28,8 +29,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   let footerLine = "Currency: XAF · VAT: 19.25% · Invoice prefix: PO";
+  let uiTheme = uiThemePresetToDataAttribute(undefined);
   try {
     const s = await getOrInitCompanySettings();
+    uiTheme = uiThemePresetToDataAttribute(s.uiThemePreset);
     const vatPct = (Number.parseFloat(String(s.vatRate)) * 100).toFixed(2);
     const dept = s.department?.trim();
     footerLine = [
@@ -49,11 +52,12 @@ export default async function RootLayout({
     <html
       lang="en"
       className="h-full antialiased"
+      data-ui-theme={uiTheme}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <AuthProvider>
           <main className="flex-1">{children}</main>
-          <footer className="border-t border-black/10 dark:border-white/10 print:hidden">
+          <footer className="border-t border-border print:hidden">
             <div className="mx-auto w-full max-w-5xl px-4 py-3 text-xs opacity-70">{footerLine}</div>
           </footer>
         </AuthProvider>

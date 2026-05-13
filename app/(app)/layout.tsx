@@ -126,7 +126,7 @@ export default async function AppLayout({
 
             <section className="min-w-0 flex-1 overflow-y-auto print:w-full print:overflow-visible">
               <WorkingPeriodBanner />
-              <div className="rounded-2xl border border-black/10 dark:border-white/10 p-4 sm:p-6 print:border-0 print:shadow-none print:p-0 print:rounded-none">
+              <div className="rounded-2xl border border-border p-4 sm:p-6 print:border-0 print:shadow-none print:p-0 print:rounded-none">
                 {children}
               </div>
             </section>

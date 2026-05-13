@@ -60,7 +60,7 @@ function NavGroup(props: {
     return (
       <Link
         href={collapsedHref}
-        className="rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 lg:px-2 lg:text-center"
+        className="rounded-md px-3 py-2 text-sm hover:bg-foreground/5 lg:px-2 lg:text-center"
         title={collapsedTitle}
       >
         <span className="lg:hidden">{label}</span>
@@ -72,11 +72,11 @@ function NavGroup(props: {
   }
 
   return (
-    <div className="rounded-md border border-black/5 dark:border-white/5">
+    <div className="rounded-md border border-border">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-black/5 dark:hover:bg-white/5"
+        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-foreground/5"
         aria-expanded={open}
       >
         <span>{label}</span>
@@ -85,13 +85,13 @@ function NavGroup(props: {
         </span>
       </button>
       {open ? (
-        <div className="flex flex-col gap-0.5 border-t border-black/5 dark:border-white/5 px-1 pb-1 pt-0.5">
+        <div className="flex flex-col gap-0.5 border-t border-border px-1 pb-1 pt-0.5">
           {overview ? (
             <Link
               href={overview.href}
               className={[
-                "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
-                pathname === overview.href ? "bg-black/5 dark:bg-white/10" : "",
+                "rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
+                pathname === overview.href ? "bg-brand/15 font-medium" : "",
               ].join(" ")}
             >
               {overview.label}
@@ -102,9 +102,9 @@ function NavGroup(props: {
               key={item.href}
               href={item.href}
               className={[
-                "rounded-md px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5",
+                "rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
                 pathMatchesItem(pathname, item.href)
-                  ? "bg-black/5 dark:bg-white/10"
+                  ? "bg-brand/15 font-medium"
                   : "",
               ].join(" ")}
             >
@@ -263,7 +263,7 @@ export function Sidebar(props: {
   return (
     <aside
       className={[
-        "rounded-2xl border border-black/10 dark:border-white/10 p-3 h-full flex flex-col",
+        "rounded-2xl border border-border bg-sidebar text-sidebar-foreground p-3 h-full flex flex-col",
         "transition-[width] duration-200",
         collapsed ? "lg:w-[72px]" : "lg:w-[260px]",
       ].join(" ")}
@@ -282,7 +282,7 @@ export function Sidebar(props: {
         <button
           type="button"
           onClick={toggle}
-          className="rounded-md border border-black/10 dark:border-white/10 px-2 py-1 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/5"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand" : "Collapse"}
         >
@@ -296,10 +296,10 @@ export function Sidebar(props: {
             key={item.href}
             href={item.href}
             className={[
-              "rounded-md px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5",
+              "rounded-md px-3 py-2 text-sm hover:bg-foreground/5",
               collapsed ? "lg:px-2 lg:text-center" : "",
               pathMatchesItem(pathname, item.href)
-                ? "bg-black/5 dark:bg-white/10"
+                ? "bg-brand/15 font-medium"
                 : "",
             ].join(" ")}
             title={collapsed ? item.label : undefined}
@@ -351,7 +351,7 @@ export function Sidebar(props: {
         ) : null}
       </nav>
 
-      <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 space-y-2">
+      <div className="mt-3 pt-3 border-t border-border space-y-2">
         {status === "ready" && session ? (
           <div
             className={[

@@ -3,7 +3,7 @@
 import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { syncLatestVatScheduleToCompanyRate } from "@/lib/tax/bootstrap";
-import { Prisma } from "@prisma/client";
+import { Prisma, type UiThemePreset } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 function parseVatRate(input: string) {
@@ -17,6 +17,12 @@ function parseFiscalYearStartMonth(raw: string): number | null {
   const n = Number.parseInt(String(raw ?? "").trim(), 10);
   if (!Number.isFinite(n) || n < 1 || n > 12) return null;
   return n;
+}
+
+function parseUiThemePreset(raw: string): UiThemePreset {
+  const v = String(raw ?? "").trim();
+  if (v === "agro") return "agro";
+  return "default";
 }
 
 export async function saveCompanySettings(formData: FormData) {
@@ -39,6 +45,7 @@ export async function saveCompanySettings(formData: FormData) {
   const fiscalYearStartMonth = parseFiscalYearStartMonth(
     String(formData.get("fiscalYearStartMonth") ?? "1"),
   );
+  const uiThemePreset = parseUiThemePreset(String(formData.get("uiThemePreset") ?? "default"));
 
   if (!companyName) {
     throw new Error("Company name is required.");
@@ -64,6 +71,7 @@ export async function saveCompanySettings(formData: FormData) {
       invoicePrefix,
       vatRate,
       fiscalYearStartMonth,
+      uiThemePreset,
     },
     update: {
       companyName,
@@ -74,6 +82,7 @@ export async function saveCompanySettings(formData: FormData) {
       invoicePrefix,
       vatRate,
       fiscalYearStartMonth,
+      uiThemePreset,
     },
   });
 
@@ -110,5 +119,6 @@ export async function saveCompanySettings(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/delivery-orders");
   revalidatePath("/");
+  revalidatePath("/login");
 }
 
