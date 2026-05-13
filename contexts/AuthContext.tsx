@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable react-hooks/set-state-in-effect */
-
 import * as React from "react";
 import type { AuthSession } from "@/lib/auth-session";
 
@@ -17,11 +15,17 @@ type AuthContextValue = {
 const AuthContext = React.createContext<AuthContextValue | null>(null);
 
 async function fetchSession(): Promise<AuthSession | null> {
-  const r = await fetch("/api/auth/session", { cache: "no-store" });
+  const r = await fetch("/api/auth/session", {
+    cache: "no-store",
+    credentials: "include",
+  });
   if (!r.ok) return null;
   const data = (await r.json()) as { session: AuthSession | null };
   return data.session ?? null;
 }
+
+/** Poll interval inside the sliding session window (see `AUTH_SESSION_MAX_AGE` / auth.config). */
+const SESSION_POLL_MS = 10 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Keep initial render deterministic for SSR + hydration.
@@ -29,9 +33,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<AuthSession | null>(null);
 
   React.useEffect(() => {
-    void fetchSession()
-      .then((s) => setSession(s))
-      .finally(() => setStatus("ready"));
+    let cancelled = false;
+
+    const applySession = (s: AuthSession | null) => {
+      if (!cancelled) setSession(s);
+    };
+
+    const touchSession = () => {
+      void fetchSession().then((s) => {
+        applySession(s);
+        if (!cancelled) setStatus("ready");
+      });
+    };
+
+    touchSession();
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") touchSession();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      touchSession();
+    }, SESSION_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(id);
+    };
   }, []);
 
   const signIn = React.useCallback((next: AuthSession) => {

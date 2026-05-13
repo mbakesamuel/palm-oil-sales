@@ -35,6 +35,19 @@ function resolveAuthSecret(): string {
   );
 }
 
+/** Sliding JWT session length in seconds. Override with `AUTH_SESSION_MAX_AGE` (integer seconds). Default 1 hour. */
+function resolveSessionMaxAgeSeconds(): number {
+  const raw = process.env.AUTH_SESSION_MAX_AGE?.trim();
+  if (!raw) return 60 * 60;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 60 || n > 365 * 24 * 60 * 60) {
+    return 60 * 60;
+  }
+  return n;
+}
+
+const sessionMaxAgeSeconds = resolveSessionMaxAgeSeconds();
+
 /**
  * Edge-safe Auth.js config (no Prisma, bcrypt, or other Node-only imports).
  * Used by `proxy.ts`. Full credentials + DB live in `auth.ts`.
@@ -43,7 +56,8 @@ export default {
   providers: [],
   trustHost: true,
   secret: resolveAuthSecret(),
-  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
+  session: { strategy: "jwt", maxAge: sessionMaxAgeSeconds },
+  jwt: { maxAge: sessionMaxAgeSeconds },
   pages: { signIn: "/login" },
   callbacks: {
     authorized({ request, auth }) {

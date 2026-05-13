@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# POS app
 
-## Getting Started
+Internal **point-of-sale and operations** web application: sales, delivery orders, stock (including bottled palm oil flows), reporting, and company setup. Built with **Next.js** (App Router), **React 19**, **Prisma** + **PostgreSQL**, and **Auth.js** (credentials sign-in, JWT sessions).
 
-First, run the development server:
+This repository is **private** (`private: true` in `package.json`). There is no public license statement unless your organization adds one.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Requirements
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Node.js**: current Active LTS or newer (same major as local development tools).
+- **PostgreSQL**: accessible via a connection string (`DATABASE_URL`).
+- **npm**, **pnpm**, or **yarn** for installs (examples below use `npm`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Quick start
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Clone the repository and enter the project directory.
+2. Copy the environment template: `cp .env.example .env` (Windows: `copy .env.example .env`).
+3. Set **`DATABASE_URL`** in `.env` to your PostgreSQL URL.
+4. Install dependencies: `npm install`.
+5. Apply the schema to your database: `npx prisma migrate dev` (development) or deploy migrations in your pipeline for production.
+6. Optionally seed demo/reference data: `npm run db:seed`.
+7. Start the dev server: `npm run dev`, then open [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+For database defaults, troubleshooting, and first sign-in, see **[docs/getting-started.md](docs/getting-started.md)**.
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Next.js development server |
+| `npm run build` | Production build (`prisma generate` then `next build`) |
+| `npm run start` | Run production server after build |
+| `npm run lint` | ESLint |
+| `npm run prisma:generate` | Regenerate Prisma Client |
+| `npm run prisma:migrate` | Prisma Migrate (alias for `prisma migrate dev`) |
+| `npm run prisma:studio` | Open Prisma Studio |
+| `npm run db:seed` | Run `prisma/seed.ts` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Documentation
 
-## Deploy on Vercel
+| Doc | Audience |
+| --- | --- |
+| [docs/README.md](docs/README.md) | Index of all guides |
+| [docs/getting-started.md](docs/getting-started.md) | Install, DB, migrations, seed, first login |
+| [docs/architecture.md](docs/architecture.md) | Stack, routing, auth, domain areas |
+| [docs/configuration.md](docs/configuration.md) | Environment variables vs company settings |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Security
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Set **`AUTH_SECRET`** or **`NEXTAUTH_SECRET`** in production. Auth.js uses this to sign session tokens. In development, a fallback secret may be used if neither is set—see [`auth.config.ts`](auth.config.ts).
+- Never commit real secrets. `.env` is gitignored; use [`.env.example`](.env.example) as the template only.
+
+## Deploy notes
+
+- Production builds expect `DATABASE_URL` and a strong auth secret in the environment (e.g. Vercel project settings).
+- The build runs `prisma generate`; apply migrations against the target database as part of your release process.
