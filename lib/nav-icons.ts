@@ -75,6 +75,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/reports/sales-budget-monthly-crosstab": Grid3X3,
   "/reports/sales-budget-weekly-crosstab": LayoutGrid,
   "/reports/pricing": CircleDollarSign,
+  "/reports/bpo-pricing": Layers,
   "/reports/bpo": Factory,
   "/reports/bpo-sales-crosstab": TableProperties,
   "/reports/bpo-stock-cross": Grid2X2,

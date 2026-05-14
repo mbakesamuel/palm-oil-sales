@@ -38,6 +38,7 @@ export const PERMISSION_KEYS = [
   "route:/reports/sales-budget-monthly-crosstab",
   "route:/reports/sales-budget-weekly-crosstab",
   "route:/reports/pricing",
+  "route:/reports/bpo-pricing",
   "route:/reports/bpo",
   "route:/reports/bpo-sales-crosstab",
   "route:/reports/bpo-stock-cross",

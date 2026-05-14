@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { PrintButton } from "@/components/PrintButton";
+import { ReportHeader } from "@/components/ReportHeader";
 
 type ProductOpt = { productId: number; productName: string };
 type VariantRow = {
@@ -22,6 +24,9 @@ type PriceRow = {
 };
 
 export function BpoVariantsClient(props: {
+  companyName: string;
+  department: string | null;
+  logoUrl?: string | null;
   products: ProductOpt[];
   variants: VariantRow[];
   prices: PriceRow[];
@@ -31,6 +36,9 @@ export function BpoVariantsClient(props: {
   deletePriceAction: (formData: FormData) => void | Promise<void>;
 }) {
   const {
+    companyName,
+    department,
+    logoUrl,
     products,
     variants,
     prices,
@@ -50,19 +58,34 @@ export function BpoVariantsClient(props: {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-1">
+      <div className="hidden print:block">
+        <ReportHeader
+          companyName={companyName}
+          department={department}
+          logoSrc={logoUrl}
+          title="Bottled Palm Oil variant pricing"
+        />
+      </div>
+
+      <div className="space-y-1 print:hidden">
         <h1 className="text-2xl font-semibold">Bottled Palm Oil Category</h1>
         <p className="text-sm opacity-75">
-          Manage BPO bottle sizes and their approved ex-tax prices by effective date.
+          Manage BPO bottle sizes and their approved prices (tax included) by effective date.
         </p>
       </div>
 
+      {products.length > 0 ? (
+        <div className="flex flex-wrap justify-end print:hidden">
+          <PrintButton label="Print pricing report" />
+        </div>
+      ) : null}
+
       {products.length === 0 ? (
-        <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 p-4 text-sm">
+        <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 p-4 text-sm print:hidden">
           Flag a product as Bottled Palm Oil on the Products page before adding variants.
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2 print:hidden">
           <form
             key={variantDraft?.id ?? "new-variant"}
             action={async (formData) => {
@@ -71,7 +94,7 @@ export function BpoVariantsClient(props: {
             }}
             className="space-y-4 rounded-lg border border-border p-4"
           >
-            <h2 className="font-semibold">{variantDraft ? "Edit variant" : "Add variant"}</h2>
+            <h2 className="font-semibold">{variantDraft ? "Edit Product" : "Add Product"}</h2>
             {variantDraft ? <input type="hidden" name="id" value={variantDraft.id} /> : null}
             <div className="grid gap-1">
               <label className="text-sm font-medium">BPO product</label>
@@ -146,7 +169,7 @@ export function BpoVariantsClient(props: {
             }}
             className="space-y-4 rounded-lg border border-border p-4"
           >
-            <h2 className="font-semibold">{priceDraft ? "Edit price" : "Add variant price"}</h2>
+            <h2 className="font-semibold">{priceDraft ? "Edit Product Price" : "Add Product Price"}</h2>
             {priceDraft ? <input type="hidden" name="id" value={priceDraft.id} /> : null}
             <div className="grid gap-1">
               <label className="text-sm font-medium">Category</label>
@@ -217,7 +240,7 @@ export function BpoVariantsClient(props: {
                 {v.unitQuantity ? ` (${v.unitQuantity})` : ""}
               </div>
               <div className="col-span-2">{v.isActive ? "Active" : "Inactive"}</div>
-              <div className="col-span-3 flex justify-end gap-2">
+              <div className="col-span-3 flex justify-end gap-2 print:hidden">
                 <button type="button" className="underline text-xs" onClick={() => setVariantDraft(v)}>
                   Edit
                 </button>
@@ -243,7 +266,7 @@ export function BpoVariantsClient(props: {
               <div className="col-span-5 font-medium">{p.variantLabel}</div>
               <div className="col-span-3 tabular-nums">{p.effectiveFromIso}</div>
               <div className="col-span-2 text-right tabular-nums">{p.unitPriceExTax}</div>
-              <div className="col-span-2 flex justify-end gap-2">
+              <div className="col-span-2 flex justify-end gap-2 print:hidden">
                 <button type="button" className="underline text-xs" onClick={() => setPriceDraft(p)}>
                   Edit
                 </button>

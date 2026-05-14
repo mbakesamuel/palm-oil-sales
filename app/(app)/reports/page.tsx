@@ -118,6 +118,17 @@ export default function ReportsIndexPage() {
         </li>
         <li>
           <Link
+            href="/reports/bpo-pricing"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
+          >
+            <div className="font-medium">Bottled Palm Oil pricing</div>
+            <div className="text-sm opacity-75">
+              BPO bottle sizes (variants) and scheduled ex-tax unit prices per variant; printable report.
+            </div>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/reports/bpo"
             className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >

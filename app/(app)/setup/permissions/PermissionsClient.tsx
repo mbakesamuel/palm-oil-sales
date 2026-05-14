@@ -138,15 +138,20 @@ export function PermissionsClient() {
                   return (
                     <label
                       key={key}
-                      className="flex items-center justify-between gap-3 text-sm"
+                      className="flex w-full cursor-pointer items-start gap-2 text-sm"
                     >
-                      <span className="font-mono text-xs">{key}</span>
-                      <input
-                        type="checkbox"
-                        checked={allowed}
-                        onChange={(e) => void toggle(key, e.target.checked)}
-                        disabled={busyKey !== null && busyKey !== key}
-                      />
+                      <span className="min-w-0 flex-1 break-all font-mono text-xs leading-6">
+                        {key}
+                      </span>
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={allowed}
+                          onChange={(e) => void toggle(key, e.target.checked)}
+                          disabled={busyKey !== null && busyKey !== key}
+                          className="m-0 size-5 shrink-0 cursor-pointer rounded border-border accent-brand disabled:cursor-not-allowed"
+                        />
+                      </span>
                     </label>
                   );
                 })}

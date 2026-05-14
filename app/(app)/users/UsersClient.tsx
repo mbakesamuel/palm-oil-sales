@@ -235,7 +235,7 @@ export function UsersClient(props: {
             value={service}
             onChange={(e) => setService(e.target.value)}
             className="rounded-md border border-border bg-transparent px-3 py-2"
-            placeholder="e.g. Retail desk, within your department"
+            placeholder="e.g Palm Oil Sales, Rubber Sales etc"
           />
           <div className="text-xs opacity-70">
             Sub-unit or service line for this user (shown in the app after sign-in).

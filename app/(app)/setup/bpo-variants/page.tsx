@@ -1,5 +1,6 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { getOrInitCompanySettings } from "@/lib/settings";
 import {
   deleteBpoVariant,
   deleteBpoVariantPrice,
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 
 export default async function BpoVariantsPage() {
   const prisma = getPrismaClient();
-  const [products, variants, prices] = await Promise.all([
+  const [products, variants, prices, settings] = await Promise.all([
     prismaRetry(() =>
       prisma.product.findMany({
         where: { isBottledPalmOil: true },
@@ -39,10 +40,14 @@ export default async function BpoVariantsPage() {
         },
       }),
     ),
+    getOrInitCompanySettings(),
   ]);
 
   return (
     <BpoVariantsClient
+      companyName={settings.companyName}
+      department={settings.department ?? null}
+      logoUrl={settings.logoUrl}
       products={products}
       variants={variants.map((v) => ({
         id: v.id,
