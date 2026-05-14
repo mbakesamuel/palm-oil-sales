@@ -167,10 +167,10 @@ export default async function DeliveryOrdersReportPage() {
       {!scopedToSalesPoint && summaryBySp.length > 0 ? (
         <section className="space-y-2 print:break-inside-avoid">
           <h2 className="text-lg font-semibold">Summary by sales point</h2>
-          <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                <tr className="border-b border-border text-left">
                   <th className="px-3 py-2 font-medium">Sales point</th>
                   <th className="px-3 py-2 font-medium text-right">Orders</th>
                   <th className="px-3 py-2 font-medium text-right">Lines</th>
@@ -181,7 +181,7 @@ export default async function DeliveryOrdersReportPage() {
                 {summaryBySp.map((s) => (
                   <tr
                     key={s.salesPointId}
-                    className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                    className="border-b border-border odd:bg-foreground/[0.04]"
                   >
                     <td className="px-3 py-2 font-medium">{s.salesPointName}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{s.orderCount}</td>
@@ -191,7 +191,7 @@ export default async function DeliveryOrdersReportPage() {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-black/15 dark:border-white/15 font-medium">
+                <tr className="border-t-2 border-border font-medium">
                   <td className="px-3 py-2">Overall</td>
                   <td className="px-3 py-2 text-right tabular-nums">{summaryGrandOrders}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{summaryGrandLines}</td>
@@ -209,10 +209,10 @@ export default async function DeliveryOrdersReportPage() {
             ? "Validated orders for your sales point"
             : "Detail · all orders in scope"}
         </h2>
-        <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10 text-left">
+              <tr className="border-b border-border text-left">
                 <th className="px-3 py-2 font-medium">DO no.</th>
                 <th className="px-3 py-2 font-medium">Date</th>
                 <th className="px-3 py-2 font-medium">Customer</th>
@@ -229,7 +229,7 @@ export default async function DeliveryOrdersReportPage() {
               {rows.map((r) => (
                 <tr
                   key={r.id}
-                  className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                  className="border-b border-border odd:bg-foreground/[0.04]"
                 >
                   <td className="px-3 py-2 font-mono text-xs font-medium">{r.deliveryOrderNo}</td>
                   <td className="px-3 py-2 tabular-nums whitespace-nowrap">
@@ -265,7 +265,7 @@ export default async function DeliveryOrdersReportPage() {
             </tbody>
             {rows.length > 0 ? (
               <tfoot>
-                <tr className="border-t-2 border-black/15 dark:border-white/15 font-medium">
+                <tr className="border-t-2 border-border font-medium">
                   <td className="px-3 py-2" colSpan={scopedToSalesPoint ? 3 : 4}>
                     {scopedToSalesPoint
                       ? "Total (validated, this sales point)"

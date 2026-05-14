@@ -337,7 +337,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
               id="customerId"
               name="customerId"
               defaultValue={selectedCustomerId}
-              className="h-10 w-full rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
+              className="h-10 w-full rounded-md border border-border bg-transparent px-3 text-sm"
               required
             >
               <option value="" disabled>
@@ -352,7 +352,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
           </div>
           <button
             type="submit"
-            className="h-10 shrink-0 rounded-md bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black sm:w-auto w-full"
+            className="h-10 shrink-0 rounded-md bg-brand text-brand-foreground px-4 text-sm font-medium sm:w-auto w-full"
           >
             Run report
           </button>
@@ -379,7 +379,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
 
       {selectedCustomerId && customerRow ? (
         <>
-          <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-5 space-y-1 print:break-inside-avoid">
+          <section className="rounded-lg border border-border p-4 sm:p-5 space-y-1 print:break-inside-avoid">
             <h2 className="text-lg font-semibold">Customer</h2>
             <p className="text-sm">
               <span className="font-medium">{customerRow.name}</span>
@@ -407,10 +407,10 @@ export default async function CustomerDeliveryMonitorPage(props: {
                   <span className="font-medium">Balance</span> is DO line total
                   (XAF) minus validated gross.
                 </p>
-                <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+                <div className="overflow-x-auto rounded-lg border border-border">
                   <table className="min-w-full text-sm">
                     <thead>
-                      <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                      <tr className="border-b border-border text-left">
                         <th className="px-3 py-2 font-medium">DO no.</th>
                         <th className="px-3 py-2 font-medium">Date</th>
                         {!scopedToSalesPoint ? (
@@ -442,7 +442,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                       {summaryRows.map((r) => (
                         <tr
                           key={r.id}
-                          className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                          className="border-b border-border odd:bg-foreground/[0.04]"
                         >
                           <td className="px-3 py-2 font-mono text-xs font-medium">
                             {r.deliveryOrderNo}
@@ -489,7 +489,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-black/15 dark:border-white/15 font-medium">
+                      <tr className="border-t-2 border-border font-medium">
                         <td
                           className="px-3 py-2"
                           colSpan={scopedToSalesPoint ? 4 : 5}
@@ -544,7 +544,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                   return (
                     <div
                       key={o.id}
-                      className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-5 space-y-3 print:break-inside-avoid"
+                      className="rounded-lg border border-border p-4 sm:p-5 space-y-3 print:break-inside-avoid"
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <div>
@@ -577,10 +577,10 @@ export default async function CustomerDeliveryMonitorPage(props: {
                         </Link>
                       </div>
 
-                      <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+                      <div className="overflow-x-auto rounded-md border border-border">
                         <table className="min-w-full text-sm">
                           <thead>
-                            <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                            <tr className="border-b border-border text-left">
                               <th className="px-3 py-2 font-medium">Product</th>
                               <th className="px-3 py-2 font-medium text-right">
                                 Qty
@@ -606,7 +606,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                               return (
                                 <tr
                                   key={d.id}
-                                  className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                                  className="border-b border-border odd:bg-foreground/[0.04]"
                                 >
                                   <td className="px-3 py-2">
                                     {d.product.productName}{" "}
@@ -634,7 +634,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                             })}
                           </tbody>
                           <tfoot>
-                            <tr className="border-t border-black/15 dark:border-white/15 font-medium">
+                            <tr className="border-t border-border font-medium">
                               <td className="px-3 py-2">Subtotal</td>
                               <td className="px-3 py-2 text-right tabular-nums">
                                 {doTotalQty}
@@ -659,10 +659,10 @@ export default async function CustomerDeliveryMonitorPage(props: {
                             No linked sales in scope.
                           </p>
                         ) : (
-                          <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+                          <div className="overflow-x-auto rounded-md border border-border">
                             <table className="min-w-full text-sm">
                               <thead>
-                                <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                                <tr className="border-b border-border text-left">
                                   <th className="px-3 py-2 font-medium">
                                     Invoice
                                   </th>
@@ -700,7 +700,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                                   return (
                                     <tr
                                       key={s.id}
-                                      className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2 align-top"
+                                      className="border-b border-border odd:bg-foreground/[0.04] align-top"
                                     >
                                       <td className="px-3 py-2 font-mono text-xs">
                                         {s.invoiceNo}

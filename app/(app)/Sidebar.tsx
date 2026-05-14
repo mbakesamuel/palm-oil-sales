@@ -6,10 +6,12 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { UserRole } from "@prisma/client";
+import { UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
 import { getRolePermissionsAction } from "@/app/(app)/setup/permissions/actions";
+import { navIconForGroup, navIconForHref } from "@/lib/nav-icons";
 import { SignOutButton } from "../forbidden/SignOutButton";
 
 type NavItem = { href: string; label: string };
@@ -18,13 +20,14 @@ type NavGroupConfig = {
   id: string;
   label: string;
   items: NavItem[];
-  /** Narrow sidebar: one shortcut link */
   collapsedHref: string;
-  collapsedAbbrev: string;
   collapsedTitle: string;
-  /** Optional first link inside the expanded group (e.g. Reports overview) */
   overview?: { href: string; label: string };
 };
+
+/** Icon rail + lg collapsed: touch-friendly icon link */
+const RAIL_LINK =
+  "flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md hover:bg-foreground/5 focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring";
 
 function pathMatchesItem(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -51,69 +54,85 @@ function NavGroup(props: {
     label,
     items,
     collapsedHref,
-    collapsedAbbrev,
     collapsedTitle,
     overview,
+    id,
   } = config;
 
-  if (collapsed) {
-    return (
-      <Link
-        href={collapsedHref}
-        className="rounded-md px-3 py-2 text-sm hover:bg-foreground/5 lg:px-2 lg:text-center"
-        title={collapsedTitle}
-      >
-        <span className="lg:hidden">{label}</span>
-        <span className="hidden lg:inline" aria-hidden>
-          {collapsedAbbrev}
-        </span>
-      </Link>
-    );
-  }
+  const GroupIcon = navIconForGroup(id);
+  const groupActive = groupContainsPath(pathname, items, overview?.href);
 
   return (
-    <div className="rounded-md border border-border">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-foreground/5"
-        aria-expanded={open}
+    <>
+      <Link
+        href={collapsedHref}
+        className={[RAIL_LINK, groupActive ? "bg-brand/15" : "", "lg:hidden"].join(" ")}
+        title={collapsedTitle}
+        aria-label={collapsedTitle}
       >
-        <span>{label}</span>
-        <span className="text-xs opacity-70 tabular-nums" aria-hidden>
-          {open ? "−" : "+"}
-        </span>
-      </button>
-      {open ? (
-        <div className="flex flex-col gap-0.5 border-t border-border px-1 pb-1 pt-0.5">
-          {overview ? (
-            <Link
-              href={overview.href}
-              className={[
-                "rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
-                pathname === overview.href ? "bg-brand/15 font-medium" : "",
-              ].join(" ")}
+        <GroupIcon className="size-5 shrink-0" aria-hidden />
+      </Link>
+
+      <div className="hidden lg:block w-full">
+        {collapsed ? (
+          <Link
+            href={collapsedHref}
+            className={[RAIL_LINK, "w-full lg:py-2", groupActive ? "bg-brand/15" : ""].join(" ")}
+            title={collapsedTitle}
+            aria-label={collapsedTitle}
+          >
+            <GroupIcon className="size-5 shrink-0" aria-hidden />
+          </Link>
+        ) : (
+          <div className="rounded-md border border-border">
+            <button
+              type="button"
+              onClick={onToggle}
+              className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-left hover:bg-foreground/5"
+              aria-expanded={open}
             >
-              {overview.label}
-            </Link>
-          ) : null}
-          {items.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={[
-                "rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
-                pathMatchesItem(pathname, item.href)
-                  ? "bg-brand/15 font-medium"
-                  : "",
-              ].join(" ")}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      ) : null}
-    </div>
+              <span>{label}</span>
+              <span className="text-xs opacity-70 tabular-nums" aria-hidden>
+                {open ? "−" : "+"}
+              </span>
+            </button>
+            {open ? (
+              <div className="flex flex-col gap-0.5 border-t border-border px-1 pb-1 pt-0.5">
+                {overview ? (
+                  <Link
+                    href={overview.href}
+                    className={[
+                      "rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
+                      pathname === overview.href ? "bg-brand/15 font-medium" : "",
+                    ].join(" ")}
+                  >
+                    {overview.label}
+                  </Link>
+                ) : null}
+                {items.map((item) => {
+                  const ItemIcon = navIconForHref(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={[
+                        "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
+                        pathMatchesItem(pathname, item.href)
+                          ? "bg-brand/15 font-medium"
+                          : "",
+                      ].join(" ")}
+                    >
+                      <ItemIcon className="size-4 shrink-0 opacity-80" aria-hidden />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -155,12 +174,10 @@ export function Sidebar(props: {
   }, [status, session?.role]);
 
   function canRoute(href: string): boolean {
-    // If permissions haven't loaded yet, keep nav visible to avoid confusing blank sidebar.
     if (!perm) return true;
     const keys = PERMISSION_KEYS as readonly string[];
     const key = `route:${href}`;
     if (keys.includes(key)) return Boolean(perm[key]);
-    // Fallback: allow by default for unknown routes.
     return true;
   }
 
@@ -186,9 +203,8 @@ export function Sidebar(props: {
       label: "Settings",
       items: filteredSetupNav,
       collapsedHref: "/setup",
-      collapsedAbbrev: "SU",
       collapsedTitle:
-        "Setup — company, users, customers, financial years, sales points, tax, products",
+        "Settings — company, users, customers, financial years, sales points, tax, products",
     }),
     [filteredSetupNav],
   );
@@ -199,8 +215,7 @@ export function Sidebar(props: {
       label: "Operations",
       items: filteredOpsNav,
       collapsedHref: "/delivery-orders",
-      collapsedAbbrev: "OP",
-      collapsedTitle: "Operations — delivery orders, sales",
+      collapsedTitle: "Operations — delivery orders, sales, stock",
     }),
     [filteredOpsNav],
   );
@@ -212,7 +227,6 @@ export function Sidebar(props: {
       label: "Reports",
       items: filteredReportNav,
       collapsedHref: "/reports",
-      collapsedAbbrev: "RP",
       collapsedTitle: "Reports — printable lists",
       overview: { href: "/reports", label: "Overview" },
     };
@@ -260,29 +274,33 @@ export function Sidebar(props: {
     });
   }
 
+  const widthLg = collapsed ? "lg:w-[72px]" : "lg:w-[260px]";
+
   return (
     <aside
       className={[
-        "rounded-2xl border border-border bg-sidebar text-sidebar-foreground p-3 h-full flex flex-col",
-        "transition-[width] duration-200",
-        collapsed ? "lg:w-[72px]" : "lg:w-[260px]",
+        "rounded-2xl border border-border bg-sidebar text-sidebar-foreground p-3 flex transition-[width] duration-200",
+        "max-md:flex-row max-md:items-stretch max-md:gap-2 max-md:min-h-13",
+        "md:h-full md:max-h-full md:flex-col md:gap-0",
+        "w-full md:w-16 md:max-w-16 lg:max-w-none",
+        widthLg,
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className={collapsed ? "hidden lg:block" : ""}>
-          <div className="font-semibold leading-tight">{brand}</div>
+      <div className="max-lg:hidden lg:flex items-start justify-between gap-2 shrink-0">
+        <div className={collapsed ? "hidden" : "min-w-0 flex-1"}>
+          <div className="font-semibold leading-tight truncate">{brand}</div>
           {department ? (
-            <div className="text-[11px] opacity-70 mt-0.5 leading-snug">
+            <div className="text-[11px] opacity-70 mt-0.5 leading-snug truncate">
               {department}
             </div>
           ) : null}
-          <div className="text-xs opacity-70 mt-1">{subtitle}</div>
+          <div className="text-xs opacity-70 mt-1 truncate">{subtitle}</div>
         </div>
 
         <button
           type="button"
           onClick={toggle}
-          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/5"
+          className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/5"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand" : "Collapse"}
         >
@@ -290,29 +308,44 @@ export function Sidebar(props: {
         </button>
       </div>
 
-      <nav className="mt-3 flex flex-col gap-1 flex-1 overflow-y-auto pr-1">
-        {dashboardNav.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={[
-              "rounded-md px-3 py-2 text-sm hover:bg-foreground/5",
-              collapsed ? "lg:px-2 lg:text-center" : "",
-              pathMatchesItem(pathname, item.href)
-                ? "bg-brand/15 font-medium"
-                : "",
-            ].join(" ")}
-            title={collapsed ? item.label : undefined}
-          >
-            <span className={collapsed ? "lg:hidden" : ""}>{item.label}</span>
-            <span
-              className={collapsed ? "hidden lg:inline" : "hidden"}
-              aria-hidden
+      <nav
+        className={[
+          "flex gap-1 flex-1 min-h-0",
+          "max-md:flex-row max-md:overflow-x-auto max-md:overflow-y-hidden max-md:min-w-0 max-md:py-0.5",
+          "md:mt-3 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:pr-1",
+        ].join(" ")}
+      >
+        {dashboardNav.map((item) => {
+          const Icon = navIconForHref(item.href);
+          const active = pathMatchesItem(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={item.label}
+              title={item.label}
+              className={[
+                RAIL_LINK,
+                "max-lg:min-w-11",
+                "lg:min-h-0 lg:w-full lg:justify-start lg:rounded-md lg:px-3 lg:py-2 lg:text-sm lg:hover:bg-foreground/5",
+                collapsed ? "lg:justify-center lg:px-2" : "",
+                active ? "bg-brand/15 font-medium" : "",
+              ].join(" ")}
             >
-              {item.label.slice(0, 2).toUpperCase()}
-            </span>
-          </Link>
-        ))}
+              <Icon
+                className={[
+                  "size-5 shrink-0",
+                  "max-lg:block",
+                  collapsed ? "lg:block" : "lg:hidden",
+                ].join(" ")}
+                aria-hidden
+              />
+              {!collapsed ? (
+                <span className="hidden lg:inline truncate">{item.label}</span>
+              ) : null}
+            </Link>
+          );
+        })}
 
         <NavGroup
           config={setupGroup}
@@ -351,52 +384,75 @@ export function Sidebar(props: {
         ) : null}
       </nav>
 
-      <div className="mt-3 pt-3 border-t border-border space-y-2">
+      <div
+        className={[
+          "mt-3 pt-3 border-t border-border shrink-0 flex gap-1",
+          "max-md:flex-row max-md:mt-0 max-md:pt-0 max-md:border-t-0 max-md:border-l max-md:border-border max-md:pl-2 max-md:items-center",
+          "md:flex-col md:mt-3 md:pt-3 md:border-t md:border-l-0 md:pl-0",
+        ].join(" ")}
+      >
         {status === "ready" && session ? (
-          <div
-            className={[
-              "text-xs opacity-80 space-y-1",
-              collapsed ? "lg:hidden" : "",
-            ].join(" ")}
-          >
-            <div className="font-medium truncate" title={session.displayName}>
-              {session.displayName}
-            </div>
-            {session.service?.trim() ? (
-              <div
-                className="opacity-70 truncate text-[11px]"
-                title={session.service}
-              >
-                {session.service}
+          <>
+            <div
+              className="flex flex-row gap-1 items-center shrink-0 lg:hidden"
+              title={`${session.displayName} · ${roleLabel(session.role)}`}
+            >
+              <div className={[RAIL_LINK, "border border-transparent"].join(" ")} aria-hidden>
+                <UserRound className="size-5 shrink-0 opacity-90" />
               </div>
-            ) : null}
+              <SignOutButton variant="icon" />
+            </div>
 
             <div
-              className="opacity-60 truncate text-[11px]"
-              title={session.username}
+              className={[
+                "hidden lg:block text-xs opacity-80 space-y-1",
+                collapsed ? "lg:hidden" : "",
+              ].join(" ")}
             >
-              @{session.username}
-            </div>
-            <div
-              className="opacity-70 truncate"
-              title={roleLabel(session.role)}
-            >
-              {roleLabel(session.role)}
-            </div>
-            {session.salesPoint ? (
+              <div className="font-medium truncate" title={session.displayName}>
+                {session.displayName}
+              </div>
+              {session.service?.trim() ? (
+                <div
+                  className="opacity-70 truncate text-[11px]"
+                  title={session.service}
+                >
+                  {session.service}
+                </div>
+              ) : null}
+              <div
+                className="opacity-60 truncate text-[11px]"
+                title={session.username}
+              >
+                @{session.username}
+              </div>
               <div
                 className="opacity-70 truncate"
-                title={session.salesPoint.name}
+                title={roleLabel(session.role)}
               >
-                {session.salesPoint.name}
+                {roleLabel(session.role)}
               </div>
-            ) : (
-              <div className="opacity-70">All sales points</div>
-            )}
-            <div className="text-left w-full">
-              <SignOutButton />
+              {session.salesPoint ? (
+                <div
+                  className="opacity-70 truncate"
+                  title={session.salesPoint.name}
+                >
+                  {session.salesPoint.name}
+                </div>
+              ) : (
+                <div className="opacity-70">All sales points</div>
+              )}
+              <div className="text-left w-full pt-1">
+                <SignOutButton />
+              </div>
             </div>
-          </div>
+
+            {collapsed ? (
+              <div className="hidden lg:flex lg:justify-center lg:pt-1">
+                <SignOutButton variant="icon" />
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
     </aside>

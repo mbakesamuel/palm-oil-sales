@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { loginWithCredentials } from "./actions";
@@ -27,11 +28,13 @@ export function LoginForm(props: {
       const r = await loginWithCredentials(username, password);
       if (!r.ok) {
         setError(r.error);
+        setBusy(false);
         return;
       }
       signIn(r.session);
       router.push("/dashboard");
-    } finally {
+    } catch {
+      setError("Something went wrong. Please try again.");
       setBusy(false);
     }
   }
@@ -39,6 +42,7 @@ export function LoginForm(props: {
   return (
     <form
       onSubmit={(e) => void onSubmit(e)}
+      aria-busy={busy}
       className="rounded-2xl border border-border p-6 space-y-4"
     >
       <div className="space-y-2 pb-4 border-b border-border">
@@ -75,7 +79,8 @@ export function LoginForm(props: {
         <input
           id="username"
           autoComplete="username"
-          className="rounded-md border border-border bg-transparent px-3 py-2"
+          disabled={busy}
+          className="rounded-md border border-border bg-transparent px-3 py-2 disabled:opacity-50"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
@@ -90,7 +95,8 @@ export function LoginForm(props: {
           id="password"
           type="password"
           autoComplete="current-password"
-          className="rounded-md border border-border bg-transparent px-3 py-2"
+          disabled={busy}
+          className="rounded-md border border-border bg-transparent px-3 py-2 disabled:opacity-50"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
@@ -104,9 +110,16 @@ export function LoginForm(props: {
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-foreground disabled:opacity-50"
       >
-        {busy ? "Signing in…" : "Sign in"}
+        {busy ? (
+          <>
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            Signing in…
+          </>
+        ) : (
+          "Sign in"
+        )}
       </button>
     </form>
   );

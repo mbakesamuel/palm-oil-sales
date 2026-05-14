@@ -49,8 +49,8 @@ const settings = await getOrInitCompanySettings();
         <PrintButton label="Print receipt" />
       </div>
 
-      <article className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
-        <header className="border-b border-black/20 pb-4 text-center">
+      <article className="text-foreground bg-background max-w-3xl mx-auto print:max-w-none print:mx-0 print:text-black print:bg-white">
+        <header className="border-b border-border pb-4 text-center print:border-black/20">
          <ReportHeader
             companyName={settings.companyName}
             department={settings.department}
@@ -75,12 +75,12 @@ const settings = await getOrInitCompanySettings();
         </header>
 
         <section className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
-          <div className="rounded border border-black/15 p-3">
+          <div className="rounded border border-border p-3 print:border-black/15">
             <div className="text-xs uppercase text-black/60">Receipt / invoice</div>
             <div className="mt-1 font-semibold tabular-nums">{data.invoiceNo}</div>
             <div className="mt-1 text-black/70">{formatDateTime(data.soldAtIso)}</div>
           </div>
-          <div className="rounded border border-black/15 p-3">
+          <div className="rounded border border-border p-3 print:border-black/15">
             <div className="text-xs uppercase text-black/60">Payment</div>
             <div className="mt-1 font-semibold">
               {data.paymentMethod === "CREDIT" ? "Employee credit" : "Cash"}
@@ -95,7 +95,7 @@ const settings = await getOrInitCompanySettings();
         <section className="mt-6">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-y border-black/20">
+              <tr className="border-y border-border print:border-black/20">
                 <th className="py-2 text-left font-medium">Product</th>
                 <th className="py-2 text-right font-medium">Qty</th>
                 <th className="py-2 text-right font-medium">Unit price</th>
@@ -105,7 +105,7 @@ const settings = await getOrInitCompanySettings();
             </thead>
             <tbody>
               {data.lines.map((line) => (
-                <tr key={line.id} className="border rounded-lg border-black/10">
+                <tr key={line.id} className="border rounded-lg border-border print:border-black/10">
                   <td className="py-2 p-3">{line.variantLabel}</td>
                   <td className="py-2 text-right tabular-nums">{line.qtyUnits}</td>
                   <td className="py-2 text-right tabular-nums">
@@ -137,7 +137,7 @@ const settings = await getOrInitCompanySettings();
                 <span className="tabular-nums">{moneyLabel(tax.amount)}</span>
               </div>
             ))}
-            <div className="flex justify-between gap-8 border-t border-black/20 pt-2 font-semibold">
+            <div className="flex justify-between gap-8 border-t border-border pt-2 font-semibold print:border-black/20">
               <span>Amount paid</span>
               <span className="tabular-nums">{moneyLabel(data.grossAmount)}</span>
             </div>
@@ -145,9 +145,9 @@ const settings = await getOrInitCompanySettings();
         </section>
 
         <footer className="mt-16 grid grid-cols-3 gap-16 text-sm">
-          <div className="border-t border-black/40 pt-2 text-center">Customer</div>
+          <div className="border-t border-border pt-2 print:border-black/40 text-center">Customer</div>
           <div></div>
-          <div className="border-t border-black/40 pt-2 text-center">Sales clerk</div>
+          <div className="border-t border-border pt-2 print:border-black/40 text-center">Sales clerk</div>
         </footer>
       </article>
     </div>

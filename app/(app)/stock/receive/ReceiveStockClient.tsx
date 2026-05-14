@@ -143,7 +143,7 @@ export function ReceiveStockClient(props: {
           {draft ? (
             <>
               <input type="hidden" name="salesPointId" value={String(draft.salesPointId)} />
-              <div className="h-10 flex items-center rounded-md border border-black/10 px-3 text-sm dark:border-white/10 bg-black/2 dark:bg-white/4">
+              <div className="h-10 flex items-center rounded-md border border-border px-3 text-sm bg-foreground/[0.04]">
                 {spLabel}
               </div>
               <p className="text-xs opacity-70">Sales point is fixed for this receipt.</p>
@@ -156,7 +156,7 @@ export function ReceiveStockClient(props: {
               <select
                 id="salesPointId"
                 name={salesPointLocked ? undefined : "salesPointId"}
-                className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
+                className="h-10 rounded-md border border-border bg-transparent px-3 text-sm"
                 required={!salesPointLocked}
                 value={String(spId)}
                 onChange={(e) => {
@@ -187,7 +187,7 @@ export function ReceiveStockClient(props: {
             key={`${formKey}-loc`}
             id="storageLocationId"
             name="storageLocationId"
-            className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
+            className="h-10 rounded-md border border-border bg-transparent px-3 text-sm"
             required={locsForSp.length > 0}
             disabled={locsForSp.length === 0}
             defaultValue={draft ? draft.storageLocationId : ""}
@@ -229,7 +229,7 @@ export function ReceiveStockClient(props: {
             key={`${formKey}-prod`}
             id="productId"
             name="productId"
-            className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
+            className="h-10 rounded-md border border-border bg-transparent px-3 text-sm"
             required
             disabled={Boolean(draft?.hasAllocations)}
             defaultValue={draft?.productId}
@@ -259,7 +259,7 @@ export function ReceiveStockClient(props: {
               name="qtyKg"
               type="text"
               inputMode="decimal"
-              className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10 disabled:opacity-60"
+              className="h-10 rounded-md border border-border bg-transparent px-3 text-sm disabled:opacity-60"
               placeholder="e.g. 1500"
               required
               disabled={Boolean(draft?.hasAllocations)}
@@ -282,7 +282,7 @@ export function ReceiveStockClient(props: {
             id="receivedAt"
             name="receivedAt"
             type="date"
-            className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
+            className="h-10 rounded-md border border-border bg-transparent px-3 text-sm"
             defaultValue={draft?.receivedAtIso}
           />
           <p className="text-xs opacity-70">Defaults to today if left blank (new receipt only).</p>
@@ -297,7 +297,7 @@ export function ReceiveStockClient(props: {
             id="note"
             name="note"
             rows={2}
-            className="rounded-md border border-black/10 bg-transparent px-3 py-2 text-sm dark:border-white/10"
+            className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
             defaultValue={draft?.note ?? ""}
           />
         </div>
@@ -306,7 +306,7 @@ export function ReceiveStockClient(props: {
           <button
             type="submit"
             disabled={busy || locsForSp.length === 0}
-            className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-white dark:text-black"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-60"
           >
             {busy ? "Saving…" : draft ? "Save changes" : "Record receipt"}
           </button>
@@ -314,7 +314,7 @@ export function ReceiveStockClient(props: {
             <button
               type="button"
               onClick={cancelEdit}
-              className="rounded-md border border-black/10 px-4 py-2 text-sm hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
             >
               Cancel edit
             </button>
@@ -328,10 +328,10 @@ export function ReceiveStockClient(props: {
           Edit date, storage, or note anytime. Product and quantity can only change if no
           validated sale has used this receipt yet. Delete is only allowed in that case.
         </p>
-        <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10 text-left">
+              <tr className="border-b border-border text-left">
                 <th className="px-3 py-2 font-medium">Date</th>
                 <th className="px-3 py-2 font-medium">Product</th>
                 <th className="px-3 py-2 font-medium text-right">Received (kg)</th>
@@ -351,7 +351,7 @@ export function ReceiveStockClient(props: {
                 recentReceipts.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                    className="border-b border-border odd:bg-foreground/[0.04]"
                   >
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums">{row.receivedAtIso}</td>
                     <td className="px-3 py-2">{row.productName}</td>
@@ -363,7 +363,7 @@ export function ReceiveStockClient(props: {
                         <button
                           type="button"
                           onClick={() => startEdit(row)}
-                          className="rounded-md border border-black/10 px-2 py-1 text-xs hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/25"
                         >
                           Edit
                         </button>

@@ -1,10 +1,10 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { getOrInitCompanySettings } from "@/lib/settings";
 import {
   deleteProductUnitPriceSchedule,
   saveProductUnitPriceSchedule,
 } from "./actions";
-import { PricingReportPrintButton } from "@/app/(app)/setup/product-pricing/PricingReportPrintButton";
 import { ProductPricingClient } from "./ProductPricingClient";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 export default async function ProductPricingPage() {
   const prisma = getPrismaClient();
-  const [schedules, products] = await Promise.all([
+  const [schedules, products, settings] = await Promise.all([
     prismaRetry(() =>
       prisma.productUnitPriceSchedule.findMany({
         orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
@@ -27,6 +27,7 @@ export default async function ProductPricingPage() {
         select: { productId: true, productName: true, productCatId: true },
       }),
     ),
+    getOrInitCompanySettings(),
   ]);
 
   const scheduleModels = schedules.map((r) => ({
@@ -41,10 +42,10 @@ export default async function ProductPricingPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-end">
-        <PricingReportPrintButton />
-      </div>
       <ProductPricingClient
+        companyName={settings.companyName}
+        department={settings.department ?? null}
+        logoUrl={settings.logoUrl}
         products={products}
         schedules={scheduleModels}
         saveScheduleAction={saveProductUnitPriceSchedule}

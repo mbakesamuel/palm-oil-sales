@@ -58,12 +58,12 @@ function clientHasStorageLocation(client: PrismaClient): boolean {
   );
 }
 
-function clientHasSalesBudgetMonthPhaseProfile(client: PrismaClient): boolean {
+function clientHasProductSalesBudgetMonthPhaseProfile(client: PrismaClient): boolean {
   return (
-    "salesBudgetMonthPhaseProfile" in client &&
+    "productSalesBudgetMonthPhaseProfile" in client &&
     typeof (
-      client as unknown as { salesBudgetMonthPhaseProfile?: { findUnique?: unknown } }
-    ).salesBudgetMonthPhaseProfile?.findUnique === "function"
+      client as unknown as { productSalesBudgetMonthPhaseProfile?: { findUnique?: unknown } }
+    ).productSalesBudgetMonthPhaseProfile?.findUnique === "function"
   );
 }
 
@@ -94,7 +94,7 @@ export function getPrismaClient() {
       tagMatches &&
       clientHasFinancialYearPeriod(globalForPrisma.prisma) &&
       clientHasStorageLocation(globalForPrisma.prisma) &&
-      clientHasSalesBudgetMonthPhaseProfile(globalForPrisma.prisma) &&
+      clientHasProductSalesBudgetMonthPhaseProfile(globalForPrisma.prisma) &&
       clientHasProductSalesBudget(globalForPrisma.prisma) &&
       clientHasProductUnitPriceSchedule(globalForPrisma.prisma)
     ) {
@@ -114,9 +114,9 @@ export function getPrismaClient() {
       "Prisma Client is out of date (missing StorageLocation). Run: npx prisma generate",
     );
   }
-  if (!clientHasSalesBudgetMonthPhaseProfile(client)) {
+  if (!clientHasProductSalesBudgetMonthPhaseProfile(client)) {
     throw new Error(
-      "Prisma Client is out of date (missing SalesBudgetMonthPhaseProfile). Run: npx prisma generate",
+      "Prisma Client is out of date (missing ProductSalesBudgetMonthPhaseProfile). Run: npx prisma generate",
     );
   }
   if (!clientHasProductSalesBudget(client)) {

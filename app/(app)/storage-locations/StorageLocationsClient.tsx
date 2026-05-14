@@ -95,7 +95,7 @@ export function StorageLocationsClient(props: {
           {salesPointLocked && salesPoints[0] ? (
             <>
               <input type="hidden" name="salesPointId" value={String(salesPoints[0].id)} />
-              <div className="h-10 flex items-center rounded-md border border-black/10 px-3 text-sm dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04]">
+              <div className="h-10 flex items-center rounded-md border border-border px-3 text-sm bg-foreground/[0.03]">
                 {lockedSalesPointName ?? salesPoints[0].name}
               </div>
             </>
@@ -105,7 +105,7 @@ export function StorageLocationsClient(props: {
               name="salesPointId"
               value={salesPointId}
               onChange={(e) => setSalesPointId(e.target.value)}
-              className="h-10 rounded-md border border-black/10 bg-transparent px-3 text-sm dark:border-white/10"
+              className="h-10 rounded-md border border-border bg-transparent px-3 text-sm"
               required
             >
               {salesPoints.map((sp) => (
@@ -126,7 +126,7 @@ export function StorageLocationsClient(props: {
             name="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="rounded-md border border-black/10 bg-transparent px-3 py-2 dark:border-white/10"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             placeholder="e.g. Production tank 3"
             required
           />
@@ -135,7 +135,7 @@ export function StorageLocationsClient(props: {
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
           >
             {editingId != null ? "Save changes" : "Add location"}
           </button>
@@ -143,7 +143,7 @@ export function StorageLocationsClient(props: {
             <button
               type="button"
               onClick={reset}
-              className="rounded-md border border-black/10 px-4 py-2 text-sm hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
             >
               Cancel edit
             </button>
@@ -155,8 +155,8 @@ export function StorageLocationsClient(props: {
         <h2 className="text-lg font-semibold">
           {salesPointLocked ? "Locations at your collection point" : "All locations"}
         </h2>
-        <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
-          <div className="grid grid-cols-12 gap-2 border-b border-black/10 px-3 py-2 text-xs font-medium opacity-70 dark:border-white/10">
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="grid grid-cols-12 gap-2 border-b border-border px-3 py-2 text-xs font-medium opacity-70">
             {salesPointLocked ? null : <div className="col-span-3">Sales point</div>}
             <div className={salesPointLocked ? "col-span-6" : "col-span-5"}>Location</div>
             <div className={salesPointLocked ? "col-span-6 text-right" : "col-span-4 text-right"}>
@@ -167,7 +167,7 @@ export function StorageLocationsClient(props: {
           {locations.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No locations yet. Add one above.</div>
           ) : (
-            <ul className="divide-y divide-black/10 dark:divide-white/10">
+            <ul className="divide-y divide-border">
               {locations.map((row) => (
                 <li
                   key={row.id}
@@ -195,7 +195,7 @@ export function StorageLocationsClient(props: {
                     <button
                       type="button"
                       onClick={() => startEdit(row)}
-                      className="rounded-md border border-black/10 px-3 py-1.5 text-xs hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
                     >
                       Edit
                     </button>

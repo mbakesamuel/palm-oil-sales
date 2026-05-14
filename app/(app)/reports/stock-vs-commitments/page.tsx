@@ -300,13 +300,13 @@ export default async function StockVsCommitmentsReportPage() {
           {stockVsCommitProducts.map((block) => (
             <div
               key={block.productId}
-              className="space-y-2 rounded-lg border border-black/10 p-4 dark:border-white/10 print:break-inside-avoid"
+              className="space-y-2 rounded-lg border border-border p-4 print:break-inside-avoid"
             >
               <h2 className="text-lg font-semibold">{block.productName}</h2>
-              <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+              <div className="overflow-x-auto rounded-md border border-border">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                    <tr className="border-b border-border text-left">
                       <th className="px-3 py-2 font-medium">Sales point</th>
                       <th className="px-3 py-2 font-medium text-right">Stock (kg)</th>
                       <th className="px-3 py-2 font-medium text-right">Commit (kg)</th>
@@ -317,7 +317,7 @@ export default async function StockVsCommitmentsReportPage() {
                     {block.rows.map((r) => (
                       <tr
                         key={r.salesPointId}
-                        className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                        className="border-b border-border odd:bg-foreground/[0.04]"
                       >
                         <td className="px-3 py-2">{r.salesPointName}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtKgOrDash(r.stock)}</td>
@@ -329,7 +329,7 @@ export default async function StockVsCommitmentsReportPage() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-black/15 font-medium dark:border-white/15">
+                    <tr className="border-t-2 border-border font-medium">
                       <td className="px-3 py-2">Total</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {fmtKgOrDash(block.totals.stock)}
@@ -346,16 +346,16 @@ export default async function StockVsCommitmentsReportPage() {
           ))}
 
           {summaryGrand ? (
-            <section className="space-y-2 rounded-lg border border-black/10 p-4 dark:border-white/10 print:break-inside-avoid">
+            <section className="space-y-2 rounded-lg border border-border p-4 print:break-inside-avoid">
               <h2 className="text-lg font-semibold">Summary by sales point (all products above)</h2>
               <p className="text-sm opacity-75">
                 Totals of stock, outstanding commit, and balance across every product included in this
                 report.
               </p>
-              <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+              <div className="overflow-x-auto rounded-md border border-border">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                    <tr className="border-b border-border text-left">
                       <th className="px-3 py-2 font-medium">Sales point</th>
                       <th className="px-3 py-2 font-medium text-right">Stock (kg)</th>
                       <th className="px-3 py-2 font-medium text-right">Commit (kg)</th>
@@ -366,7 +366,7 @@ export default async function StockVsCommitmentsReportPage() {
                     {summaryBySalesPoint.map((r) => (
                       <tr
                         key={r.salesPointId}
-                        className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                        className="border-b border-border odd:bg-foreground/[0.04]"
                       >
                         <td className="px-3 py-2">{r.salesPointName}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtKgOrDash(r.stock)}</td>
@@ -378,7 +378,7 @@ export default async function StockVsCommitmentsReportPage() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-black/15 font-medium dark:border-white/15">
+                    <tr className="border-t-2 border-border font-medium">
                       <td className="px-3 py-2">Grand total</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {fmtKgOrDash(summaryGrand.stock)}

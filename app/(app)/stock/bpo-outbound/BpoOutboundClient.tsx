@@ -99,7 +99,7 @@ export function BpoOutboundClient(props: {
       ) : null}
 
       <form
-        className="space-y-4 rounded-lg border border-black/10 dark:border-white/10 p-4"
+        className="space-y-4 rounded-lg border border-border p-4"
         onSubmit={async (e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
@@ -140,19 +140,19 @@ export function BpoOutboundClient(props: {
       >
         <h2 className="font-semibold">Post BPO outbound</h2>
         <div className="grid gap-4 sm:grid-cols-3">
-          <label className="grid gap-2 rounded-md border border-black/10 dark:border-white/10 p-3 text-sm">
+          <label className="grid gap-2 rounded-md border border-border p-3 text-sm">
             <span className="font-medium">Operation</span>
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value as Mode)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
             >
               <option value="OUT">PRO / Gift / Other out</option>
               <option value="CASH">Cash sale</option>
               <option value="CREDIT">Employee credit sale</option>
             </select>
           </label>
-          <div className="rounded-md border border-black/10 dark:border-white/10 p-3 text-sm sm:col-span-2">
+          <div className="rounded-md border border-border p-3 text-sm sm:col-span-2">
             <div className="font-medium">Working month</div>
             <div className="mt-1 opacity-75">{workingPeriod.workingMonthLabel}</div>
           </div>
@@ -168,7 +168,7 @@ export function BpoOutboundClient(props: {
               max={mode === "OUT" ? undefined : workingPeriod.workingMonthEndIso ?? undefined}
               defaultValue={mode === "OUT" ? todayIsoDate() : defaultSaleDate}
               required={mode !== "OUT"}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
             />
             {mode !== "OUT" && workingPeriod.workingMonthStartIso && workingPeriod.workingMonthEndIso ? (
               <p className="text-xs opacity-70">
@@ -183,7 +183,7 @@ export function BpoOutboundClient(props: {
               <select
                 name="reason"
                 defaultValue="PRO"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
               >
                 <option value="PRO">PRO</option>
                 <option value="Gift">Gift</option>
@@ -193,29 +193,29 @@ export function BpoOutboundClient(props: {
           ) : null}
           <div className="grid gap-1 sm:col-span-3">
             <label className="text-sm font-medium">Note</label>
-            <input name="note" className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2" />
+            <input name="note" className="rounded-md border border-border bg-transparent px-3 py-2" />
           </div>
         </div>
         {mode === "CREDIT" ? (
           <div className="grid gap-4 sm:grid-cols-4">
             <div className="grid gap-1">
               <label className="text-sm font-medium">Matricule</label>
-              <input name="employeeMatricule" required className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2" />
+              <input name="employeeMatricule" required className="rounded-md border border-border bg-transparent px-3 py-2" />
             </div>
             <div className="grid gap-1">
               <label className="text-sm font-medium">Employee name</label>
-              <input name="employeeName" required className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2" />
+              <input name="employeeName" required className="rounded-md border border-border bg-transparent px-3 py-2" />
             </div>
             <div className="grid gap-1">
               <label className="text-sm font-medium">Estate</label>
-              <input name="employeeEstate" required className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2" />
+              <input name="employeeEstate" required className="rounded-md border border-border bg-transparent px-3 py-2" />
             </div>
             <div className="grid gap-1">
               <label className="text-sm font-medium">Collected product</label>
               <select
                 value={collectedProduct}
                 onChange={(e) => setCollectedProduct(e.target.value as "BOTTLED_PALM_OIL" | "LOOSE_PALM_OIL")}
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
               >
                 <option value="BOTTLED_PALM_OIL">Bottled Palm Oil</option>
                 <option value="LOOSE_PALM_OIL">Loose Palm Oil</option>
@@ -238,7 +238,7 @@ export function BpoOutboundClient(props: {
           {lines.map((l, idx) => (
             <div key={idx} className="grid gap-2 sm:grid-cols-12">
               <select
-                className="sm:col-span-7 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="sm:col-span-7 rounded-md border border-border bg-transparent px-3 py-2"
                 value={l.productVariantId}
                 onChange={(e) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, productVariantId: e.target.value } : x)))}
               >
@@ -249,7 +249,7 @@ export function BpoOutboundClient(props: {
                 ))}
               </select>
               <input
-                className="sm:col-span-3 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="sm:col-span-3 rounded-md border border-border bg-transparent px-3 py-2"
                 value={l.qtyUnits}
                 inputMode="decimal"
                 onChange={(e) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, qtyUnits: e.target.value } : x)))}
@@ -268,7 +268,7 @@ export function BpoOutboundClient(props: {
             busy ||
             (mode === "CREDIT" && collectedProduct === "LOOSE_PALM_OIL")
           }
-          className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+          className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
         >
           {mode === "OUT" ? "Post movement" : "Post sale"}
         </button>
@@ -279,7 +279,7 @@ export function BpoOutboundClient(props: {
         <h2 className="text-lg font-semibold">Recent BPO sales</h2>
         <div className="space-y-3">
           {sales.map((s) => (
-            <div key={s.invoiceNo} className="rounded-lg border border-black/10 dark:border-white/10 p-4">
+            <div key={s.invoiceNo} className="rounded-lg border border-border p-4">
               <div className="flex justify-between gap-3">
                 <div>
                   <div className="font-semibold">{s.invoiceNo}</div>
@@ -292,7 +292,7 @@ export function BpoOutboundClient(props: {
                   <div className="text-sm font-medium tabular-nums">{s.grossAmount}</div>
                   <Link
                     href={`/stock/bpo-outbound/${s.id}/receipt`}
-                    className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs"
+                    className="rounded-md border border-border px-3 py-1.5 text-xs"
                   >
                     Print receipt
                   </Link>
@@ -308,7 +308,7 @@ export function BpoOutboundClient(props: {
               </ul>
             </div>
           ))}
-          {sales.length === 0 ? <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm opacity-75">No BPO sales yet.</div> : null}
+          {sales.length === 0 ? <div className="rounded-lg border border-border p-4 text-sm opacity-75">No BPO sales yet.</div> : null}
         </div>
       </section>
 
@@ -316,7 +316,7 @@ export function BpoOutboundClient(props: {
         <h2 className="text-lg font-semibold">Recent outbound movements</h2>
         <div className="space-y-3">
           {movements.map((m) => (
-            <div key={m.voucherNo} className="rounded-lg border border-black/10 dark:border-white/10 p-4">
+            <div key={m.voucherNo} className="rounded-lg border border-border p-4">
               <div className="flex justify-between gap-3">
                 <div>
                   <div className="font-semibold">{m.voucherNo}</div>
@@ -334,7 +334,7 @@ export function BpoOutboundClient(props: {
               </ul>
             </div>
           ))}
-          {movements.length === 0 ? <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm opacity-75">No outbound movements yet.</div> : null}
+          {movements.length === 0 ? <div className="rounded-lg border border-border p-4 text-sm opacity-75">No outbound movements yet.</div> : null}
         </div>
       </section>
     </div>

@@ -218,7 +218,7 @@ export function BpoConsignmentsClient(props: {
 
       {!isBotaSalesPoint && canCreateVoucher ? (
         <form
-          className="space-y-4 rounded-lg border border-black/10 dark:border-white/10 p-4"
+          className="space-y-4 rounded-lg border border-border p-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (draftAvailabilityError) {
@@ -247,7 +247,7 @@ export function BpoConsignmentsClient(props: {
                     name="sourceSalesPointId"
                     value={defaultSourceSalesPointId}
                   />
-                  <div className="rounded-md border border-black/10 dark:border-white/10 px-3 py-2 text-sm">
+                  <div className="rounded-md border border-border px-3 py-2 text-sm">
                     {salesPoints.find((s) => s.id === defaultSourceSalesPointId)
                       ?.name ?? "Assigned sales point"}
                   </div>
@@ -255,7 +255,7 @@ export function BpoConsignmentsClient(props: {
               ) : (
                 <select
                   name="sourceSalesPointId"
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   required
                   value={sourceSalesPointId}
                   onChange={(e) => setSourceSalesPointId(e.target.value)}
@@ -276,14 +276,14 @@ export function BpoConsignmentsClient(props: {
               <input
                 type="date"
                 name="movementDate"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
               />
             </div>
             <div className="grid gap-1">
               <label className="text-sm font-medium">Note</label>
               <input
                 name="note"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
               />
             </div>
           </div>
@@ -307,7 +307,7 @@ export function BpoConsignmentsClient(props: {
             {lines.map((line, idx) => (
               <div key={idx} className="grid gap-2 sm:grid-cols-12">
                 <select
-                  className="sm:col-span-7 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="sm:col-span-7 rounded-md border border-border bg-transparent px-3 py-2"
                   value={line.productVariantId}
                   onChange={(e) =>
                     setLines((prev) =>
@@ -327,7 +327,7 @@ export function BpoConsignmentsClient(props: {
                   ))}
                 </select>
                 <input
-                  className="sm:col-span-3 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="sm:col-span-3 rounded-md border border-border bg-transparent px-3 py-2"
                   inputMode="decimal"
                   value={line.qtyUnits}
                   onChange={(e) =>
@@ -369,14 +369,14 @@ export function BpoConsignmentsClient(props: {
                 botaSalesPointId == null ||
                 Boolean(draftAvailabilityError)
               }
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               Create voucher
             </button>
             {canPrintCreatedVoucher && lastCreatedPrint ? (
               <a
                 href={`/stock/bpo-consignments/${lastCreatedPrint.id}/voucher`}
-                className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium"
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium"
               >
                 Print voucher
               </a>
@@ -391,7 +391,7 @@ export function BpoConsignmentsClient(props: {
           {movements.map((m) => (
             <div
               key={m.id}
-              className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-3"
+              className="rounded-lg border border-border p-4 space-y-3"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -423,7 +423,7 @@ export function BpoConsignmentsClient(props: {
                           "Sender voucher validated.",
                         );
                       }}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs"
                     >
                       Validate
                     </button>
@@ -448,7 +448,7 @@ export function BpoConsignmentsClient(props: {
                   {m.canPrintReceiptVoucher ? (
                     <a
                       href={`/stock/bpo-consignments/${m.id}/receipt`}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs"
                     >
                       Print receipt voucher
                     </a>
@@ -459,7 +459,7 @@ export function BpoConsignmentsClient(props: {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b border-black/10 dark:border-white/10">
+                    <tr className="border-b border-border">
                       <th className="text-left py-1.5">Variant</th>
                       <th className="text-right py-1.5">Voucher qty</th>
                       <th className="text-right py-1.5">Actual qty</th>
@@ -469,7 +469,7 @@ export function BpoConsignmentsClient(props: {
                     {m.lines.map((l) => (
                       <tr
                         key={l.id}
-                        className="border-b border-black/5 dark:border-white/5 last:border-0"
+                        className="border-b border-border last:border-0"
                       >
                         <td className="py-1.5">{l.variantLabel}</td>
                         <td className="py-1.5 text-right tabular-nums">
@@ -486,7 +486,7 @@ export function BpoConsignmentsClient(props: {
 
               {m.canBotaValidate ? (
                 <form
-                  className="space-y-2 rounded-md border border-black/10 dark:border-white/10 p-3"
+                  className="space-y-2 rounded-md border border-border p-3"
                   onSubmit={(e) => {
                     e.preventDefault();
                     const fd = new FormData(e.currentTarget);
@@ -523,7 +523,7 @@ export function BpoConsignmentsClient(props: {
                         name={`actual-${l.id}`}
                         inputMode="decimal"
                         defaultValue={l.actualQtyUnits ?? l.voucherQtyUnits}
-                        className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                        className="rounded-md border border-border bg-transparent px-3 py-2"
                         required
                       />
                     </label>
@@ -531,19 +531,19 @@ export function BpoConsignmentsClient(props: {
                   <input
                     name="discrepancyNote"
                     placeholder="Discrepancy note, if any"
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                   />
                   <div className="flex flex-wrap items-center gap-3">
                     <button
                       disabled={busy}
-                      className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+                      className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
                     >
                       Validate Bota receipt
                     </button>
                     {lastConfirmationPrint?.id === m.id ? (
                       <a
                         href={`/stock/bpo-consignments/${lastConfirmationPrint.id}/confirmation`}
-                        className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium"
+                        className="rounded-md border border-border px-4 py-2 text-sm font-medium"
                       >
                         Print confirmation receipt
                       </a>
@@ -554,7 +554,7 @@ export function BpoConsignmentsClient(props: {
             </div>
           ))}
           {movements.length === 0 ? (
-            <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm opacity-75">
+            <div className="rounded-lg border border-border p-4 text-sm opacity-75">
               No BPO consignment documents yet.
             </div>
           ) : null}

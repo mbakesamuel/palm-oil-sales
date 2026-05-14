@@ -1,7 +1,8 @@
- "use client";
+"use client";
 
 import * as React from "react";
 import { PrintButton } from "@/components/PrintButton";
+import { ReportHeader } from "@/components/ReportHeader";
 import { CustomerType } from "@/lib/domain";
 
 type ScheduleRow = {
@@ -51,9 +52,10 @@ function pickLatestRows(rows: ScheduleRow[]): ScheduleRow[] {
 export function PricingReport(props: {
   companyName: string;
   department: string | null;
+  logoUrl?: string | null;
   schedules: ScheduleRow[];
 }) {
-  const { companyName, department, schedules } = props;
+  const { companyName, department, logoUrl, schedules } = props;
   const generated = new Date();
   const [effectiveFromIso, setEffectiveFromIso] = React.useState("");
 
@@ -85,24 +87,31 @@ export function PricingReport(props: {
         {props.rows.length === 0 ? (
           <p className="text-sm opacity-75">No rows.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-black">
-            <table className="min-w-full text-sm">
+          <div className="overflow-x-auto rounded-lg bg-background text-foreground">
+            <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
               <thead>
-                <tr className="border-b border-black/10 dark:border-white/10 text-left">
-                  <th className="p-2 font-medium">Product</th>
-                  <th className="p-2 font-medium">Customer type</th>
-                  <th className="p-2 font-medium text-right">Unit price (ex tax)</th>
+                <tr className="text-left">
+                  <th className="border border-border p-2 font-medium print:border-black/25">
+                    Product
+                  </th>
+                  <th className="border border-border p-2 font-medium print:border-black/25">
+                    Customer type
+                  </th>
+                  <th className="border border-border p-2 text-right font-medium print:border-black/25">
+                    Unit price (ex tax)
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {props.rows.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-black/5 dark:border-white/5 align-top"
-                  >
-                    <td className="p-2">{r.productName}</td>
-                    <td className="p-2">{labelCustomerType(r.customerType)}</td>
-                    <td className="p-2 tabular-nums text-right whitespace-nowrap">
+                  <tr key={r.id} className="align-top">
+                    <td className="border border-border p-2 print:border-black/25">
+                      {r.productName}
+                    </td>
+                    <td className="border border-border p-2 print:border-black/25">
+                      {labelCustomerType(r.customerType)}
+                    </td>
+                    <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
                       {r.unitPriceExTax}
                     </td>
                   </tr>
@@ -117,12 +126,18 @@ export function PricingReport(props: {
 
   return (
     <section className="space-y-4 print:space-y-3">
+      <div className="print:block">
+        <ReportHeader
+          companyName={companyName}
+          department={department}
+          logoSrc={logoUrl}
+          title="Pricing report"
+        />
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between print:block">
         <div>
-          <h2 className="text-xl font-semibold">Pricing report</h2>
-          <p className="text-sm opacity-80 mt-1">{companyName}</p>
-          {department ? <p className="text-sm opacity-75 mt-1">{department}</p> : null}
-          <p className="text-xs opacity-70 mt-1 tabular-nums">
+          <p className="text-xs opacity-70 tabular-nums">
             Generated{" "}
             {generated.toLocaleString("en-GB", {
               dateStyle: "medium",
@@ -145,7 +160,7 @@ export function PricingReport(props: {
               type="date"
               value={effectiveFromIso}
               onChange={(e) => setEffectiveFromIso(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
             />
             <p className="text-xs opacity-70">Leave blank to show latest per product/customer.</p>
           </div>

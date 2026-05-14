@@ -1,7 +1,11 @@
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getPrismaClient } from "@/lib/prisma";
 import { saveCompanySettings } from "@/app/(app)/setup/actions";
-import { fiscalPeriodForDate, formatFinancialYearLabel, monthName } from "@/lib/fiscal";
+import {
+  fiscalPeriodForDate,
+  formatFinancialYearLabel,
+  monthName,
+} from "@/lib/fiscal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,10 +24,10 @@ export default async function SetupPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Setup</h1>
+        <h1 className="text-2xl font-semibold">Company Parameters</h1>
         <p className="text-sm opacity-75">
-          Configure your company info, department, VAT rate, invoice prefix, financial year, and optional agro-themed
-          appearance.
+          Configure company information, department, VAT rate, invoice prefix,
+          financial year, and optional agro-themed appearance.
         </p>
       </div>
 
@@ -53,8 +57,9 @@ export default async function SetupPage() {
             className="rounded-md border border-border bg-transparent px-3 py-2"
           />
           <div className="text-xs opacity-70">
-            Use a path to a file in <span className="font-mono">public</span> (starts with{" "}
-            <span className="font-mono">/</span>) or a direct image URL. Leave blank for text only.
+            Use a path to a file in <span className="font-mono">public</span>{" "}
+            (starts with <span className="font-mono">/</span>) or a direct image
+            URL. Leave blank for text only.
           </div>
         </div>
 
@@ -70,14 +75,15 @@ export default async function SetupPage() {
             className="rounded-md border border-border bg-transparent px-3 py-2"
           />
           <div className="text-xs opacity-70">
-            Shown in the app shell, delivery order PDFs, and confirm dialogs (e.g. division or unit name).
-            {" "}
-            Optional <span className="font-medium">service</span> lines (e.g. retail counter) are{" "}
-            <span className="font-medium">per user</span> and edited under{" "}
+            Shown in the app shell, delivery order PDFs,sales Invoices/receipts
+            and confirm dialogs.
+            <span className="font-medium">Services</span> (e.g Palm Oil Sales,
+            Rubber Sales etc) are <span className="font-medium">per user</span>{" "}
+            and edited under{" "}
             <a className="underline underline-offset-4" href="/users">
               Users
             </a>
-            ; department stays company-wide.
+            .
           </div>
         </div>
 
@@ -154,8 +160,9 @@ export default async function SetupPage() {
             })}
           </select>
           <div className="text-xs opacity-70">
-            Month <span className="font-medium">1</span> of the financial year begins on the first day of this calendar
-            month. Choose January if your financial year matches the calendar year.
+            Month <span className="font-medium">1</span> of the financial year
+            begins on the first day of this calendar month. Choose January if
+            your financial year matches the calendar year.
           </div>
         </div>
 
@@ -173,14 +180,23 @@ export default async function SetupPage() {
             <option value="agro">Agro — green and yellow</option>
           </select>
           <div className="text-xs opacity-70">
-            Company-wide look for the web app. Users see the change after save (or on next visit).
+            Company-wide look for the web app. Users see the change after save
+            (or on next visit).
           </div>
         </div>
 
         <div className="rounded-lg border border-border bg-accent/30 px-4 py-3 text-sm space-y-1">
-          <div className="font-medium">Today’s fiscal period (preview, from start month)</div>
+          <div className="font-medium">
+            Today’s fiscal period (preview, from start month)
+          </div>
           <p className="opacity-90">
-            FY <span className="font-semibold tabular-nums">{formatFinancialYearLabel(currentFy.financialYear, settings.fiscalYearStartMonth)}</span>
+            FY{" "}
+            <span className="font-semibold tabular-nums">
+              {formatFinancialYearLabel(
+                currentFy.financialYear,
+                settings.fiscalYearStartMonth,
+              )}
+            </span>
             {" · "}
             Fiscal month{" "}
             <span className="font-semibold tabular-nums">
@@ -189,7 +205,8 @@ export default async function SetupPage() {
             /12
           </p>
           <p className="text-xs opacity-75">
-            Posting uses explicit financial year dates and calendar working months under{" "}
+            Posting uses explicit financial year dates and calendar working
+            months under{" "}
             <a className="underline underline-offset-4" href="/financial-years">
               Financial years
             </a>
@@ -205,7 +222,8 @@ export default async function SetupPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">User accounts</h2>
         <p className="text-sm opacity-75">
-          Administrators manage usernames, passwords, roles, sales points, and optional per-user service under{" "}
+          Administrators manage usernames, passwords, roles, sales points, and
+          optional per-user service under{" "}
           <a className="underline underline-offset-4" href="/users">
             Users
           </a>
@@ -213,26 +231,35 @@ export default async function SetupPage() {
           <span className="font-mono text-xs">admin</span> /{" "}
           <span className="font-mono text-xs">admin</span> and{" "}
           <span className="font-mono text-xs">clerk</span> /{" "}
-          <span className="font-mono text-xs">clerk</span> (clerk is tied to the first sales point if
-          one exists).
+          <span className="font-mono text-xs">clerk</span> (clerk is tied to the
+          first sales point if one exists).
         </p>
         <div className="rounded-lg border border-border p-4">
           {users.length === 0 ? (
             <div className="text-sm opacity-75">
-              No users yet. Saving settings will create default Admin and Clerk users.
+              No users yet. Saving settings will create default Admin and Clerk
+              users.
             </div>
           ) : (
             <ul className="text-sm space-y-1">
               {users.map((u) => (
-                <li key={u.id} className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <li
+                  key={u.id}
+                  className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+                >
                   <div className="min-w-0">
                     <span>
-                      <span className="font-mono text-xs opacity-80">{u.username}</span>
+                      <span className="font-mono text-xs opacity-80">
+                        {u.username}
+                      </span>
                       <span className="mx-1 opacity-40">·</span>
                       {u.name}
                     </span>
                     {u.service?.trim() ? (
-                      <div className="text-xs opacity-70 truncate" title={u.service}>
+                      <div
+                        className="text-xs opacity-70 truncate"
+                        title={u.service}
+                      >
                         Service: {u.service}
                       </div>
                     ) : null}
@@ -247,4 +274,3 @@ export default async function SetupPage() {
     </div>
   );
 }
-

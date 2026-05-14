@@ -7,7 +7,7 @@ import { getOrInitCompanySettings } from "@/lib/settings";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import {
-  getOrInitSalesBudgetMonthPhaseProfile,
+  getOrInitProductSalesBudgetMonthPhaseProfile,
   profileRowToPercentDecimals,
   sumProfilePercents,
 } from "@/lib/sales-budget-profile";
@@ -27,6 +27,16 @@ function parsePct(raw: string): Prisma.Decimal {
 
 export async function saveSalesBudgetPhaseProfile(formData: FormData) {
   await assertPermissionKey("route:/setup/sales-budget");
+  const financialYear = parseFinancialYear(formData);
+  const productId = parseProductId(formData);
+
+  const fy = await getFinancialYearPeriodByYear(financialYear);
+  if (!fy) {
+    throw new Error(
+      `Financial year ${financialYear} is not defined. Create it under Financial years first.`,
+    );
+  }
+
   const pcts: Prisma.Decimal[] = [];
   for (let i = 1; i <= 12; i++) {
     const key = `pctM${String(i).padStart(2, "0")}` as const;
@@ -39,10 +49,13 @@ export async function saveSalesBudgetPhaseProfile(formData: FormData) {
   }
 
   const prisma = getPrismaClient();
-  await prisma.salesBudgetMonthPhaseProfile.upsert({
-    where: { id: "default" },
+  await prisma.productSalesBudgetMonthPhaseProfile.upsert({
+    where: {
+      financialYear_productId: { financialYear, productId },
+    },
     create: {
-      id: "default",
+      financialYear,
+      productId,
       pctM01: pcts[0]!,
       pctM02: pcts[1]!,
       pctM03: pcts[2]!,
@@ -153,13 +166,14 @@ export async function deleteProductSalesBudget(formData: FormData) {
 export async function previewSalesBudgetPhaseAction(formData: FormData): Promise<SalesBudgetPhaseResult> {
   await assertPermissionKey("route:/setup/sales-budget");
   const financialYear = parseFinancialYear(formData);
+  const productId = parseProductId(formData);
   const annualQtyKg = parseQtyKg(formData);
   const budgetUnitPricePerKg = parsePrice(formData);
 
   const [fy, settings, profile] = await Promise.all([
     getFinancialYearPeriodByYear(financialYear),
     getOrInitCompanySettings(),
-    getOrInitSalesBudgetMonthPhaseProfile(),
+    getOrInitProductSalesBudgetMonthPhaseProfile(financialYear, productId),
   ]);
 
   if (!fy) {

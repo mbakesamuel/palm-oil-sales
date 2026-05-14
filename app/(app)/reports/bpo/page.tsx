@@ -139,10 +139,10 @@ export default async function BpoReportPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Stock on hand</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+        <div className="rounded-lg border border-border overflow-hidden">
           <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10">
+              <tr className="border-b border-border">
                 <th className="text-left px-3 py-2">Sales point</th>
                 <th className="text-left px-3 py-2">Variant</th>
                 <th className="text-right px-3 py-2">Qty units</th>
@@ -150,7 +150,7 @@ export default async function BpoReportPage() {
             </thead>
             <tbody>
               {stock.map((r) => (
-                <tr key={`${r.salesPoint}-${r.variant}`} className="border-b border-black/5 dark:border-white/5">
+                <tr key={`${r.salesPoint}-${r.variant}`} className="border-b border-border">
                   <td className="px-3 py-2">{r.salesPoint}</td>
                   <td className="px-3 py-2">{r.variant}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmt(r.qty)}</td>
@@ -166,10 +166,10 @@ export default async function BpoReportPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Consignment pipeline and movements</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-x-auto">
+        <div className="rounded-lg border border-border overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm border-collapse">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10">
+              <tr className="border-b border-border">
                 <th className="text-left px-3 py-2">Voucher</th>
                 <th className="text-left px-3 py-2">Type</th>
                 <th className="text-left px-3 py-2">Status</th>
@@ -181,7 +181,7 @@ export default async function BpoReportPage() {
             </thead>
             <tbody>
               {movements.map((m) => (
-                <tr key={m.id} className="border-b border-black/5 dark:border-white/5 align-top">
+                <tr key={m.id} className="border-b border-border align-top">
                   <td className="px-3 py-2 font-mono text-xs">{m.voucherNo}</td>
                   <td className="px-3 py-2">{m.movementType === BpoMovementType.CONSIGNMENT_TRANSFER ? "Consignment" : m.reason ?? m.movementType}</td>
                   <td className="px-3 py-2">{m.status}</td>
@@ -217,10 +217,10 @@ export default async function BpoReportPage() {
           <span className="font-medium tabular-nums">{xaf(salesTotals.net)}</span> · Gross:{" "}
           <span className="font-medium tabular-nums">{xaf(salesTotals.gross)}</span>
         </p>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-x-auto">
+        <div className="rounded-lg border border-border overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm border-collapse">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10">
+              <tr className="border-b border-border">
                 <th className="text-left px-3 py-2">Invoice</th>
                 <th className="text-left px-3 py-2">Date</th>
                 <th className="text-left px-3 py-2">Customer</th>
@@ -231,7 +231,7 @@ export default async function BpoReportPage() {
             </thead>
             <tbody>
               {saleLines.map((l) => (
-                <tr key={l.id} className="border-b border-black/5 dark:border-white/5">
+                <tr key={l.id} className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs">{l.sale.invoiceNo}</td>
                   <td className="px-3 py-2 tabular-nums">{l.sale.soldAt.toISOString().slice(0, 10)}</td>
                   <td className="px-3 py-2">{l.sale.customerNameSnapshot}</td>

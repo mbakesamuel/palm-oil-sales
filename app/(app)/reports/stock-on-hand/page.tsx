@@ -264,11 +264,11 @@ export default async function StockOnHandReportPage() {
               {!scopedToSalesPoint ? (
                 <h2 className="text-lg font-semibold">{sec.sp.name}</h2>
               ) : null}
-              <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+              <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-black/10 dark:border-white/10 text-left">
-                      <th className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-neutral-950 z-10 border-r border-black/10 dark:border-white/10">
+                    <tr className="border-b border-border text-left">
+                      <th className="px-3 py-2 font-medium sticky left-0 bg-background z-10 border-r border-border">
                         Storage location
                       </th>
                       {sec.productCols.map((pc) => (
@@ -280,7 +280,7 @@ export default async function StockOnHandReportPage() {
                           <span className="block text-[10px] font-normal opacity-60">kg</span>
                         </th>
                       ))}
-                      <th className="px-3 py-2 font-medium text-right whitespace-nowrap border-l border-black/10 dark:border-white/10">
+                      <th className="px-3 py-2 font-medium text-right whitespace-nowrap border-l border-border">
                         Row total
                         <span className="block text-[10px] font-normal opacity-60">kg</span>
                       </th>
@@ -290,9 +290,9 @@ export default async function StockOnHandReportPage() {
                     {sec.bodyRows.map(({ loc, cells, rowSum }) => (
                       <tr
                         key={loc.id}
-                        className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                        className="border-b border-border odd:bg-foreground/[0.04]"
                       >
-                        <td className="px-3 py-2 font-medium sticky left-0 bg-white dark:bg-neutral-950 z-10 border-r border-black/5 dark:border-white/5">
+                        <td className="px-3 py-2 font-medium sticky left-0 bg-background z-10 border-r border-border">
                           {loc.name}
                         </td>
                         {cells.map((q, i) => (
@@ -300,15 +300,15 @@ export default async function StockOnHandReportPage() {
                             {q.gt(0) ? fmtKg(q) : "—"}
                           </td>
                         ))}
-                        <td className="px-3 py-2 text-right tabular-nums font-medium border-l border-black/5 dark:border-white/5">
+                        <td className="px-3 py-2 text-right tabular-nums font-medium border-l border-border">
                           {rowSum.gt(0) ? fmtKg(rowSum) : "—"}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-black/15 font-medium dark:border-white/15">
-                      <td className="px-3 py-2 sticky left-0 bg-white dark:bg-neutral-950 z-10 border-r border-black/10 dark:border-white/10">
+                    <tr className="border-t-2 border-border font-medium">
+                      <td className="px-3 py-2 sticky left-0 bg-background z-10 border-r border-border">
                         Column total
                       </td>
                       {sec.footerColTotals.map((t, i) => (
@@ -316,7 +316,7 @@ export default async function StockOnHandReportPage() {
                           {t.gt(0) ? fmtKg(t) : "—"}
                         </td>
                       ))}
-                      <td className="px-3 py-2 text-right tabular-nums border-l border-black/15 dark:border-white/15">
+                      <td className="px-3 py-2 text-right tabular-nums border-l border-border">
                         {fmtKg(sec.sectionGrand)}
                       </td>
                     </tr>
@@ -334,10 +334,10 @@ export default async function StockOnHandReportPage() {
           <p className="text-sm opacity-75">
             Total remaining kg by product grade across every collection point in scope.
           </p>
-          <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                <tr className="border-b border-border text-left">
                   <th className="px-3 py-2 font-medium">Grade</th>
                   <th className="px-3 py-2 font-medium text-right">Remaining (kg)</th>
                 </tr>
@@ -346,7 +346,7 @@ export default async function StockOnHandReportPage() {
                 {summaryByGrade.rows.map((r) => (
                   <tr
                     key={r.productId}
-                    className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                    className="border-b border-border odd:bg-foreground/[0.04]"
                   >
                     <td className="px-3 py-2">{r.gradeLabel}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmtKg(r.qtyKg)}</td>
@@ -354,7 +354,7 @@ export default async function StockOnHandReportPage() {
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-black/15 font-medium dark:border-white/15">
+                <tr className="border-t-2 border-border font-medium">
                   <td className="px-3 py-2">Total</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtKg(summaryByGrade.total)}</td>
                 </tr>

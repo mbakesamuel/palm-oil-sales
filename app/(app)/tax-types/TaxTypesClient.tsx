@@ -122,7 +122,7 @@ export function TaxTypesClient(props: {
         <button
           type="button"
           onClick={openAddTypeModal}
-          className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+          className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
         >
           Add tax type
         </button>
@@ -139,7 +139,7 @@ export function TaxTypesClient(props: {
             role="dialog"
             aria-modal="true"
             aria-labelledby="tax-type-modal-title"
-            className="relative z-10 w-full max-w-lg rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-xl shadow-black/10 dark:shadow-black/40 p-5 sm:p-6 space-y-4 max-h-[min(90vh,32rem)] overflow-y-auto"
+            className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-background shadow-xl shadow-black/10 dark:shadow-black/40 p-5 sm:p-6 space-y-4 max-h-[min(90vh,32rem)] overflow-y-auto"
           >
             <div className="flex items-start justify-between gap-3">
               <h2 id="tax-type-modal-title" className="text-lg font-semibold">
@@ -148,7 +148,7 @@ export function TaxTypesClient(props: {
               <button
                 type="button"
                 onClick={closeTypeModal}
-                className="rounded-md p-1 text-sm opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
+                className="rounded-md p-1 text-sm opacity-70 hover:opacity-100 hover:bg-accent/25"
                 aria-label="Close"
               >
                 ✕
@@ -171,7 +171,7 @@ export function TaxTypesClient(props: {
                   name="code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   placeholder="e.g. VAT"
                   required
                   autoFocus
@@ -186,7 +186,7 @@ export function TaxTypesClient(props: {
                   name="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   required
                 />
               </div>
@@ -199,17 +199,17 @@ export function TaxTypesClient(props: {
                   name="sortOrder"
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 w-32"
+                  className="rounded-md border border-border bg-transparent px-3 py-2 w-32"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+                <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
                   {editingTypeId ? "Save type" : "Add type"}
                 </button>
                 <button
                   type="button"
                   onClick={closeTypeModal}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm"
+                  className="rounded-md border border-border px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
@@ -226,7 +226,7 @@ export function TaxTypesClient(props: {
             setRateTaxTypeId(null);
             setRateEditId(null);
           }}
-          className="space-y-3 max-w-xl rounded-lg border border-black/10 dark:border-white/10 p-4"
+          className="space-y-3 max-w-xl rounded-lg border border-border p-4"
         >
           <h2 className="text-lg font-semibold">
             {rateEditId ? "Edit rate row" : "Add rate row"}
@@ -239,7 +239,7 @@ export function TaxTypesClient(props: {
               name="variant"
               value={rateVariant}
               onChange={(e) => setRateVariant(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
             >
               <option value="DEFAULT">Default</option>
               <option value="SIMPLIFIED">Simplified</option>
@@ -257,7 +257,7 @@ export function TaxTypesClient(props: {
               name="effectiveFrom"
               value={rateEffective}
               onChange={(e) => setRateEffective(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
               required
             />
           </div>
@@ -267,18 +267,18 @@ export function TaxTypesClient(props: {
               name="rate"
               value={rateValue}
               onChange={(e) => setRateValue(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
               placeholder="0.1925"
               required
             />
           </div>
           <div className="flex gap-2">
-            <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+            <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
               Save rate
             </button>
             <button
               type="button"
-              className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm"
+              className="rounded-md border border-border px-4 py-2 text-sm"
               onClick={() => {
                 setRateTaxTypeId(null);
                 setRateEditId(null);
@@ -299,7 +299,7 @@ export function TaxTypesClient(props: {
             {types.map((t) => (
               <li
                 key={t.id}
-                className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-3"
+                className="rounded-lg border border-border p-4 space-y-3"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -313,14 +313,14 @@ export function TaxTypesClient(props: {
                     <button
                       type="button"
                       onClick={() => startEditType(t)}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs"
                     >
                       Edit type
                     </button>
                     <button
                       type="button"
                       onClick={() => openNewRate(t.id)}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs"
                     >
                       Add rate
                     </button>
@@ -340,7 +340,7 @@ export function TaxTypesClient(props: {
                   {t.rateSchedules.length === 0 ? (
                     <div className="text-xs opacity-70">No rates — sales for this tax will error.</div>
                   ) : (
-                    <ul className="divide-y divide-black/10 dark:divide-white/10 border border-black/10 dark:border-white/10 rounded-md overflow-hidden">
+                    <ul className="divide-y divide-border border border-border rounded-md overflow-hidden">
                       {t.rateSchedules.map((r) => (
                         <li
                           key={r.id}

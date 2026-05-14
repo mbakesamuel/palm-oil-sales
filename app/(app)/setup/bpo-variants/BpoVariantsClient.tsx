@@ -69,7 +69,7 @@ export function BpoVariantsClient(props: {
               await saveVariantAction(formData);
               setVariantDraft(null);
             }}
-            className="space-y-4 rounded-lg border border-black/10 dark:border-white/10 p-4"
+            className="space-y-4 rounded-lg border border-border p-4"
           >
             <h2 className="font-semibold">{variantDraft ? "Edit variant" : "Add variant"}</h2>
             {variantDraft ? <input type="hidden" name="id" value={variantDraft.id} /> : null}
@@ -78,7 +78,7 @@ export function BpoVariantsClient(props: {
               <select
                 name="productId"
                 defaultValue={defaultProductId}
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
                 required
               >
                 {products.map((p) => (
@@ -94,7 +94,7 @@ export function BpoVariantsClient(props: {
                 name="name"
                 defaultValue={variantDraft?.name ?? ""}
                 placeholder="1L bottle, 5L bottle"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
                 required
               />
             </div>
@@ -104,7 +104,7 @@ export function BpoVariantsClient(props: {
                 <input
                   name="unitLabel"
                   defaultValue={variantDraft?.unitLabel ?? "Bottle"}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                 />
               </div>
               <div className="grid gap-1">
@@ -114,7 +114,7 @@ export function BpoVariantsClient(props: {
                   inputMode="decimal"
                   defaultValue={variantDraft?.unitQuantity ?? ""}
                   placeholder="Optional, e.g. 5"
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                 />
               </div>
             </div>
@@ -123,14 +123,14 @@ export function BpoVariantsClient(props: {
               Active
             </label>
             <div className="flex gap-2">
-              <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+              <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
                 Save variant
               </button>
               {variantDraft ? (
                 <button
                   type="button"
                   onClick={() => setVariantDraft(null)}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm"
+                  className="rounded-md border border-border px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
@@ -144,7 +144,7 @@ export function BpoVariantsClient(props: {
               await savePriceAction(formData);
               setPriceDraft(null);
             }}
-            className="space-y-4 rounded-lg border border-black/10 dark:border-white/10 p-4"
+            className="space-y-4 rounded-lg border border-border p-4"
           >
             <h2 className="font-semibold">{priceDraft ? "Edit price" : "Add variant price"}</h2>
             {priceDraft ? <input type="hidden" name="id" value={priceDraft.id} /> : null}
@@ -153,7 +153,7 @@ export function BpoVariantsClient(props: {
               <select
                 name="productVariantId"
                 defaultValue={defaultVariantId}
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
                 required
               >
                 {variants.map((v) => (
@@ -170,7 +170,7 @@ export function BpoVariantsClient(props: {
                   type="date"
                   name="effectiveFrom"
                   defaultValue={priceDraft?.effectiveFromIso ?? ""}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   required
                 />
               </div>
@@ -180,7 +180,7 @@ export function BpoVariantsClient(props: {
                   name="unitPriceExTax"
                   inputMode="decimal"
                   defaultValue={priceDraft?.unitPriceExTax ?? ""}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   required
                 />
               </div>
@@ -188,7 +188,7 @@ export function BpoVariantsClient(props: {
             <div className="flex gap-2">
               <button
                 disabled={variants.length === 0}
-                className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+                className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 Save price
               </button>
@@ -196,7 +196,7 @@ export function BpoVariantsClient(props: {
                 <button
                   type="button"
                   onClick={() => setPriceDraft(null)}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm"
+                  className="rounded-md border border-border px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
@@ -208,9 +208,9 @@ export function BpoVariantsClient(props: {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Variants</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+        <div className="rounded-lg border border-border overflow-hidden">
           {variants.map((v) => (
-            <div key={v.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm border-b border-black/10 dark:border-white/10 last:border-0">
+            <div key={v.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm border-b border-border last:border-0">
               <div className="col-span-4 font-medium">{v.productName} - {v.name}</div>
               <div className="col-span-3 opacity-75">
                 {v.unitLabel}
@@ -237,9 +237,9 @@ export function BpoVariantsClient(props: {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Price schedules</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+        <div className="rounded-lg border border-border overflow-hidden">
           {prices.map((p) => (
-            <div key={p.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm border-b border-black/10 dark:border-white/10 last:border-0">
+            <div key={p.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm border-b border-border last:border-0">
               <div className="col-span-5 font-medium">{p.variantLabel}</div>
               <div className="col-span-3 tabular-nums">{p.effectiveFromIso}</div>
               <div className="col-span-2 text-right tabular-nums">{p.unitPriceExTax}</div>

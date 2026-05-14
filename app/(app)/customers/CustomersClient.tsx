@@ -115,7 +115,7 @@ export function CustomersClient(props: {
       </div>
 
       {taxRegimes.length === 0 ? (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
+        <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Tax regimes required</div>
           <p className="opacity-80 mt-1">
             Create at least one tax regime before adding customers.
@@ -133,7 +133,7 @@ export function CustomersClient(props: {
           type="button"
           disabled={taxRegimes.length === 0}
           onClick={openCreate}
-          className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+          className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
         >
           Add customer
         </button>
@@ -150,7 +150,7 @@ export function CustomersClient(props: {
             role="dialog"
             aria-modal="true"
             aria-labelledby="customer-modal-title"
-            className="relative z-10 w-full max-w-3xl rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-xl shadow-black/10 dark:shadow-black/40 p-5 sm:p-6 space-y-4 max-h-[min(90vh,42rem)] overflow-y-auto"
+            className="relative z-10 w-full max-w-3xl rounded-xl border border-border bg-background shadow-xl shadow-black/10 dark:shadow-black/40 p-5 sm:p-6 space-y-4 max-h-[min(90vh,42rem)] overflow-y-auto"
           >
             <div className="flex items-start justify-between gap-3">
               <h2 id="customer-modal-title" className="text-lg font-semibold">
@@ -159,7 +159,7 @@ export function CustomersClient(props: {
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-md p-1 text-sm opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
+                className="rounded-md p-1 text-sm opacity-70 hover:opacity-100 hover:bg-accent/25"
                 aria-label="Close"
               >
                 ✕
@@ -185,7 +185,7 @@ export function CustomersClient(props: {
                     name="name"
                     value={form.name}
                     onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                     required
                     autoFocus
                   />
@@ -202,7 +202,7 @@ export function CustomersClient(props: {
                     onChange={(e) =>
                       setForm((p) => ({ ...p, phone: e.target.value }))
                     }
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                   />
                 </div>
 
@@ -218,7 +218,7 @@ export function CustomersClient(props: {
                     onChange={(e) =>
                       setForm((p) => ({ ...p, email: e.target.value }))
                     }
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                   />
                 </div>
 
@@ -233,7 +233,7 @@ export function CustomersClient(props: {
                     onChange={(e) =>
                       setForm((p) => ({ ...p, address: e.target.value }))
                     }
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                   />
                 </div>
 
@@ -251,7 +251,7 @@ export function CustomersClient(props: {
                         customerType: e.target.value as CustomerType,
                       }))
                     }
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                   >
                     <option value="INDUSTRY">Industry</option>
                     <option value="WHOLE_SALE">Whole sale</option>
@@ -274,7 +274,7 @@ export function CustomersClient(props: {
                         residency: e.target.value as CustomerResidency,
                       }))
                     }
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                   >
                     <option value="LOCAL">Local</option>
                     <option value="OVERSEAS">Overseas</option>
@@ -292,7 +292,7 @@ export function CustomersClient(props: {
                     onChange={(e) =>
                       setForm((p) => ({ ...p, taxRegimeId: e.target.value }))
                     }
-                    className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                    className="rounded-md border border-border bg-transparent px-3 py-2"
                     disabled={taxRegimes.length === 0}
                   >
                     {taxRegimes.map((tr) => (
@@ -338,7 +338,7 @@ export function CustomersClient(props: {
                       onChange={(e) =>
                         setForm((p) => ({ ...p, taxpayerId: e.target.value }))
                       }
-                      className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                      className="rounded-md border border-border bg-transparent px-3 py-2"
                     />
                   </div>
                 ) : null}
@@ -347,14 +347,14 @@ export function CustomersClient(props: {
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
                   disabled={taxRegimes.length === 0}
-                  className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+                  className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
                 >
                   {editingId ? "Save changes" : "Add customer"}
                 </button>
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm"
+                  className="rounded-md border border-border px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
@@ -366,8 +366,8 @@ export function CustomersClient(props: {
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">All customers</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
             <div className="col-span-3">Name</div>
             <div className="col-span-2">Phone</div>
             <div className="col-span-2">Type</div>
@@ -379,7 +379,7 @@ export function CustomersClient(props: {
           {customers.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No customers yet.</div>
           ) : (
-            <ul className="divide-y divide-black/10 dark:divide-white/10">
+            <ul className="divide-y divide-border">
               {customers.map((c) => (
                 <li
                   key={c.id}
@@ -404,7 +404,7 @@ export function CustomersClient(props: {
                     <button
                       type="button"
                       onClick={() => startEdit(c)}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
                     >
                       Edit
                     </button>

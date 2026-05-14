@@ -84,22 +84,22 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-desc"
-        className="relative z-10 w-full max-w-md rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-950 shadow-xl shadow-black/10 dark:shadow-black/40"
+        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-background text-foreground shadow-xl shadow-black/10 dark:shadow-black/40"
       >
         <div className="p-5 sm:p-6 space-y-4">
           <div className="space-y-1.5">
-            <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="text-xs font-semibold uppercase tracking-wide text-foreground/60">
               {brandingEyebrow}
             </div>
             <h2
               id="confirm-dialog-title"
-              className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+              className="text-lg font-semibold text-foreground"
             >
               {title}
             </h2>
             <p
               id="confirm-dialog-desc"
-              className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed"
+              className="text-sm text-foreground/80 leading-relaxed"
             >
               {description}
             </p>
@@ -109,7 +109,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
               type="button"
               disabled={busy}
               onClick={onCancel}
-              className="rounded-lg border border-black/15 dark:border-white/15 px-4 py-2.5 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
             >
               {cancelLabel}
             </button>
@@ -121,7 +121,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
                 "rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50",
                 confirmTone === "danger"
                   ? "bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
-                  : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white",
+                  : "bg-brand text-brand-foreground hover:opacity-90",
               ].join(" ")}
             >
               {busy ? "Please wait…" : confirmLabel}

@@ -288,7 +288,7 @@ export default async function BpoStockCrossReportPage(props: {
 
       <form
         method="GET"
-        className="print:hidden flex flex-wrap items-end gap-3 rounded-lg border border-black/10 dark:border-white/10 p-4"
+        className="print:hidden flex flex-wrap items-end gap-3 rounded-lg border border-border p-4"
       >
         <div className="flex flex-row justify-between w-full items-end gap-3">
           <div className="flex justify-between items-end gap-3">
@@ -298,10 +298,10 @@ export default async function BpoStockCrossReportPage(props: {
                 type="date"
                 name="asOf"
                 defaultValue={asOf.iso}
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
               />
             </label>
-            <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+            <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
               View report
             </button>
           </div>
@@ -311,10 +311,10 @@ export default async function BpoStockCrossReportPage(props: {
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
+      <div className="overflow-hidden rounded-lg border border-border">
         <table className="w-full table-fixed text-xs border-collapse">
           <thead>
-            <tr className="border-b border-black/10 dark:border-white/10">
+            <tr className="border-b border-border">
               <th className="w-[18%] text-left px-2 py-2">Sales point</th>
               {variantColumns.map((variant) => (
                 <th
@@ -331,7 +331,7 @@ export default async function BpoStockCrossReportPage(props: {
             {rows.map((row) => (
               <tr
                 key={row.salesPoint.id}
-                className="border-b border-black/5 dark:border-white/5"
+                className="border-b border-border"
               >
                 <td className="px-2 py-2 font-medium leading-tight wrap-break-word">
                   {row.salesPoint.name}
@@ -349,7 +349,7 @@ export default async function BpoStockCrossReportPage(props: {
                 </td>
               </tr>
             ))}
-            <tr className="border-t border-black/20 font-semibold">
+            <tr className="border-t border-foreground/25 font-semibold">
               <td className="px-2 py-2">Total</td>
               {columnTotals.map((qty, idx) => (
                 <td
@@ -377,10 +377,10 @@ export default async function BpoStockCrossReportPage(props: {
             litres, 3x5 = 15 litres.
           </p>
         </div>
-        <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
+        <div className="overflow-hidden rounded-lg border border-border">
           <table className="w-full table-fixed text-xs border-collapse">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10">
+              <tr className="border-b border-border">
                 <th className="w-[18%] text-left px-2 py-2">Sales point</th>
                 {variantColumns.map((variant) => (
                   <th
@@ -397,7 +397,7 @@ export default async function BpoStockCrossReportPage(props: {
               {kgRows.map((row) => (
                 <tr
                   key={row.salesPoint.id}
-                  className="border-b border-black/5 dark:border-white/5"
+                  className="border-b border-border"
                 >
                   <td className="px-2 py-2 font-medium leading-tight wrap-break-word">
                     {row.salesPoint.name}
@@ -415,7 +415,7 @@ export default async function BpoStockCrossReportPage(props: {
                   </td>
                 </tr>
               ))}
-              <tr className="border-t border-black/20 font-semibold">
+              <tr className="border-t border-foreground/25 font-semibold">
                 <td className="px-2 py-2">Total kg</td>
                 {kgColumnTotals.map((qty, idx) => (
                   <td

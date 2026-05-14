@@ -342,13 +342,13 @@ export default async function DailySalesSummaryPage(props: {
             type="date"
             defaultValue={selectedIso ?? ""}
             disabled={!monthFilter}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm disabled:opacity-50"
+            className="rounded-md border border-border bg-transparent px-3 py-2 text-sm disabled:opacity-50"
           />
         </div>
         <button
           type="submit"
           disabled={!monthFilter}
-          className="rounded-md border border-black/15 bg-black/5 dark:bg-white/10 px-4 py-2 text-sm font-medium hover:bg-black/10 dark:hover:bg-white/15 disabled:opacity-50"
+          className="rounded-md border border-border bg-foreground/[0.08] px-4 py-2 text-sm font-medium hover:bg-accent/35 disabled:opacity-50"
         >
           Apply
         </button>
@@ -361,10 +361,10 @@ export default async function DailySalesSummaryPage(props: {
         </div>
       ) : null}
 
-      <div className="w-full min-w-0 rounded-lg border border-black/10 dark:border-white/10 overflow-x-auto">
+      <div className="w-full min-w-0 rounded-lg border border-border overflow-x-auto">
         <table className="w-full min-w-208 border-collapse text-sm">
           <thead>
-            <tr className="border-b border-black/10 dark:border-white/10 text-left">
+            <tr className="border-b border-border text-left">
               <th className="px-2 py-2 font-medium">Customer</th>
               <th className="px-2 py-2 font-medium">DO no.</th>
               <th className="px-2 py-2 font-medium">DO issued</th>
@@ -383,7 +383,7 @@ export default async function DailySalesSummaryPage(props: {
               return (
                 <tr
                   key={s.id}
-                  className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                  className="border-b border-border odd:bg-foreground/[0.04]"
                 >
                   <td className="px-2 py-2 max-w-56 truncate" title={s.customerNameSnapshot}>
                     {s.customerNameSnapshot}
@@ -424,10 +424,10 @@ export default async function DailySalesSummaryPage(props: {
           <h2 className="text-sm font-semibold">
             Summary by customer type (validated sales, day)
           </h2>
-          <div className="w-full max-w-md rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+          <div className="w-full max-w-md rounded-lg border border-border overflow-hidden">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-black/10 dark:border-white/10 text-left bg-black/3 dark:bg-white/5">
+                <tr className="border-b border-border text-left bg-foreground/[0.06]">
                   <th className="px-3 py-2 font-medium">Customer type</th>
                   <th className="px-3 py-2 font-medium text-right">Qty (kg)</th>
                 </tr>
@@ -439,7 +439,7 @@ export default async function DailySalesSummaryPage(props: {
                   return (
                     <tr
                       key={t}
-                      className="border-b border-black/5 dark:border-white/5"
+                      className="border-b border-border"
                     >
                       <td className="px-3 py-2">{CUSTOMER_TYPE_LABELS[t]}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
@@ -448,7 +448,7 @@ export default async function DailySalesSummaryPage(props: {
                     </tr>
                   );
                 })}
-                <tr className="font-medium border-t-2 border-black/15 dark:border-white/15">
+                <tr className="font-medium border-t-2 border-border">
                   <td className="px-3 py-2">Grand total</td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKg(grandQty)}

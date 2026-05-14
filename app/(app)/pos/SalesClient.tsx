@@ -723,7 +723,7 @@ export function SalesClient(props: {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-5 space-y-3">
+      <div className="rounded-lg border border-border p-4 sm:p-5 space-y-3">
         <div className="text-sm font-semibold">Open existing invoice</div>
         <p className="text-xs opacity-75">
           Enter the invoice number (e.g. PO-2026-000001) to load it.
@@ -734,7 +734,7 @@ export function SalesClient(props: {
               Invoice no.
             </label>
             <input
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
               value={lookupNo}
               onChange={(e) => setLookupNo(e.target.value)}
               placeholder="PO-2026-000001"
@@ -744,21 +744,21 @@ export function SalesClient(props: {
             type="button"
             disabled={busy !== null || !lookupNo.trim()}
             onClick={() => void onLoadByNo()}
-            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {busy === "load" ? "Loading…" : "Load invoice"}
           </button>
           <button
             type="button"
             onClick={resetNew}
-            className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
           >
             New sale
           </button>
           {saleId ? (
             <Link
               href={`/sales/${saleId}`}
-              className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm text-center hover:bg-black/5 dark:hover:bg-white/5"
+              className="rounded-md border border-border px-4 py-2 text-sm text-center hover:bg-accent/25"
             >
               View / print
             </Link>
@@ -766,7 +766,7 @@ export function SalesClient(props: {
         </div>
       </div>
 
-      <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-4">
+      <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Sale (invoice)</h2>
@@ -821,7 +821,7 @@ export function SalesClient(props: {
           <div className="grid gap-2">
             <label className="text-sm font-medium">Customer</label>
             <select
-              className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2"
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
               disabled={saleId != null}
@@ -860,7 +860,7 @@ export function SalesClient(props: {
               Reference no. (optional)
             </label>
             <input
-              className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2"
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
               placeholder="Voucher / customer ref"
@@ -876,7 +876,7 @@ export function SalesClient(props: {
             {session?.salesPoint ? (
               <>
                 <input
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                   value={session.salesPoint.name}
                   readOnly
                 />
@@ -887,7 +887,7 @@ export function SalesClient(props: {
             ) : (
               <>
                 <select
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2"
                   value={salesPointId}
                   onChange={(e) => setSalesPointId(e.target.value)}
                   disabled={saleId != null}
@@ -911,7 +911,7 @@ export function SalesClient(props: {
             <label className="text-sm font-medium">Sale date</label>
             <input
               type="date"
-              className="w-full max-w-xs rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="w-full max-w-xs rounded-md border border-border bg-transparent px-3 py-2"
               value={transactionDate}
               min={transactionDateBounds?.minIso}
               max={transactionDateBounds?.maxIso}
@@ -932,7 +932,7 @@ export function SalesClient(props: {
             <div className="grid gap-2">
               <label className="text-sm font-medium">Vehicle number</label>
               <input
-                className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="w-full rounded-md border border-border bg-transparent px-3 py-2"
                 value={vehicleNumber}
                 onChange={(e) => setVehicleNumber(e.target.value)}
                 placeholder="Registration / fleet id"
@@ -946,7 +946,7 @@ export function SalesClient(props: {
                 <span className="font-normal opacity-70">(optional)</span>
               </label>
               <input
-                className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="w-full rounded-md border border-border bg-transparent px-3 py-2"
                 value={deliveryOrderNo}
                 onChange={(e) => setDeliveryOrderNo(e.target.value)}
                 placeholder="Link to delivery order for qty control"
@@ -956,7 +956,7 @@ export function SalesClient(props: {
           </div>
 
           {deliveryOrderNo.trim() ? (
-            <div className="rounded-lg border border-black/10 dark:border-white/10 p-3 text-sm space-y-2 sm:col-span-2">
+            <div className="rounded-lg border border-border p-3 text-sm space-y-2 sm:col-span-2">
               <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
                 Delivery order control
               </div>
@@ -1012,7 +1012,7 @@ export function SalesClient(props: {
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs border-collapse min-w-[320px]">
                         <thead>
-                          <tr className="border-b border-black/15 dark:border-white/15">
+                          <tr className="border-b border-border">
                             <th className="text-left py-1.5 pr-2 font-medium">
                               Product
                             </th>
@@ -1031,7 +1031,7 @@ export function SalesClient(props: {
                           {doLookupData.perProduct.map((r) => (
                             <tr
                               key={r.productId}
-                              className="border-b border-black/10 dark:border-white/10"
+                              className="border-b border-border"
                             >
                               <td className="py-1.5 pr-2">{r.productName}</td>
                               <td className="text-right tabular-nums py-1.5 px-1">
@@ -1090,8 +1090,8 @@ export function SalesClient(props: {
             for the transaction date.
           </p>
 
-          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
               <div className="col-span-5">Product</div>
               <div className="col-span-3">Qty</div>
               <div className="col-span-3">Price (ex tax)</div>
@@ -1104,7 +1104,7 @@ export function SalesClient(props: {
               >
                 <div className="col-span-5">
                   <select
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                    className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                     value={l.productId}
                     onChange={(e) =>
                       setLines((prev) =>
@@ -1133,7 +1133,7 @@ export function SalesClient(props: {
                 </div>
                 <div className="col-span-3">
                   <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                    className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                     value={l.qtyKg}
                     inputMode="decimal"
                     onChange={(e) =>
@@ -1148,7 +1148,7 @@ export function SalesClient(props: {
                 </div>
                 <div className="col-span-3 space-y-0.5 min-w-0 pt-0.5">
                   <input
-                    className="w-full rounded-md border border-black/10 dark:border-white/10 bg-black/3 dark:bg-white/6 px-2 py-1"
+                    className="w-full rounded-md border border-border bg-foreground/[0.06] px-2 py-1"
                     value={l.unitPricePerKg}
                     inputMode="decimal"
                     readOnly
@@ -1189,7 +1189,7 @@ export function SalesClient(props: {
                   <span className="tabular-nums">{row.amount.toFixed(2)}</span>
                 </div>
               ))}
-              <div className="flex justify-between font-semibold border-t border-black/10 dark:border-white/10 pt-2 mt-2">
+              <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
                 <span>Gross</span>
                 <span className="tabular-nums">{displayGross.toFixed(2)}</span>
               </div>
@@ -1219,8 +1219,8 @@ export function SalesClient(props: {
             </button>
           </div>
 
-          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden divide-y divide-black/10 dark:divide-white/10">
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 bg-black/2 dark:bg-white/3">
+          <div className="rounded-lg border border-border overflow-hidden divide-y divide-border">
+            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 bg-foreground/[0.04]">
               <div className="col-span-3">Method</div>
               <div className="col-span-3">Amount</div>
               <div className="col-span-5">Instrument / bank</div>
@@ -1231,7 +1231,7 @@ export function SalesClient(props: {
                 <div className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-3">
                     <select
-                      className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                      className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                       value={p.method}
                       onChange={(e) =>
                         setPayments((prev) =>
@@ -1261,7 +1261,7 @@ export function SalesClient(props: {
                   </div>
                   <div className="col-span-3">
                     <input
-                      className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                      className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                       value={p.amount}
                       inputMode="decimal"
                       onChange={(e) =>
@@ -1300,7 +1300,7 @@ export function SalesClient(props: {
                         Cheque #
                       </label>
                       <input
-                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                         value={p.chequeNo ?? ""}
                         placeholder="Cheque number"
                         onChange={(e) =>
@@ -1317,7 +1317,7 @@ export function SalesClient(props: {
                         Bank
                       </label>
                       <input
-                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                         value={p.bank ?? ""}
                         placeholder="Drawee bank"
                         onChange={(e) =>
@@ -1338,7 +1338,7 @@ export function SalesClient(props: {
                         Traite no.
                       </label>
                       <input
-                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                         value={p.traiteNo ?? ""}
                         placeholder="Traite number"
                         onChange={(e) =>
@@ -1355,7 +1355,7 @@ export function SalesClient(props: {
                         Bank
                       </label>
                       <input
-                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                         value={p.bank ?? ""}
                         placeholder="Issuing bank"
                         onChange={(e) =>
@@ -1373,7 +1373,7 @@ export function SalesClient(props: {
                       </label>
                       <input
                         type="date"
-                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                         value={p.traiteIssuedOn ?? ""}
                         onChange={(e) =>
                           setPayments((prev) =>
@@ -1392,7 +1392,7 @@ export function SalesClient(props: {
                       </label>
                       <input
                         type="date"
-                        className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                         value={p.traiteMaturityOn ?? ""}
                         onChange={(e) =>
                           setPayments((prev) =>
@@ -1439,7 +1439,7 @@ export function SalesClient(props: {
                 Boolean(taxPreviewError)
               }
               onClick={() => void onSaveSale()}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {busy === "save"
                 ? "Saving…"
@@ -1453,7 +1453,7 @@ export function SalesClient(props: {
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void onValidate()}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
                 >
                   {busy === "validate" ? "Validating…" : "Validate invoice"}
                 </button>

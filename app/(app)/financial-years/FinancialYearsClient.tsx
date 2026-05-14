@@ -67,7 +67,7 @@ export function FinancialYearsClient(props: {
         </p>
       </div>
 
-      <section className="space-y-3 rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6">
+      <section className="space-y-3 rounded-lg border border-border p-4 sm:p-6">
         <h2 className="text-lg font-semibold">Your working month</h2>
         <p className="text-sm opacity-80">
           Open year:{" "}
@@ -100,8 +100,8 @@ export function FinancialYearsClient(props: {
                   className={[
                     "rounded-md border px-3 py-2 text-left text-sm transition-colors",
                     active
-                      ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                      : "border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5",
+                      ? "border-brand bg-brand text-brand-foreground"
+                      : "border-border hover:bg-accent/25",
                   ].join(" ")}
                 >
                   <div className="font-medium tabular-nums">{row.label}</div>
@@ -113,7 +113,7 @@ export function FinancialYearsClient(props: {
       </section>
 
       {canManage ? (
-        <section className="space-y-4 rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6">
+        <section className="space-y-4 rounded-lg border border-border p-4 sm:p-6">
           <h2 className="text-lg font-semibold">Financial year calendar (admin / manager)</h2>
           <p className="text-sm opacity-75">
             Close the current year before opening another. For a <span className="font-medium">new</span>{" "}
@@ -137,7 +137,7 @@ export function FinancialYearsClient(props: {
                 max={2100}
                 value={yearToOpen}
                 onChange={(e) => setYearToOpen(e.target.value)}
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                className="rounded-md border border-border bg-transparent px-3 py-2"
                 required
               />
             </div>
@@ -153,7 +153,7 @@ export function FinancialYearsClient(props: {
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   disabled={openRow != null}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 disabled:opacity-50"
+                  className="rounded-md border border-border bg-transparent px-3 py-2 disabled:opacity-50"
                 />
               </div>
               <div className="grid gap-1">
@@ -167,14 +167,14 @@ export function FinancialYearsClient(props: {
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   disabled={openRow != null}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 disabled:opacity-50"
+                  className="rounded-md border border-border bg-transparent px-3 py-2 disabled:opacity-50"
                 />
               </div>
             </div>
             <button
               type="submit"
               disabled={openRow != null}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50 w-fit"
+              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50 w-fit"
             >
               Open year
             </button>
@@ -187,7 +187,7 @@ export function FinancialYearsClient(props: {
           ) : null}
         </section>
       ) : (
-        <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm opacity-80">
+        <section className="rounded-lg border border-border p-4 text-sm opacity-80">
           Only <span className="font-medium">admin</span> or <span className="font-medium">manager</span>{" "}
           can open or close financial years.
         </section>
@@ -195,8 +195,8 @@ export function FinancialYearsClient(props: {
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">All periods</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
             <div className="col-span-1">FY</div>
             <div className="col-span-2">From</div>
             <div className="col-span-2">To</div>
@@ -207,7 +207,7 @@ export function FinancialYearsClient(props: {
           {periods.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No financial years recorded yet.</div>
           ) : (
-            <ul className="divide-y divide-black/10 dark:divide-white/10">
+            <ul className="divide-y divide-border">
               {periods.map((p) => (
                 <li
                   key={p.id}

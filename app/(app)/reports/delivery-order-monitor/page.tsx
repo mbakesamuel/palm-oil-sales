@@ -195,12 +195,12 @@ export default async function DeliveryOrderMonitorPage(props: {
             name="no"
             defaultValue={lookupNo}
             placeholder="e.g. DO-2026-000001"
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm font-mono"
+            className="rounded-md border border-border bg-transparent px-3 py-2 text-sm font-mono"
           />
         </div>
         <button
           type="submit"
-          className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium shrink-0"
+          className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium shrink-0"
         >
           Look up
         </button>
@@ -221,7 +221,7 @@ export default async function DeliveryOrderMonitorPage(props: {
 
       {order ? (
         <>
-          <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-3 print:break-inside-avoid">
+          <section className="rounded-lg border border-border p-4 sm:p-6 space-y-3 print:break-inside-avoid">
             <h2 className="text-lg font-semibold">Delivery order</h2>
             <div className="grid gap-2 sm:grid-cols-2 text-sm">
               <div>
@@ -272,10 +272,10 @@ export default async function DeliveryOrderMonitorPage(props: {
               ) : null}
             </div>
 
-            <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+            <div className="overflow-x-auto rounded-md border border-border">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                  <tr className="border-b border-border text-left">
                     <th className="px-3 py-2 font-medium">Product</th>
                     <th className="px-3 py-2 font-medium text-right">Qty</th>
                     <th className="px-3 py-2 font-medium">Unit</th>
@@ -286,7 +286,7 @@ export default async function DeliveryOrderMonitorPage(props: {
                   {order.details.map((d) => (
                     <tr
                       key={d.id}
-                      className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                      className="border-b border-border odd:bg-foreground/[0.04]"
                     >
                       <td className="px-3 py-2">
                         <span className="font-medium">{d.product.productName}</span>
@@ -301,7 +301,7 @@ export default async function DeliveryOrderMonitorPage(props: {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-black/15 dark:border-white/15 font-medium">
+                  <tr className="border-t border-border font-medium">
                     <td className="px-3 py-2">DO total</td>
                     <td className="px-3 py-2 text-right tabular-nums">{doTotalQty}</td>
                     <td className="px-3 py-2" />
@@ -312,7 +312,7 @@ export default async function DeliveryOrderMonitorPage(props: {
             </div>
           </section>
 
-          <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-3 print:break-inside-avoid">
+          <section className="rounded-lg border border-border p-4 sm:p-6 space-y-3 print:break-inside-avoid">
             <h2 className="text-lg font-semibold">Sales history (this DO no.)</h2>
             {scopedToSalesPoint ? (
               <p className="text-xs opacity-75">
@@ -322,10 +322,10 @@ export default async function DeliveryOrderMonitorPage(props: {
             {sales.length === 0 ? (
               <p className="text-sm opacity-75">No sales invoices reference this delivery order yet.</p>
             ) : (
-              <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+              <div className="overflow-x-auto rounded-md border border-border">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                    <tr className="border-b border-border text-left">
                       <th className="px-3 py-2 font-medium">Invoice</th>
                       <th className="px-3 py-2 font-medium">Date</th>
                       <th className="px-3 py-2 font-medium">Status</th>
@@ -346,7 +346,7 @@ export default async function DeliveryOrderMonitorPage(props: {
                       return (
                         <tr
                           key={s.id}
-                          className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2 align-top"
+                          className="border-b border-border odd:bg-foreground/[0.04] align-top"
                         >
                           <td className="px-3 py-2 font-mono text-xs font-medium">{s.invoiceNo}</td>
                           <td className="px-3 py-2 tabular-nums whitespace-nowrap">
@@ -380,7 +380,7 @@ export default async function DeliveryOrderMonitorPage(props: {
             )}
           </section>
 
-          <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-3 print:break-inside-avoid">
+          <section className="rounded-lg border border-border p-4 sm:p-6 space-y-3 print:break-inside-avoid">
             <h2 className="text-lg font-semibold">Summary</h2>
             <p className="text-xs opacity-75 max-w-3xl">
               <span className="font-medium">Invoiced</span> uses only <span className="font-medium">VALIDATED</span>{" "}
@@ -388,10 +388,10 @@ export default async function DeliveryOrderMonitorPage(props: {
               <span className="font-medium">kg</span>; compare to the DO line qty when your document unit is
               also kg (or convert outside the app).
             </p>
-            <div className="overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
+            <div className="overflow-x-auto rounded-md border border-border">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                  <tr className="border-b border-border text-left">
                     <th className="px-3 py-2 font-medium">Product</th>
                     <th className="px-3 py-2 font-medium text-right">DO qty</th>
                     <th className="px-3 py-2 font-medium">Unit</th>
@@ -403,7 +403,7 @@ export default async function DeliveryOrderMonitorPage(props: {
                   {productRows.map((r) => (
                     <tr
                       key={r.productId}
-                      className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                      className="border-b border-border odd:bg-foreground/[0.04]"
                     >
                       <td className="px-3 py-2">{r.productName}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.doQty}</td>
@@ -416,7 +416,7 @@ export default async function DeliveryOrderMonitorPage(props: {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-black/15 dark:border-white/15 font-medium">
+                  <tr className="border-t-2 border-border font-medium">
                     <td className="px-3 py-2">Totals</td>
                     <td className="px-3 py-2 text-right tabular-nums">{doTotalQty}</td>
                     <td className="px-3 py-2" />
@@ -429,16 +429,16 @@ export default async function DeliveryOrderMonitorPage(props: {
               </table>
             </div>
             <div className="grid gap-2 sm:grid-cols-3 text-sm max-w-3xl">
-              <div className="rounded-md border border-black/10 dark:border-white/10 px-3 py-2">
+              <div className="rounded-md border border-border px-3 py-2">
                 <div className="text-xs opacity-70">DO total (XAF)</div>
                 <div className="text-lg font-semibold tabular-nums">{xaf(doTotalAmount)}</div>
               </div>
-              <div className="rounded-md border border-black/10 dark:border-white/10 px-3 py-2">
+              <div className="rounded-md border border-border px-3 py-2">
                 <div className="text-xs opacity-70">Invoiced gross — validated (XAF)</div>
                 <div className="text-lg font-semibold tabular-nums">{xaf(invoicedGross)}</div>
                 <div className="text-[11px] opacity-60 mt-0.5">Net {xaf(invoicedNet)}</div>
               </div>
-              <div className="rounded-md border border-black/10 dark:border-white/10 px-3 py-2">
+              <div className="rounded-md border border-border px-3 py-2">
                 <div className="text-xs opacity-70">Balance (DO − invoiced gross)</div>
                 <div className="text-lg font-semibold tabular-nums">{xaf(balanceAmount)}</div>
               </div>

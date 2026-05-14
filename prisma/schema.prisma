@@ -107,26 +107,31 @@ model FinancialYearPeriod {
   @@map("FinancialYearPeriod")
 }
 
-/// Global monthly percentage weights (fiscal months 1–12) for sales budget quantity phasing; must sum to 100.
-model SalesBudgetMonthPhaseProfile {
-  id        String   @id @default("default")
-  /// Percent for fiscal month 1 … 12 (e.g. 8.333333 for one-twelfth).
-  pctM01    Decimal  @db.Decimal(10, 6)
-  pctM02    Decimal  @db.Decimal(10, 6)
-  pctM03    Decimal  @db.Decimal(10, 6)
-  pctM04    Decimal  @db.Decimal(10, 6)
-  pctM05    Decimal  @db.Decimal(10, 6)
-  pctM06    Decimal  @db.Decimal(10, 6)
-  pctM07    Decimal  @db.Decimal(10, 6)
-  pctM08    Decimal  @db.Decimal(10, 6)
-  pctM09    Decimal  @db.Decimal(10, 6)
-  pctM10    Decimal  @db.Decimal(10, 6)
-  pctM11    Decimal  @db.Decimal(10, 6)
-  pctM12    Decimal  @db.Decimal(10, 6)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/// Monthly percentage weights (fiscal months 1–12) per product and financial year; must sum to 100.
+model ProductSalesBudgetMonthPhaseProfile {
+  id              String   @id @default(cuid())
+  financialYear   Int
+  productId       Int
+  pctM01          Decimal  @db.Decimal(10, 6)
+  pctM02          Decimal  @db.Decimal(10, 6)
+  pctM03          Decimal  @db.Decimal(10, 6)
+  pctM04          Decimal  @db.Decimal(10, 6)
+  pctM05          Decimal  @db.Decimal(10, 6)
+  pctM06          Decimal  @db.Decimal(10, 6)
+  pctM07          Decimal  @db.Decimal(10, 6)
+  pctM08          Decimal  @db.Decimal(10, 6)
+  pctM09          Decimal  @db.Decimal(10, 6)
+  pctM10          Decimal  @db.Decimal(10, 6)
+  pctM11          Decimal  @db.Decimal(10, 6)
+  pctM12          Decimal  @db.Decimal(10, 6)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  @@map("SalesBudgetMonthPhaseProfile")
+  product Product @relation(fields: [productId], references: [productId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([financialYear, productId])
+  @@index([financialYear])
+  @@map("ProductSalesBudgetMonthPhaseProfile")
 }
 
 /// Annual sales budget per product and financial year (company-wide).
@@ -368,8 +373,9 @@ model Product {
   batches              Batch[]
   saleLines            SaleLine[]
   deliveryOrderDetails DeliveryOrderDetails[]
-  salesBudgets         ProductSalesBudget[]
-  unitPriceSchedules   ProductUnitPriceSchedule[]
+  salesBudgets                ProductSalesBudget[]
+  salesBudgetPhaseProfiles    ProductSalesBudgetMonthPhaseProfile[]
+  unitPriceSchedules          ProductUnitPriceSchedule[]
   variants             ProductVariant[]
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt

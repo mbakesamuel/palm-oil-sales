@@ -8,10 +8,13 @@ export function WorkingPeriodBanner() {
 
   if (wp.openFinancialYear == null) {
     return (
-      <div className="mb-4 rounded-lg border border-amber-600/40 bg-amber-600/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-200 print:hidden">
+      <div className="rounded-lg border border-accent/60 bg-accent/35 px-4 py-3 text-sm text-foreground print:hidden">
         <span className="font-medium">No financial year is open.</span> Sales and delivery orders
         cannot be posted until an admin or manager opens a year under{" "}
-        <Link href="/financial-years" className="underline underline-offset-4">
+        <Link
+          href="/financial-years"
+          className="font-medium text-brand underline underline-offset-4 hover:opacity-90"
+        >
           Financial years
         </Link>
         .
@@ -20,14 +23,14 @@ export function WorkingPeriodBanner() {
   }
 
   return (
-    <div className="mb-4 flex flex-col gap-2 rounded-lg border border-black/10 dark:border-white/10 px-4 py-3 text-sm print:hidden sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-2 rounded-lg border border-accent/50 bg-accent/20 px-4 py-3 text-sm text-foreground print:hidden sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <span className="opacity-70">Your posting period</span>{" "}
+        <span className="opacity-80">Financial year (Posting period):</span>{" "}
         <span className="font-medium tabular-nums">{wp.fyLabel}</span>
-        <span className="opacity-70"> · </span>
+        <span className="opacity-80"> · </span>
         <span className="font-medium">{wp.workingMonthLabel}</span>
         {wp.workingMonthStartIso && wp.workingMonthEndIso ? (
-          <span className="opacity-70">
+          <span className="opacity-80">
             {" "}
             ({wp.workingMonthStartIso}–{wp.workingMonthEndIso})
           </span>
@@ -35,7 +38,7 @@ export function WorkingPeriodBanner() {
       </div>
       <Link
         href="/financial-years"
-        className="text-xs underline underline-offset-4 opacity-80 hover:opacity-100 shrink-0"
+        className="text-xs font-medium text-brand underline underline-offset-4 hover:opacity-90 shrink-0"
       >
         Change working month
       </Link>

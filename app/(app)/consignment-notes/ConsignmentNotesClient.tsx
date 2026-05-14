@@ -288,14 +288,14 @@ export function ConsignmentNotesClient(props: {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-5 space-y-4">
+      <div className="rounded-lg border border-border p-4 sm:p-5 space-y-4">
         <div className="text-sm font-semibold">Open</div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium opacity-70">Sale invoice no.</label>
             <div className="flex flex-wrap gap-2 items-end">
               <input
-                className="flex-1 min-w-[10rem] rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="flex-1 min-w-[10rem] rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={invoiceLookup}
                 onChange={(e) => setInvoiceLookup(e.target.value)}
                 placeholder="PO-…"
@@ -304,7 +304,7 @@ export function ConsignmentNotesClient(props: {
                 type="button"
                 disabled={busy !== null || !invoiceLookup.trim()}
                 onClick={() => void onLoadByInvoice()}
-                className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+                className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 {busy === "inv" ? "Loading…" : "Load sale"}
               </button>
@@ -314,7 +314,7 @@ export function ConsignmentNotesClient(props: {
             <label className="text-xs font-medium opacity-70">VCN no.</label>
             <div className="flex flex-wrap gap-2 items-end">
               <input
-                className="flex-1 min-w-[10rem] rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="flex-1 min-w-[10rem] rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={vcnLookup}
                 onChange={(e) => setVcnLookup(e.target.value)}
                 placeholder="VCN-2026-000001"
@@ -323,7 +323,7 @@ export function ConsignmentNotesClient(props: {
                 type="button"
                 disabled={busy !== null || !vcnLookup.trim()}
                 onClick={() => void onLoadByVcn()}
-                className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25 disabled:opacity-50"
               >
                 {busy === "vcn" ? "Loading…" : "Load note"}
               </button>
@@ -333,7 +333,7 @@ export function ConsignmentNotesClient(props: {
       </div>
 
       {saleId ? (
-        <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-4">
+        <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold">Sale & delivery order context</h2>
@@ -350,7 +350,7 @@ export function ConsignmentNotesClient(props: {
             {noteId ? (
               <Link
                 href={`/consignment-notes/${noteId}`}
-                className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
               >
                 View / print
               </Link>
@@ -402,7 +402,7 @@ export function ConsignmentNotesClient(props: {
             </div>
           </div>
 
-          <div className="rounded-md border border-black/10 dark:border-white/10 p-3 grid grid-cols-3 gap-2 text-xs sm:text-sm">
+          <div className="rounded-md border border-border p-3 grid grid-cols-3 gap-2 text-xs sm:text-sm">
             <div>
               <div className="opacity-70">Paid (DO)</div>
               <div className="font-medium tabular-nums">{paidQty}</div>
@@ -422,7 +422,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1 sm:col-span-2">
               <label className="text-sm font-medium">To (destination)</label>
               <textarea
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm min-h-[4rem]"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm min-h-[4rem]"
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 disabled={draftLocked}
@@ -433,7 +433,7 @@ export function ConsignmentNotesClient(props: {
               <label className="text-sm font-medium">Date of lifting</label>
               <input
                 type="date"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={dateOfLifting}
                 onChange={(e) => setDateOfLifting(e.target.value)}
                 disabled={draftLocked}
@@ -442,7 +442,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1">
               <label className="text-sm font-medium">Vehicle no.</label>
               <input
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={vehicleNumber}
                 onChange={(e) => setVehicleNumber(e.target.value)}
                 disabled={draftLocked}
@@ -451,7 +451,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1">
               <label className="text-sm font-medium">Consigner (staff at sales point)</label>
               <input
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={consignerName}
                 onChange={(e) => setConsignerName(e.target.value)}
                 disabled={draftLocked}
@@ -461,7 +461,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1">
               <label className="text-sm font-medium">Consigner designation</label>
               <input
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={consignerDesignation}
                 onChange={(e) => setConsignerDesignation(e.target.value)}
                 disabled={draftLocked}
@@ -472,7 +472,7 @@ export function ConsignmentNotesClient(props: {
               <label className="text-sm font-medium">Date of consignment</label>
               <input
                 type="date"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={dateOfConsignment}
                 onChange={(e) => setDateOfConsignment(e.target.value)}
                 disabled={draftLocked}
@@ -481,7 +481,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1">
               <label className="text-sm font-medium">Receiver name</label>
               <input
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={receiverName}
                 onChange={(e) => setReceiverName(e.target.value)}
                 disabled={draftLocked}
@@ -490,7 +490,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1">
               <label className="text-sm font-medium">Receiver NIC no.</label>
               <input
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={receiverNicNo}
                 onChange={(e) => setReceiverNicNo(e.target.value)}
                 disabled={draftLocked}
@@ -499,7 +499,7 @@ export function ConsignmentNotesClient(props: {
             <div className="grid gap-1 sm:col-span-2">
               <label className="text-sm font-medium">Place of issue (NIC)</label>
               <input
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={receiverNicPlaceOfIssue}
                 onChange={(e) => setReceiverNicPlaceOfIssue(e.target.value)}
                 disabled={draftLocked}
@@ -509,7 +509,7 @@ export function ConsignmentNotesClient(props: {
               <label className="text-sm font-medium">Received date (optional)</label>
               <input
                 type="date"
-                className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                 value={receivedDate}
                 onChange={(e) => setReceivedDate(e.target.value)}
                 disabled={draftLocked}
@@ -522,7 +522,7 @@ export function ConsignmentNotesClient(props: {
               type="button"
               disabled={saveDisabled}
               onClick={() => void onSave()}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {busy === "save" ? "Saving…" : noteId ? "Save changes" : "Save (create note)"}
             </button>
@@ -541,7 +541,7 @@ export function ConsignmentNotesClient(props: {
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void onValidate()}
-                className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
               >
                 {busy === "val" ? "Validating…" : "Validate"}
               </button>

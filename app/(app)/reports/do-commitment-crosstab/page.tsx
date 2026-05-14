@@ -240,11 +240,11 @@ export default async function DoCommitmentCrosstabPage() {
       {orders.length === 0 ? (
         <p className="text-sm opacity-75">No validated delivery orders in scope.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10 print:break-inside-avoid">
+        <div className="overflow-x-auto rounded-lg border border-border print:break-inside-avoid">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10 text-left align-bottom">
-                <th className="sticky left-0 z-10 bg-white px-3 py-2 font-medium dark:bg-neutral-950">
+              <tr className="border-b border-border text-left align-bottom">
+                <th className="sticky left-0 z-10 bg-background px-3 py-2 font-medium">
                   Customer - product
                 </th>
                 {salesPoints.map((sp) => (
@@ -256,7 +256,7 @@ export default async function DoCommitmentCrosstabPage() {
                     {sp.name}
                   </th>
                 ))}
-                <th className="border-l border-black/10 px-3 py-2 text-right font-medium dark:border-white/10">
+                <th className="border-l border-border px-3 py-2 text-right font-medium">
                   Row total
                 </th>
               </tr>
@@ -269,9 +269,9 @@ export default async function DoCommitmentCrosstabPage() {
                 return (
                   <tr
                     key={rk}
-                    className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                    className="border-b border-border odd:bg-foreground/[0.04]"
                   >
-                    <td className="sticky left-0 z-10 max-w-[min(28rem,55vw)] bg-white px-3 py-2 font-medium dark:bg-neutral-950">
+                    <td className="sticky left-0 z-10 max-w-[min(28rem,55vw)] bg-background px-3 py-2 font-medium">
                       <span className="whitespace-normal">{rowLabel.get(rk) ?? rk}</span>
                     </td>
                     {salesPoints.map((sp) => {
@@ -291,7 +291,7 @@ export default async function DoCommitmentCrosstabPage() {
                         </td>
                       );
                     })}
-                    <td className="border-l border-black/10 px-3 py-2 text-right font-medium tabular-nums dark:border-white/10">
+                    <td className="border-l border-border px-3 py-2 text-right font-medium tabular-nums">
                       {fmtQty(rowTotals.get(rk) ?? z)}
                     </td>
                   </tr>
@@ -299,8 +299,8 @@ export default async function DoCommitmentCrosstabPage() {
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-black/15 font-medium dark:border-white/15">
-                <td className="sticky left-0 z-10 bg-white px-3 py-2 dark:bg-neutral-950">
+              <tr className="border-t-2 border-border font-medium">
+                <td className="sticky left-0 z-10 bg-background px-3 py-2">
                   Column totals
                 </td>
                 {salesPoints.map((sp) => (
@@ -308,7 +308,7 @@ export default async function DoCommitmentCrosstabPage() {
                     {fmtQty(colTotals.get(sp.id) ?? z)}
                   </td>
                 ))}
-                <td className="border-l border-black/10 px-3 py-2 text-right tabular-nums dark:border-white/10">
+                <td className="border-l border-border px-3 py-2 text-right tabular-nums">
                   {fmtQty(grandTotal)}
                 </td>
               </tr>

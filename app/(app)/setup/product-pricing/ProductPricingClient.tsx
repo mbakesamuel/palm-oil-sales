@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { PrintButton } from "@/components/PrintButton";
+import { ReportHeader } from "@/components/ReportHeader";
 import { MAIN_PRODUCT_CATEGORY_ID } from "@/lib/pricing/constants";
 import { CustomerType } from "@/lib/domain";
 
@@ -47,12 +49,23 @@ function labelCustomerType(ct: string | null) {
 }
 
 export function ProductPricingClient(props: {
+  companyName: string;
+  department: string | null;
+  logoUrl?: string | null;
   products: ProductOpt[];
   schedules: ScheduleRow[];
   saveScheduleAction: (formData: FormData) => void | Promise<void>;
   deleteScheduleAction: (formData: FormData) => void | Promise<void>;
 }) {
-  const { products, schedules, saveScheduleAction, deleteScheduleAction } = props;
+  const {
+    companyName,
+    department,
+    logoUrl,
+    products,
+    schedules,
+    saveScheduleAction,
+    deleteScheduleAction,
+  } = props;
   const router = useRouter();
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
@@ -99,14 +112,23 @@ export function ProductPricingClient(props: {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
+      <div className="hidden print:block">
+        <ReportHeader
+          companyName={companyName}
+          department={department}
+          logoSrc={logoUrl}
+          title="Product pricing"
+        />
+      </div>
+
+      <div className="space-y-1 print:hidden">
         <h1 className="text-2xl font-semibold">Product pricing</h1>
         <p className="text-sm opacity-75">
           Ex-tax unit prices by effective date.{" "}
           <span className="font-medium">Main</span> category products (category id{" "}
           {MAIN_PRODUCT_CATEGORY_ID}) are priced per customer type; other categories use one direct
           price per product. Operational screens resolve the latest row on or before the document
-          date. Only administrators can edit this page. Prices are those approved by the General Manager of the corporation
+          date. Only administrators can edit this page. Prices are those approved by the General Manager of the corporation.
         </p>
         <p className="text-sm opacity-75">
           Manage the catalog under{" "}
@@ -121,15 +143,16 @@ export function ProductPricingClient(props: {
         </p>
       </div>
 
-      {products.length === 0 ? (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
-          Add products before scheduling prices.
+      {products.length === 0 ? ( 
+        <div className="rounded-lg border border-border p-4 text-sm">
+          Add products before scheduling price effective date.
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+          <PrintButton label="Print report" />
           <button
             type="button"
-            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
             onClick={() => {
               setBanner(null);
               openAddForm();
@@ -137,7 +160,7 @@ export function ProductPricingClient(props: {
           >
             Add price row
           </button>
-          <p className="text-sm opacity-75">Create or edit scheduled unit prices.</p>
+        {/*   <p className="text-xs opacity-75">Create or edit scheduled unit prices.</p> */}
         </div>
       )}
 
@@ -169,12 +192,13 @@ export function ProductPricingClient(props: {
             aria-label="Close"
             onClick={closeForm}
           />
-          <div className="relative mx-auto mt-24 w-[min(42rem,calc(100vw-2rem))] rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-black p-4 shadow-lg">
+
+          <div className="relative mx-auto mt-24 w-[min(42rem,calc(100vw-2rem))] rounded-lg border border-border bg-background text-foreground p-4 shadow-lg">
             <div className="flex items-start justify-between gap-4">
               <div className="font-medium">{editingId ? "Edit price row" : "Add price row"}</div>
               <button
                 type="button"
-                className="rounded-md border border-black/15 dark:border-white/15 px-3 py-1.5 text-sm"
+                className="rounded-md border border-border px-3 py-1.5 text-sm"
                 onClick={closeForm}
               >
                 Close
@@ -213,7 +237,7 @@ export function ProductPricingClient(props: {
                   name="productId"
                   value={productId}
                   onChange={(e) => setProductId(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   required
                 >
                   <option value="" disabled>
@@ -237,7 +261,7 @@ export function ProductPricingClient(props: {
                   name="customerType"
                   value={isMainProduct ? customerType : ""}
                   onChange={(e) => setCustomerType(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   disabled={!productId || !isMainProduct}
                   required={!!productId && isMainProduct}
                 >
@@ -266,7 +290,7 @@ export function ProductPricingClient(props: {
                   type="date"
                   value={effectiveFrom}
                   onChange={(e) => setEffectiveFrom(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   required
                 />
               </div>
@@ -280,7 +304,7 @@ export function ProductPricingClient(props: {
                   name="unitPriceExTax"
                   value={unitPriceExTax}
                   onChange={(e) => setUnitPriceExTax(e.target.value)}
-                  className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+                  className="rounded-md border border-border bg-transparent px-3 py-2"
                   inputMode="decimal"
                   required
                 />
@@ -289,14 +313,14 @@ export function ProductPricingClient(props: {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="submit"
-                  className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+                  className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
                 >
                   {editingId ? "Save changes" : "Add"}
                 </button>
                 {editingId ? (
                   <button
                     type="button"
-                    className="rounded-md border border-black/15 dark:border-white/15 px-4 py-2 text-sm"
+                    className="rounded-md border border-border px-4 py-2 text-sm"
                     onClick={resetForm}
                   >
                     Cancel edit
@@ -313,29 +337,29 @@ export function ProductPricingClient(props: {
         {schedules.length === 0 ? (
           <p className="text-sm opacity-75">No rows yet.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-black/10 dark:border-white/10 text-left">
+                <tr className="border-b border-border text-left">
                   <th className="p-2 font-medium">Product</th>
                   <th className="p-2 font-medium">Customer type</th>
                   <th className="p-2 font-medium">Effective from</th>
                   <th className="p-2 font-medium">Ex-tax unit</th>
-                  <th className="p-2 font-medium w-40">Actions</th>
+                  <th className="p-2 font-medium w-40 print:hidden">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {schedules.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-b border-black/5 dark:border-white/5 align-top"
+                    className="border-b border-border align-top"
                   >
                     <td className="p-2">{r.productName}</td>
                     <td className="p-2">{labelCustomerType(r.customerType)}</td>
                     <td className="p-2 tabular-nums">{r.effectiveFromIso}</td>
                     <td className="p-2 tabular-nums">{r.unitPriceExTax}</td>
-                    <td className="p-2">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="p-2 print:hidden">
+                      <div className="flex flex-wrap gap-5">
                         <button
                           type="button"
                           className="text-xs underline underline-offset-4"

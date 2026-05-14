@@ -56,6 +56,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/stock-on-hand"] = true;
   base["route:/reports/stock-vs-commitments"] = true;
   base["route:/reports/sales-budget-monthly-crosstab"] = true;
+  base["route:/reports/sales-budget-weekly-crosstab"] = true;
   base["route:/reports/pricing"] = true;
   base["route:/reports/bpo"] = true;
   base["route:/reports/bpo-sales-crosstab"] =

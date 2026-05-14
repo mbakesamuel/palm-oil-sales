@@ -19,7 +19,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/sales"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Sales register</div>
             <div className="text-sm opacity-75">Invoices, customers, net / VAT / gross (XAF).</div>
@@ -28,7 +28,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/daily-sales-summary"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Daily sales summary</div>
             <div className="text-sm opacity-75">
@@ -40,7 +40,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/delivery-orders"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Delivery orders</div>
             <div className="text-sm opacity-75">Recent delivery orders with line totals and fiscal period.</div>
@@ -49,7 +49,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/delivery-order-monitor"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Delivery order monitor</div>
             <div className="text-sm opacity-75">
@@ -60,7 +60,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/customer-delivery-monitor"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Delivery orders by customer</div>
             <div className="text-sm opacity-75">
@@ -71,7 +71,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/do-commitment-crosstab"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Commitment by Customer/Product</div>
             <div className="text-sm opacity-75">
@@ -83,7 +83,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/stock-on-hand"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Stock on hand</div>
             <div className="text-sm opacity-75">
@@ -95,7 +95,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/stock-vs-commitments"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Stock vs commitments</div>
             <div className="text-sm opacity-75">
@@ -107,7 +107,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/pricing"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Product pricing</div>
             <div className="text-sm opacity-75">
@@ -119,7 +119,7 @@ export default function ReportsIndexPage() {
         <li>
           <Link
             href="/reports/bpo"
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:bg-black/5 dark:hover:bg-white/5"
+            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
           >
             <div className="font-medium">Bottled Palm Oil monitor</div>
             <div className="text-sm opacity-75">

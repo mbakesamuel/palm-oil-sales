@@ -10,7 +10,7 @@ export function DashboardSessionCard() {
 
   if (status !== "ready") {
     return (
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm opacity-70">
+      <div className="rounded-lg border border-border p-4 text-sm opacity-70">
         Loading session…
       </div>
     );
@@ -31,7 +31,7 @@ export function DashboardSessionCard() {
   }
 
   return (
-    <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm space-y-1">
+    <div className="rounded-lg border border-border p-4 text-sm space-y-1">
       <div className="font-medium">Signed in as {session.username}</div>
       <div className="opacity-80">{roleLabel(session.role)}</div>
       {session.salesPoint ? (

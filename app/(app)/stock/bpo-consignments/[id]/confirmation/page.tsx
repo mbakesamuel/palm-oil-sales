@@ -50,8 +50,8 @@ export default async function BpoConsignmentConfirmationPrintPage(props: {
         <PrintButton label="Print confirmation receipt" />
       </div>
 
-      <article className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
-        <header className="border-b border-black/20 pb-4">
+      <article className="text-foreground bg-background max-w-3xl mx-auto print:max-w-none print:mx-0 print:text-black print:bg-white">
+        <header className="border-b border-border pb-4 print:border-black/20">
           <ReportHeader
             companyName={settings.companyName}
             department={settings.department}
@@ -71,13 +71,13 @@ export default async function BpoConsignmentConfirmationPrintPage(props: {
           </div>
         </header>
         <section className="mt-6 grid grid-cols-2 gap-4 text-sm">
-          <div className="rounded border border-black/15 p-3">
+          <div className="rounded border border-border p-3 print:border-black/15">
             <div className="text-xs uppercase text-black/60">
               Transferred from
             </div>
             <div className="mt-1 font-medium">{data.sourceSalesPointName}</div>
           </div>
-          <div className="rounded border border-black/15 p-3">
+          <div className="rounded border border-border p-3 print:border-black/15">
             <div className="text-xs uppercase text-black/60">Received at</div>
             <div className="mt-1 font-medium">
               {data.destinationSalesPointName}
@@ -88,7 +88,7 @@ export default async function BpoConsignmentConfirmationPrintPage(props: {
         <section className="mt-6">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-y border-black/20">
+              <tr className="border-y border-border print:border-black/20">
                 <th className="py-2 text-left font-medium">Variant</th>
                 <th className="py-2 text-right font-medium">Voucher qty</th>
                 <th className="py-2 text-right font-medium">Actual received</th>
@@ -96,7 +96,7 @@ export default async function BpoConsignmentConfirmationPrintPage(props: {
             </thead>
             <tbody>
               {data.lines.map((line) => (
-                <tr key={line.id} className="border-b border-black/10">
+                <tr key={line.id} className="border-b border-border print:border-black/10">
                   <td className="py-2">{line.variantLabel}</td>
                   <td className="py-2 text-right tabular-nums">
                     {line.voucherQtyUnits}
@@ -111,7 +111,7 @@ export default async function BpoConsignmentConfirmationPrintPage(props: {
         </section>
 
         {data.discrepancyNote ? (
-          <section className="mt-4 rounded border border-black/15 p-3 text-sm">
+          <section className="mt-4 rounded border border-border p-3 print:border-black/15 text-sm">
             <div className="font-medium">Discrepancy note</div>
             <p className="mt-1">{data.discrepancyNote}</p>
           </section>
@@ -129,11 +129,11 @@ export default async function BpoConsignmentConfirmationPrintPage(props: {
         </section>
 
         <section className="mt-16 grid grid-cols-3 gap-30 text-sm">
-          <div className="border-t border-black/40 pt-2 flex items-center justify-center">
+          <div className="border-t border-border pt-2 print:border-black/40 flex items-center justify-center">
             <p>Sales Clerk</p>
           </div>
           <div></div>
-          <div className="border-t border-black/40 pt-2 flex items-center justify-center">
+          <div className="border-t border-border pt-2 print:border-black/40 flex items-center justify-center">
             <p>Sales Supervisor</p>
           </div>
         </section>

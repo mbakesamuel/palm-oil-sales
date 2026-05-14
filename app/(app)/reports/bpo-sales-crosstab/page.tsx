@@ -114,7 +114,7 @@ function ReportCrosstabSection(props: {
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm opacity-75">{unitLabel}</p>
       </div>
-      <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10 print:border-black/20">
+      <div className="overflow-hidden rounded-lg border border-border print:border-black/20">
         <table className="w-full table-fixed border-collapse text-[9px] leading-tight print:text-black">
           <colgroup>
             <col className="w-[12%]" />
@@ -123,10 +123,10 @@ function ReportCrosstabSection(props: {
             ))}
           </colgroup>
           <thead>
-            <tr className="border-b border-black/10 dark:border-white/10 print:border-black/20">
+            <tr className="border-b border-border print:border-black/20">
               <th
                 rowSpan={2}
-                className="sticky left-0 z-20 bg-white px-1 py-2 text-left font-medium dark:bg-neutral-950 print:bg-white print:text-black"
+                className="sticky left-0 z-20 bg-background px-1 py-2 text-left font-medium print:bg-white print:text-black"
               >
                 BPO variant
               </th>
@@ -134,7 +134,7 @@ function ReportCrosstabSection(props: {
                 <th
                   key={financialMonth}
                   colSpan={2}
-                  className="border-l border-black/10 px-1 py-2 text-center font-medium dark:border-white/10"
+                  className="border-l border-border px-1 py-2 text-center font-medium"
                 >
                   {formatFiscalMonthCalendarLabel(
                     financialYear,
@@ -145,21 +145,21 @@ function ReportCrosstabSection(props: {
               ))}
               <th
                 colSpan={2}
-                className="border-l border-black/10 px-2 py-2 text-center font-medium dark:border-white/10"
+                className="border-l border-border px-2 py-2 text-center font-medium"
               >
                 Global total
               </th>
             </tr>
-            <tr className="border-b border-black/10 dark:border-white/10 print:border-black/20">
+            <tr className="border-b border-border print:border-black/20">
               {MONTHS.map((financialMonth) => (
                 <Fragment key={`heading-${financialMonth}`}>
-                  <th className="border-l border-black/10 px-1 py-1 text-right font-medium dark:border-white/10">
+                  <th className="border-l border-border px-1 py-1 text-right font-medium">
                     Month
                   </th>
                   <th className="px-1 py-1 text-right font-medium">To date</th>
                 </Fragment>
               ))}
-              <th className="border-l border-black/10 px-1 py-1 text-right font-medium dark:border-white/10">
+              <th className="border-l border-border px-1 py-1 text-right font-medium">
                 Total
               </th>
               <th className="px-1 py-1 text-right font-medium">To date</th>
@@ -174,14 +174,14 @@ function ReportCrosstabSection(props: {
               return (
                 <tr
                   key={row.variantId}
-                  className="border-b border-black/5 odd:bg-black/2 dark:border-white/5 dark:odd:bg-white/2 print:border-black/10 print:odd:bg-transparent"
+                  className="border-b border-border odd:bg-foreground/[0.04] print:border-black/10 print:odd:bg-transparent"
                 >
-                  <td className="sticky left-0 z-10 bg-white px-1 py-2 font-medium dark:bg-neutral-950 print:bg-white print:text-black">
+                  <td className="sticky left-0 z-10 bg-background px-1 py-2 font-medium print:bg-white print:text-black">
                     {row.label}
                   </td>
                   {MONTHS.map((financialMonth, idx) => (
                     <Fragment key={`${row.variantId}-${financialMonth}`}>
-                      <td className="border-l border-black/10 px-1 py-2 text-right tabular-nums dark:border-white/10">
+                      <td className="border-l border-border px-1 py-2 text-right tabular-nums">
                         {fmtCell(values[idx] ?? z, metric)}
                       </td>
                       <td className="px-1 py-2 text-right tabular-nums">
@@ -189,7 +189,7 @@ function ReportCrosstabSection(props: {
                       </td>
                     </Fragment>
                   ))}
-                  <td className="border-l border-black/10 px-1 py-2 text-right font-medium tabular-nums dark:border-white/10">
+                  <td className="border-l border-border px-1 py-2 text-right font-medium tabular-nums">
                     {fmtCell(rowTotal, metric)}
                   </td>
                   <td className="px-1 py-2 text-right font-medium tabular-nums">
@@ -207,13 +207,13 @@ function ReportCrosstabSection(props: {
             ) : null}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-black/15 font-medium dark:border-white/15 print:border-black/30">
-              <td className="sticky left-0 z-10 bg-white px-1 py-2 dark:bg-neutral-950 print:bg-white print:text-black">
+            <tr className="border-t-2 border-border font-medium print:border-black/30">
+              <td className="sticky left-0 z-10 bg-background px-1 py-2 print:bg-white print:text-black">
                 Total
               </td>
               {MONTHS.map((financialMonth, idx) => (
                 <Fragment key={`total-${financialMonth}`}>
-                  <td className="border-l border-black/10 px-1 py-2 text-right tabular-nums dark:border-white/10">
+                  <td className="border-l border-border px-1 py-2 text-right tabular-nums">
                     {fmtCell(monthlyTotals[idx] ?? z, metric)}
                   </td>
                   <td className="px-1 py-2 text-right tabular-nums">
@@ -221,7 +221,7 @@ function ReportCrosstabSection(props: {
                   </td>
                 </Fragment>
               ))}
-              <td className="border-l border-black/10 px-1 py-2 text-right tabular-nums dark:border-white/10">
+              <td className="border-l border-border px-1 py-2 text-right tabular-nums">
                 {fmtCell(grandTotal, metric)}
               </td>
               <td className="px-1 py-2 text-right tabular-nums">
@@ -387,8 +387,8 @@ export default async function BpoSalesCrosstabReportPage(props: {
             className={[
               "rounded-md border px-2 py-1 tabular-nums",
               period.financialYear === selectedPeriod.financialYear
-                ? "border-black/20 bg-black/5 dark:border-white/20 dark:bg-white/10"
-                : "border-black/10 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5",
+                ? "border-foreground/25 bg-accent/35"
+                : "border-border hover:bg-accent/25",
             ].join(" ")}
           >
             {formatFinancialYearLabel(

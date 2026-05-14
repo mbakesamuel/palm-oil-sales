@@ -18,8 +18,8 @@ import { Sidebar } from "./Sidebar";
 const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
-  { href: "/setup", label: "Setup" },
-  { href: "/setup/sales-budget", label: "Sales budgets" },
+  { href: "/setup", label: "Company Parameters" },
+  { href: "/setup/sales-budget", label: "Sales budget Phasing" },
   { href: "/setup/product-pricing", label: "Product pricing" },
   { href: "/setup/bpo-variants", label: "BPO variants" },
   { href: "/setup/permissions", label: "Access control" },
@@ -56,6 +56,10 @@ const reportNav = [
   {
     href: "/reports/sales-budget-monthly-crosstab",
     label: "Budget phasing (monthly)",
+  },
+  {
+    href: "/reports/sales-budget-weekly-crosstab",
+    label: "Budget phasing (weekly)",
   },
   { href: "/reports/pricing", label: "Product pricing" },
   { href: "/reports/bpo", label: "BPO monitor" },
@@ -111,8 +115,8 @@ export default async function AppLayout({
         }
       >
         <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
-          <div className="mx-auto w-full max-w-[min(100rem,calc(100vw-1.5rem))] px-4 py-6 h-full flex flex-col gap-6 lg:flex-row print:max-w-none print:px-6 print:py-4 print:block">
-            <div className="print:hidden shrink-0 h-full overflow-y-auto">
+          <div className="mx-auto w-full max-w-[min(100rem,calc(100vw-1.5rem))] px-4 py-6 h-full min-h-0 flex flex-col gap-4 md:flex-row md:gap-6 print:max-w-none print:px-6 print:py-4 print:block">
+            <div className="print:hidden shrink-0 w-full max-md:min-w-0 md:h-full md:w-16 md:max-w-16 md:shrink-0 md:overflow-y-auto lg:max-w-none lg:w-auto overflow-x-auto overflow-y-visible md:overflow-x-visible">
               <Sidebar
                 brand={settings.companyName}
                 department={settings.department}
@@ -124,9 +128,11 @@ export default async function AppLayout({
               />
             </div>
 
-            <section className="min-w-0 flex-1 overflow-y-auto print:w-full print:overflow-visible">
-              <WorkingPeriodBanner />
-              <div className="rounded-2xl border border-border p-4 sm:p-6 print:border-0 print:shadow-none print:p-0 print:rounded-none">
+            <section className="min-w-0 flex flex-1 flex-col gap-3 min-h-0 print:w-full print:overflow-visible">
+              <div className="shrink-0 print:hidden">
+                <WorkingPeriodBanner />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-4 sm:p-6 print:overflow-visible print:border-0 print:shadow-none print:p-0 print:rounded-none">
                 {children}
               </div>
             </section>

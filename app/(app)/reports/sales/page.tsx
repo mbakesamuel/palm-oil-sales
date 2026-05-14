@@ -186,7 +186,7 @@ export default async function SalesReportPage() {
         </div>
       </div>
 
-      <div className="w-full min-w-0 rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+      <div className="w-full min-w-0 rounded-lg border border-border overflow-hidden">
         <table className="w-full min-w-0 table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[10%]" />
@@ -200,7 +200,7 @@ export default async function SalesReportPage() {
             <col className="w-[12%]" />
           </colgroup>
           <thead>
-            <tr className="border-b border-black/10 dark:border-white/10 text-left">
+            <tr className="border-b border-border text-left">
               <th className="px-2 py-2 font-medium">Invoice</th>
               <th className="px-2 py-2 font-medium">Date</th>
               <th className="px-2 py-2 font-medium">Customer</th>
@@ -221,7 +221,7 @@ export default async function SalesReportPage() {
               return (
                 <tr
                   key={s.invoiceNo}
-                  className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2"
+                  className="border-b border-border odd:bg-foreground/[0.04]"
                 >
                   <td
                     className="px-2 py-2 font-mono text-xs truncate max-w-0"
@@ -271,7 +271,7 @@ export default async function SalesReportPage() {
           </tbody>
           {rows.length > 0 ? (
             <tfoot>
-              <tr className="border-t-2 border-black/15 dark:border-white/15 font-medium">
+              <tr className="border-t-2 border-border font-medium">
                 <td className="px-2 py-2 truncate max-w-0" colSpan={5}>
                   Totals (this page)
                 </td>

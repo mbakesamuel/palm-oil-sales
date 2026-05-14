@@ -50,7 +50,7 @@ export function PermissionsClient() {
   if (!session?.userId) return <div className="text-sm">Login required.</div>;
   if (!isAdmin) {
     return (
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
+      <div className="rounded-lg border border-border p-4 text-sm">
         Only administrators can manage access control.
       </div>
     );
@@ -101,7 +101,7 @@ export function PermissionsClient() {
         <div className="grid gap-2">
           <label className="text-sm font-medium">Role</label>
           <select
-            className="h-10 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+            className="h-10 rounded-md border border-border bg-transparent px-3 py-2 text-sm"
             value={role}
             onChange={(e) => setRole(e.target.value as UserRole)}
           >
@@ -116,7 +116,7 @@ export function PermissionsClient() {
           type="button"
           onClick={() => void onReset()}
           disabled={busyKey !== null}
-          className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+          className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
         >
           Reset to defaults
         </button>
@@ -129,7 +129,7 @@ export function PermissionsClient() {
           {Object.entries(grouped).map(([group, list]) => (
             <section
               key={group}
-              className="rounded-lg border border-black/10 dark:border-white/10 p-4"
+              className="rounded-lg border border-border p-4"
             >
               <div className="font-medium text-sm">{group}</div>
               <div className="mt-3 grid gap-2">

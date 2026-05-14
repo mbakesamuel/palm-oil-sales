@@ -523,7 +523,7 @@ export function DeliveryOrdersClient(props: {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-5 space-y-3">
+      <div className="rounded-lg border border-border p-4 sm:p-5 space-y-3">
         <div className="text-sm font-semibold">Open existing order</div>
         <p className="text-xs opacity-75">
           Enter the delivery order number (e.g. DO-2026-000001) to load the full
@@ -535,7 +535,7 @@ export function DeliveryOrdersClient(props: {
               Delivery order no.
             </label>
             <input
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
               value={lookupNo}
               onChange={(e) => setLookupNo(e.target.value)}
               placeholder="DO-2026-000001"
@@ -545,7 +545,7 @@ export function DeliveryOrdersClient(props: {
             type="button"
             disabled={busy !== null || !lookupNo.trim()}
             onClick={() => void onLoadByNo()}
-            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {busy === "load" ? "Loading…" : "Load order"}
           </button>
@@ -557,14 +557,14 @@ export function DeliveryOrdersClient(props: {
               !canCreateOrEditDeliveryOrderDraft(session.role)
             }
             onClick={resetNew}
-            className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25 disabled:opacity-50"
           >
             New blank order
           </button>
           {orderId != null ? (
             <Link
               href={`/delivery-orders/${orderId}`}
-              className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm text-center hover:bg-black/5 dark:hover:bg-white/5"
+              className="rounded-md border border-border px-4 py-2 text-sm text-center hover:bg-accent/25"
             >
               View / print
             </Link>
@@ -579,7 +579,7 @@ export function DeliveryOrdersClient(props: {
       </div>
 
       {customers.length === 0 || products.length === 0 || salesPoints.length === 0 ? (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
+        <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
             {customers.length === 0 ? (
@@ -605,7 +605,7 @@ export function DeliveryOrdersClient(props: {
       ) : (
         <>
           {/* Section 1 — DeliveryOrder header */}
-          <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-4">
+          <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -669,7 +669,7 @@ export function DeliveryOrdersClient(props: {
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href={`/delivery-orders/${orderId}`}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                  className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
                 >
                   View / print
                 </Link>
@@ -687,7 +687,7 @@ export function DeliveryOrdersClient(props: {
                   </label>
                   <select
                     id="do-customer"
-                    className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                    className="h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm box-border"
                     value={customerId}
                     onChange={(e) => {
                       setAllowAutoUnitPrice(true);
@@ -716,7 +716,7 @@ export function DeliveryOrdersClient(props: {
                   <input
                     id="do-date-issued"
                     type="date"
-                    className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                    className="h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm box-border"
                     value={dateIssued}
                     min={dateIssuedBounds?.minIso}
                     max={dateIssuedBounds?.maxIso}
@@ -764,7 +764,7 @@ export function DeliveryOrdersClient(props: {
                   </label>
                   <input
                     id="do-order-ref"
-                    className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                    className="h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm box-border"
                     value={orderRef}
                     onChange={(e) => setOrderRef(e.target.value)}
                     placeholder="PO / contract ref"
@@ -782,7 +782,7 @@ export function DeliveryOrdersClient(props: {
                     <>
                       <input
                         id="do-sales-point"
-                        className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                        className="h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm box-border"
                         value={session.salesPoint.name}
                         readOnly
                       />
@@ -794,7 +794,7 @@ export function DeliveryOrdersClient(props: {
                   ) : (
                     <select
                       id="do-sales-point"
-                      className="h-10 w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm box-border"
+                      className="h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm box-border"
                       value={salesPointId}
                       onChange={(e) => setSalesPointId(e.target.value)}
                       required
@@ -819,7 +819,7 @@ export function DeliveryOrdersClient(props: {
                 type="button"
                 disabled={busy !== null || draftFormLocked}
                 onClick={() => void onSaveHeader()}
-                className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+                className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 {busy === "header"
                   ? "Saving…"
@@ -835,7 +835,7 @@ export function DeliveryOrdersClient(props: {
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void onValidateOrder()}
-                  className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
                 >
                   {busy === "validate" ? "Validating…" : "Validate"}
                 </button>
@@ -862,7 +862,7 @@ export function DeliveryOrdersClient(props: {
 
           {/* Section 2 — DeliveryOrderDetails */}
           <section
-            className={`rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-4 ${
+            className={`rounded-lg border border-border p-4 sm:p-6 space-y-4 ${
               section2Disabled ? "opacity-55 pointer-events-none" : ""
             }`}
           >
@@ -916,12 +916,12 @@ export function DeliveryOrdersClient(props: {
                 return (
                   <div
                     key={idx}
-                    className="rounded-lg border border-black/10 dark:border-white/10 p-3 sm:p-4 space-y-3 min-w-0"
+                    className="rounded-lg border border-border p-3 sm:p-4 space-y-3 min-w-0"
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="text-xs font-medium opacity-70">Product</div>
                       <select
-                        className="w-full min-w-0 max-w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-2 text-sm"
+                        className="w-full min-w-0 max-w-full rounded-md border border-border bg-transparent px-2 py-2 text-sm"
                         value={l.productId}
                         disabled={linesReadOnly}
                         onChange={(e) => {
@@ -945,7 +945,7 @@ export function DeliveryOrdersClient(props: {
                       <div className="space-y-1 min-w-0">
                         <label className="text-xs font-medium opacity-70">Qty</label>
                         <input
-                          className="w-full min-w-0 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-2 text-sm"
+                          className="w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-2 text-sm"
                           inputMode="numeric"
                           value={l.orderQty}
                           disabled={linesReadOnly}
@@ -961,7 +961,7 @@ export function DeliveryOrdersClient(props: {
                       <div className="space-y-1 min-w-0">
                         <label className="text-xs font-medium opacity-70">Unit</label>
                         <input
-                          className="w-full min-w-0 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-2 text-sm"
+                          className="w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-2 text-sm"
                           value={l.orderUnit}
                           disabled={linesReadOnly}
                           onChange={(e) =>
@@ -978,7 +978,7 @@ export function DeliveryOrdersClient(props: {
                           Unit price (ex VAT)
                         </label>
                         <input
-                          className="w-full min-w-0 rounded-md border border-black/10 dark:border-white/10 bg-black/3 dark:bg-white/6 px-2 py-2 text-sm"
+                          className="w-full min-w-0 rounded-md border border-border bg-foreground/[0.06] px-2 py-2 text-sm"
                           inputMode="decimal"
                           value={l.unitPrice}
                           placeholder="—"
@@ -1000,7 +1000,7 @@ export function DeliveryOrdersClient(props: {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs border-t border-black/5 dark:border-white/10 pt-3">
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs border-t border-border pt-3">
                       <span className="opacity-70 font-medium">Taxes</span>
                       <span className="tabular-nums">
                         <span className="opacity-70">VAT:</span>{" "}
@@ -1069,7 +1069,7 @@ export function DeliveryOrdersClient(props: {
                 taxPreview == null
               }
               onClick={() => void onSaveLines()}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {busy === "lines" ? "Saving…" : "Save line items & taxes"}
             </button>
@@ -1077,7 +1077,7 @@ export function DeliveryOrdersClient(props: {
 
           {/* Section 3 — DeliveryOrderPaymentDetails */}
           <section
-            className={`rounded-lg border border-black/10 dark:border-white/10 p-4 sm:p-6 space-y-4 ${
+            className={`rounded-lg border border-border p-4 sm:p-6 space-y-4 ${
               section3Disabled ? "opacity-55 pointer-events-none" : ""
             }`}
           >
@@ -1125,16 +1125,16 @@ export function DeliveryOrdersClient(props: {
                 No payments on this order yet.
               </p>
             ) : (
-              <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden space-y-0">
+              <div className="rounded-lg border border-border overflow-hidden space-y-0">
                 {payments.map((p, idx) => (
                   <div
                     key={idx}
-                    className="overflow-x-auto px-3 py-3 border-b border-black/10 dark:border-white/10 last:border-b-0"
+                    className="overflow-x-auto px-3 py-3 border-b border-border last:border-b-0"
                   >
                     <div className="min-w-[1100px] flex items-end gap-3">
                       <div className="grid gap-1 w-[260px] shrink-0">
                         <label className="text-xs font-medium opacity-70">Method</label>
-                        <div className="flex flex-wrap items-center gap-3 rounded-md border border-black/10 dark:border-white/10 px-3 py-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm">
                           <label className="inline-flex items-center gap-2">
                             <input
                               type="radio"
@@ -1189,7 +1189,7 @@ export function DeliveryOrdersClient(props: {
                         <label className="text-xs font-medium opacity-70">Date issued</label>
                         <input
                           type="date"
-                          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                          className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                           value={p.paymentDate}
                           disabled={paymentsReadOnly}
                           onChange={(e) =>
@@ -1207,7 +1207,7 @@ export function DeliveryOrdersClient(props: {
                           <div className="grid gap-1 w-[220px] shrink-0">
                             <label className="text-xs font-medium opacity-70">Cheque no.</label>
                             <input
-                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                              className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                               placeholder="Cheque no."
                               value={p.chequeNo}
                               disabled={paymentsReadOnly}
@@ -1223,7 +1223,7 @@ export function DeliveryOrdersClient(props: {
                           <div className="grid gap-1 w-[220px] shrink-0">
                             <label className="text-xs font-medium opacity-70">Bank</label>
                             <input
-                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                              className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                               placeholder="Bank"
                               value={p.bank}
                               disabled={paymentsReadOnly}
@@ -1242,7 +1242,7 @@ export function DeliveryOrdersClient(props: {
                           <div className="grid gap-1 w-[260px] shrink-0">
                             <label className="text-xs font-medium opacity-70">CDC receipt no.</label>
                             <input
-                              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1.5 text-sm"
+                              className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                               placeholder="CDC receipt no."
                               value={p.cashReceiptNo}
                               disabled={paymentsReadOnly}
@@ -1278,7 +1278,7 @@ export function DeliveryOrdersClient(props: {
               type="button"
               disabled={paymentsReadOnly || busy !== null}
               onClick={() => void onSavePayments()}
-              className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {busy === "payments" ? "Saving…" : "Save payments"}
             </button>

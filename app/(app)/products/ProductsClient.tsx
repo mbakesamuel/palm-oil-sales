@@ -77,7 +77,7 @@ export function ProductsClient(props: {
       </div>
 
       {categories.length === 0 ? (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
+        <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Add a category first</div>
           <p className="opacity-80 mt-2">
             Products must belong to a category. Create at least one category, then return here.
@@ -111,7 +111,7 @@ export function ProductsClient(props: {
               name="productName"
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
               required
             />
           </div>
@@ -125,7 +125,7 @@ export function ProductsClient(props: {
               name="productCode"
               value={productCode}
               onChange={(e) => setProductCode(e.target.value)}
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
             />
           </div>
 
@@ -136,7 +136,7 @@ export function ProductsClient(props: {
             <select
               id="productCatId"
               name="productCatId"
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
               value={productCatIdForSelect}
               onChange={(e) => setProductCatId(e.target.value)}
               required
@@ -149,7 +149,7 @@ export function ProductsClient(props: {
             </select>
           </div>
 
-          <label className="flex items-start gap-2 rounded-md border border-black/10 dark:border-white/10 p-3 text-sm">
+          <label className="flex items-start gap-2 rounded-md border border-border p-3 text-sm">
             <input
               type="checkbox"
               name="isBottledPalmOil"
@@ -166,14 +166,14 @@ export function ProductsClient(props: {
           </label>
 
           <div className="flex items-center gap-2">
-            <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+            <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
               {editingId != null ? "Save product" : "Add product"}
             </button>
             {editingId != null ? (
               <button
                 type="button"
                 onClick={reset}
-                className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
               >
                 Cancel edit
               </button>
@@ -184,8 +184,8 @@ export function ProductsClient(props: {
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">All products</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
             <div className="col-span-4">Product</div>
             <div className="col-span-3">Category</div>
             <div className="col-span-2">Code</div>
@@ -195,7 +195,7 @@ export function ProductsClient(props: {
           {products.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No products yet.</div>
           ) : (
-            <ul className="divide-y divide-black/10 dark:divide-white/10">
+            <ul className="divide-y divide-border">
               {products.map((p) => (
                 <li
                   key={p.productId}
@@ -216,7 +216,7 @@ export function ProductsClient(props: {
                       type="button"
                       onClick={() => startEdit(p)}
                       disabled={categories.length === 0}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25 disabled:opacity-50"
                     >
                       Edit
                     </button>

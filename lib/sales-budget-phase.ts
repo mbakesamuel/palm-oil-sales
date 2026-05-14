@@ -41,6 +41,28 @@ export type SalesBudgetPhaseResult = {
   months: PhasedMonth[];
 };
 
+/** Whole kg for displaying phased quantities (month / week / day rollups). */
+export function formatPhasedQtyKgDisplay(qtyKg: string | Decimal): string {
+  const d = typeof qtyKg === "string" ? new Dec(qtyKg) : qtyKg;
+  if (!d.isFinite()) return typeof qtyKg === "string" ? qtyKg : qtyKg.toString();
+  const n = Number(d.toDecimalPlaces(0, ROUND_HALF_UP));
+  return new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  }).format(n);
+}
+
+/** Whole XAF for displaying phased revenue (annual / month / week / day). */
+export function formatPhasedRevenueDisplay(revenue: string | Decimal): string {
+  const d = typeof revenue === "string" ? new Dec(revenue) : revenue;
+  if (!d.isFinite()) return typeof revenue === "string" ? revenue : revenue.toString();
+  const n = Number(d.toDecimalPlaces(0, ROUND_HALF_UP));
+  return new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  }).format(n);
+}
+
 /** ISO 8601 week-year and week number (UTC calendar date; Monday week start). */
 export function utcIsoWeekYearAndWeek(isoDate: IsoDate): { weekYear: number; week: number } {
   const [ys, ms, ds] = isoDate.split("-").map((x) => Number.parseInt(x, 10));

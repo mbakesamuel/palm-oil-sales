@@ -64,7 +64,7 @@ export default async function PosPage() {
       </div>
 
       {customers.length === 0 || grades.length === 0 ? (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 text-sm">
+        <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
             {customers.length === 0 ? <li>Add at least one customer.</li> : null}

@@ -78,7 +78,7 @@ export function PosForm(props: {
       <div className="grid gap-2 max-w-xl">
         <label className="text-sm font-medium">Customer</label>
         <select
-          className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+          className="rounded-md border border-border bg-transparent px-3 py-2"
           value={customerId}
           onChange={(e) => setCustomerId(e.target.value)}
         >
@@ -110,8 +110,8 @@ export function PosForm(props: {
           </button>
         </div>
 
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
             <div className="col-span-5">Product</div>
             <div className="col-span-3">Qty (kg)</div>
             <div className="col-span-3">Price / kg</div>
@@ -121,7 +121,7 @@ export function PosForm(props: {
             <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center">
               <div className="col-span-5">
                 <select
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={l.productId}
                   onChange={(e) =>
                     setLines((prev) =>
@@ -138,7 +138,7 @@ export function PosForm(props: {
               </div>
               <div className="col-span-3">
                 <input
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={l.qtyKg}
                   inputMode="decimal"
                   onChange={(e) =>
@@ -150,7 +150,7 @@ export function PosForm(props: {
               </div>
               <div className="col-span-3">
                 <input
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={l.unitPricePerKg}
                   inputMode="decimal"
                   onChange={(e) =>
@@ -189,8 +189,8 @@ export function PosForm(props: {
           </button>
         </div>
 
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
             <div className="col-span-2">Method</div>
             <div className="col-span-2">Amount</div>
             <div className="col-span-2">Cheque #</div>
@@ -201,7 +201,7 @@ export function PosForm(props: {
             <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center">
               <div className="col-span-2">
                 <select
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={p.method}
                   onChange={(e) =>
                     setPayments((prev) =>
@@ -217,7 +217,7 @@ export function PosForm(props: {
               </div>
               <div className="col-span-2">
                 <input
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={p.amount}
                   inputMode="decimal"
                   onChange={(e) =>
@@ -229,7 +229,7 @@ export function PosForm(props: {
               </div>
               <div className="col-span-2">
                 <input
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={p.chequeNo ?? ""}
                   placeholder={p.method === "CHEQUE" ? "Cheque number" : ""}
                   disabled={p.method !== "CHEQUE"}
@@ -242,7 +242,7 @@ export function PosForm(props: {
               </div>
               <div className="col-span-5">
                 <input
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-2 py-1"
+                  className="w-full rounded-md border border-border bg-transparent px-2 py-1"
                   value={p.bank ?? ""}
                   placeholder={p.method === "CHEQUE" ? "Drawee bank" : ""}
                   disabled={p.method !== "CHEQUE"}
@@ -268,7 +268,7 @@ export function PosForm(props: {
         </div>
       </section>
 
-      <section className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-2">
+      <section className="rounded-lg border border-border p-4 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="opacity-75">Net</span>
           <span>{net.toFixed(2)} XAF</span>
@@ -288,7 +288,7 @@ export function PosForm(props: {
         <div className="text-xs opacity-70">No credit sales: paid must equal total.</div>
       </section>
 
-      <button className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium">
+      <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
         Create sale
       </button>
     </form>

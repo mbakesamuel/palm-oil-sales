@@ -4,8 +4,11 @@ import { Prisma } from "@prisma/client";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { getOrInitSalesBudgetMonthPhaseProfile, profileRowToPercentDecimals } from "@/lib/sales-budget-profile";
-import { computeMonthlyBudgetQtyKgByFiscalMonth } from "@/lib/sales-budget-phase";
+import { getOrInitProductSalesBudgetMonthPhaseProfile, profileRowToPercentDecimals } from "@/lib/sales-budget-profile";
+import {
+  computeMonthlyBudgetQtyKgByFiscalMonth,
+  formatPhasedQtyKgDisplay,
+} from "@/lib/sales-budget-phase";
 import { fiscalPeriodForCalendarMonth, monthName } from "@/lib/fiscal";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import { PrintButton } from "@/components/PrintButton";
@@ -19,11 +22,7 @@ export const runtime = "nodejs";
 const z = new Prisma.Decimal(0);
 
 function fmtKg(d: Prisma.Decimal) {
-  const n = Number(d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP));
-  return new Intl.NumberFormat("fr-FR", {
-    maximumFractionDigits: 3,
-    minimumFractionDigits: 0,
-  }).format(n);
+  return formatPhasedQtyKgDisplay(d);
 }
 
 const CAL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -40,14 +39,13 @@ export default async function SalesBudgetMonthlyCrosstabPage({
   const settings = await getOrInitCompanySettings();
   const prisma = getPrismaClient();
 
-  const [periods, profile, products, budgets] = await Promise.all([
+  const [periods, products, budgets] = await Promise.all([
     prismaRetry(() =>
       prisma.financialYearPeriod.findMany({
         orderBy: { financialYear: "desc" },
         select: { financialYear: true, startDate: true, endDate: true },
       }),
     ),
-    getOrInitSalesBudgetMonthPhaseProfile(),
     prismaRetry(() =>
       prisma.product.findMany({
         orderBy: { productName: "asc" },
@@ -66,7 +64,6 @@ export default async function SalesBudgetMonthlyCrosstabPage({
   ]);
 
   const periodsByFy = new Map(periods.map((p) => [p.financialYear, p]));
-  const pcts = profileRowToPercentDecimals(profile);
 
   const yearsSet = new Set<number>();
   const yNow = new Date().getUTCFullYear();
@@ -94,6 +91,36 @@ export default async function SalesBudgetMonthlyCrosstabPage({
 
   const productsInReport = products.filter((p) => productIdsWithBudget.has(p.productId));
 
+  const phasePctByProductFy = new Map<string, Prisma.Decimal[]>();
+  const pairSeen = new Set<string>();
+  const pairList: { productId: number; financialYear: number }[] = [];
+  for (const p of productsInReport) {
+    for (const m of CAL_MONTHS) {
+      const { financialYear } = fiscalPeriodForCalendarMonth(
+        reportYear,
+        m,
+        settings.fiscalYearStartMonth,
+      );
+      if (!budgetMap.has(`${p.productId}:${financialYear}`)) continue;
+      const pk = `${p.productId}:${financialYear}`;
+      if (pairSeen.has(pk)) continue;
+      pairSeen.add(pk);
+      pairList.push({ productId: p.productId, financialYear });
+    }
+  }
+  await Promise.all(
+    pairList.map(async ({ productId, financialYear }) => {
+      const row = await getOrInitProductSalesBudgetMonthPhaseProfile(
+        financialYear,
+        productId,
+      );
+      phasePctByProductFy.set(
+        `${productId}:${financialYear}`,
+        profileRowToPercentDecimals(row),
+      );
+    }),
+  );
+
   const monthlyCache = new Map<string, Prisma.Decimal[]>();
 
   function monthlyLine(productId: number, fy: number): Prisma.Decimal[] | null {
@@ -101,6 +128,8 @@ export default async function SalesBudgetMonthlyCrosstabPage({
     if (!b) return null;
     const period = periodsByFy.get(fy);
     if (!period) return null;
+    const pcts = phasePctByProductFy.get(`${productId}:${fy}`);
+    if (!pcts) return null;
     const key = `${productId}:${fy}`;
     let line = monthlyCache.get(key);
     if (!line) {
@@ -177,7 +206,11 @@ export default async function SalesBudgetMonthlyCrosstabPage({
               <Link href="/setup/sales-budget" className="underline">
                 Sales budgets
               </Link>
-              ).
+              ).{" "}
+              <Link href="/reports/sales-budget-weekly-crosstab" className="underline">
+                Weekly phasing crosstab
+              </Link>
+              .
             </p>
             <p className="mt-1 text-xs tabular-nums opacity-70">
               Generated{" "}
@@ -198,8 +231,8 @@ export default async function SalesBudgetMonthlyCrosstabPage({
             className={[
               "rounded-md border px-2 py-1 tabular-nums",
               y === reportYear
-                ? "border-black/20 bg-black/5 dark:border-white/20 dark:bg-white/10"
-                : "border-black/10 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5",
+                ? "border-foreground/25 bg-accent/35"
+                : "border-border hover:bg-accent/25",
             ].join(" ")}
           >
             {y}
@@ -220,11 +253,11 @@ export default async function SalesBudgetMonthlyCrosstabPage({
           Budget lines reference no matching products, or the catalog is empty.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10 print:break-inside-avoid print:border-black/20">
+        <div className="overflow-x-auto rounded-lg border border-border print:break-inside-avoid print:border-black/20">
           <table className="min-w-full text-sm print:text-black">
             <thead>
-              <tr className="border-b border-black/10 dark:border-white/10 text-left align-bottom print:border-black/20">
-                <th className="sticky left-0 z-10 bg-white px-3 py-2 font-medium dark:bg-neutral-950 print:bg-white print:text-black">
+              <tr className="border-b border-border text-left align-bottom print:border-black/20">
+                <th className="sticky left-0 z-10 bg-background px-3 py-2 font-medium print:bg-white print:text-black">
                   Product
                 </th>
                 {CAL_MONTHS.map((m) => (
@@ -236,7 +269,7 @@ export default async function SalesBudgetMonthlyCrosstabPage({
                     {monthName(m).slice(0, 3)}
                   </th>
                 ))}
-                <th className="border-l border-black/10 px-3 py-2 text-right font-medium tabular-nums dark:border-white/10">
+                <th className="border-l border-border px-3 py-2 text-right font-medium tabular-nums">
                   Total
                 </th>
               </tr>
@@ -245,9 +278,9 @@ export default async function SalesBudgetMonthlyCrosstabPage({
               {rows.map((r) => (
                 <tr
                   key={r.productId}
-                  className="border-b border-black/5 dark:border-white/5 odd:bg-black/2 dark:odd:bg-white/2 print:border-black/15 print:odd:bg-transparent"
+                  className="border-b border-border odd:bg-foreground/[0.04] print:border-black/15 print:odd:bg-transparent"
                 >
-                  <td className="sticky left-0 z-10 max-w-[min(24rem,50vw)] bg-white px-3 py-2 font-medium dark:bg-neutral-950 print:bg-white print:text-black">
+                  <td className="sticky left-0 z-10 max-w-[min(24rem,50vw)] bg-background px-3 py-2 font-medium print:bg-white print:text-black">
                     <span className="whitespace-normal">{r.label}</span>
                   </td>
                   {r.cells.map((kg, idx) => {
@@ -264,15 +297,15 @@ export default async function SalesBudgetMonthlyCrosstabPage({
                       </td>
                     );
                   })}
-                  <td className="border-l border-black/10 px-3 py-2 text-right font-medium tabular-nums dark:border-white/10">
+                  <td className="border-l border-border px-3 py-2 text-right font-medium tabular-nums">
                     {r.rowTotal.eq(z) ? "—" : fmtKg(r.rowTotal)}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-black/15 font-medium dark:border-white/15 print:border-black/30">
-                <td className="sticky left-0 z-10 bg-white px-3 py-2 dark:bg-neutral-950 print:bg-white print:text-black">
+              <tr className="border-t-2 border-border font-medium print:border-black/30">
+                <td className="sticky left-0 z-10 bg-background px-3 py-2 print:bg-white print:text-black">
                   Column totals (kg)
                 </td>
                 {colTotals.map((c, idx) => (
@@ -280,7 +313,7 @@ export default async function SalesBudgetMonthlyCrosstabPage({
                     {c.eq(z) ? "—" : fmtKg(c)}
                   </td>
                 ))}
-                <td className="border-l border-black/10 px-3 py-2 text-right tabular-nums dark:border-white/10">
+                <td className="border-l border-border px-3 py-2 text-right tabular-nums">
                   {grandTotal.eq(z) ? "—" : fmtKg(grandTotal)}
                 </td>
               </tr>

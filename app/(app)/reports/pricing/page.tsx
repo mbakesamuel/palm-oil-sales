@@ -28,7 +28,7 @@ export default async function PricingReportPage() {
             Printable unit prices by product (scopes to the open financial year).
           </p>
         </div>
-        <p className="text-sm opacity-80 rounded-lg border border-black/10 dark:border-white/10 p-4">
+        <p className="text-sm opacity-80 rounded-lg border border-border p-4">
           No financial year is open. Open a period under Financial years, then print again.
         </p>
         <div className="hidden print:block">
@@ -76,6 +76,7 @@ export default async function PricingReportPage() {
       <PricingReport
         companyName={settings.companyName}
         department={settings.department ?? null}
+        logoUrl={settings.logoUrl}
         schedules={scheduleModels}
       />
 

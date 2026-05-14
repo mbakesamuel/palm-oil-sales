@@ -199,7 +199,7 @@ export function UsersClient(props: {
             name="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             autoComplete="off"
             required
           />
@@ -217,7 +217,7 @@ export function UsersClient(props: {
             name="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             required
           />
           <div className="text-xs opacity-70">
@@ -234,7 +234,7 @@ export function UsersClient(props: {
             name="service"
             value={service}
             onChange={(e) => setService(e.target.value)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             placeholder="e.g. Retail desk, within your department"
           />
           <div className="text-xs opacity-70">
@@ -257,7 +257,7 @@ export function UsersClient(props: {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             autoComplete="new-password"
             required={!editingId}
           />
@@ -278,7 +278,7 @@ export function UsersClient(props: {
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             autoComplete="new-password"
             required={!editingId || password.length > 0}
           />
@@ -291,7 +291,7 @@ export function UsersClient(props: {
           <select
             id="role"
             name="role"
-            className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+            className="rounded-md border border-border bg-transparent px-3 py-2"
             value={role}
             onChange={(e) => {
               const v = e.target.value;
@@ -319,7 +319,7 @@ export function UsersClient(props: {
             <select
               id="salesPointId"
               name="salesPointId"
-              className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2"
+              className="rounded-md border border-border bg-transparent px-3 py-2"
               value={salesPointId}
               onChange={(e) => setSalesPointId(e.target.value)}
               required
@@ -339,7 +339,7 @@ export function UsersClient(props: {
             </select>
           </div>
         ) : (
-          <p className="text-xs opacity-70 rounded-md border border-black/10 dark:border-white/10 px-3 py-2">
+          <p className="text-xs opacity-70 rounded-md border border-border px-3 py-2">
             This role is not tied to a single sales point (organization-wide
             access).
           </p>
@@ -348,7 +348,7 @@ export function UsersClient(props: {
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            className="rounded-md bg-black text-white dark:bg-white dark:text-black px-4 py-2 text-sm font-medium"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
           >
             {editingId != null ? "Save changes" : "Add user"}
           </button>
@@ -356,7 +356,7 @@ export function UsersClient(props: {
             <button
               type="button"
               onClick={reset}
-              className="rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
             >
               Cancel edit
             </button>
@@ -366,8 +366,8 @@ export function UsersClient(props: {
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">All users</h2>
-        <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-black/10 dark:border-white/10">
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
             <div className="col-span-2">Username</div>
             <div className="col-span-2">Name</div>
             <div className="col-span-2">Role</div>
@@ -379,7 +379,7 @@ export function UsersClient(props: {
           {users.length === 0 ? (
             <div className="p-4 text-sm opacity-75">No users yet.</div>
           ) : (
-            <ul className="divide-y divide-black/10 dark:divide-white/10">
+            <ul className="divide-y divide-border">
               {users.map((u) => (
                 <li
                   key={u.id}
@@ -406,7 +406,7 @@ export function UsersClient(props: {
                     <button
                       type="button"
                       onClick={() => startEdit(u)}
-                      className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+                      className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
                     >
                       Edit
                     </button>
@@ -452,7 +452,7 @@ export function UsersClient(props: {
                       >
                         <button
                           type="submit"
-                          className="rounded-md border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs hover:bg-black/5 dark:hover:bg-white/5"
+                          className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
                         >
                           Reactivate
                         </button>
