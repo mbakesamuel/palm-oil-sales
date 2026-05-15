@@ -89,6 +89,32 @@ export function BpoConsignmentsClient(props: {
     voucherNo: string;
   } | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [rejectTarget, setRejectTarget] = React.useState<MovementRow | null>(null);
+  const [rejectReason, setRejectReason] = React.useState("");
+
+  const busyRef = React.useRef(false);
+  React.useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  const dismissRejectModal = React.useCallback(() => {
+    setRejectTarget(null);
+    setRejectReason("");
+  }, []);
+
+  React.useEffect(() => {
+    if (rejectTarget == null) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busyRef.current) dismissRejectModal();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [rejectTarget, dismissRejectModal]);
 
   async function run(
     action: (fd: FormData) => Promise<BpoMutationResult>,
@@ -433,12 +459,8 @@ export function BpoConsignmentsClient(props: {
                       type="button"
                       disabled={busy}
                       onClick={() => {
-                        const reason =
-                          window.prompt("Reject reason (optional)") ?? "";
-                        const fd = new FormData();
-                        fd.set("id", m.id);
-                        fd.set("reason", reason);
-                        void run(rejectAction, fd, "Voucher rejected.");
+                        setRejectReason("");
+                        setRejectTarget(m);
                       }}
                       className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs"
                     >
@@ -560,6 +582,84 @@ export function BpoConsignmentsClient(props: {
           ) : null}
         </div>
       </section>
+
+      {rejectTarget ? (
+        <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center p-4 sm:p-6">
+          <div
+            className="absolute inset-0 bg-black/45 dark:bg-black/55 backdrop-blur-[2px]"
+            aria-hidden
+            onClick={() => {
+              if (!busyRef.current) dismissRejectModal();
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bpo-reject-voucher-title"
+            className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-background text-foreground shadow-xl shadow-black/10 dark:shadow-black/40"
+          >
+            <div className="p-5 sm:p-6 space-y-4">
+              <h2 id="bpo-reject-voucher-title" className="text-lg font-semibold text-foreground">
+                Reject this voucher?
+              </h2>
+              <div className="space-y-2 text-sm text-foreground/85">
+                <p>
+                  You are about to reject{" "}
+                  <span className="font-semibold text-foreground">{rejectTarget.voucherNo}</span>{" "}
+                  from <span className="font-medium">{rejectTarget.sourceSalesPointName}</span> to{" "}
+                  <span className="font-medium">{rejectTarget.destinationSalesPointName}</span>
+                  {" · "}
+                  <span className="tabular-nums">{rejectTarget.movementDateIso}</span>
+                  {" · "}
+                  <span className="font-medium">{rejectTarget.status}</span>.
+                </p>
+                <p className="text-red-800 dark:text-red-300/90">
+                  This marks the consignment as rejected and cannot be undone from this screen.
+                </p>
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="bpo-reject-reason" className="text-sm font-medium">
+                  Reason (optional)
+                </label>
+                <textarea
+                  id="bpo-reject-reason"
+                  rows={3}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  disabled={busy}
+                  placeholder="e.g. Wrong quantities on voucher"
+                  className="rounded-md border border-border bg-transparent px-3 py-2 text-sm disabled:opacity-60"
+                />
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={dismissRejectModal}
+                  className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const fd = new FormData();
+                    fd.set("id", rejectTarget.id);
+                    fd.set("reason", rejectReason.trim());
+                    void run(rejectAction, fd, "Voucher rejected.").then((r) => {
+                      if (r?.ok) dismissRejectModal();
+                    });
+                  }}
+                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-600"
+                >
+                  {busy ? "Please wait…" : "Reject voucher"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

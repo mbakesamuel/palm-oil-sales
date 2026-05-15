@@ -505,9 +505,18 @@ export function DeliveryOrdersClient(props: {
       <div className="space-y-1">      
         <h1 className="text-2xl font-semibold">Delivery order</h1>
         <p className="text-sm opacity-75">
-          Senior sales supervisors prepare drafts (header, lines, payments). Managers validate
-          pending orders. Open an order by number; clerks and supervisors can load to view or
-          print (validated orders appear on their report).
+          {session?.salesPoint ? (
+            <>
+              You can load and print <span className="font-medium">validated</span> delivery orders
+              at your collection point only. Pending drafts are prepared by senior supervisors and
+              validated by managers before they appear here.
+            </>
+          ) : (
+            <>
+              Senior sales supervisors prepare drafts (header, lines, payments). Managers validate
+              pending orders. Open an order by number to view or print.
+            </>
+          )}
         </p>
       </div>
 

@@ -88,6 +88,9 @@ export default async function DeliveryOrderMonitorPage(props: {
     } else if (scopedToSalesPoint && order.salesPointId !== assignedSalesPointId) {
       wrongScope = true;
       order = null;
+    } else if (scopedToSalesPoint && order.status !== ValidationStatus.VALIDATED) {
+      notFound = true;
+      order = null;
     }
   }
 

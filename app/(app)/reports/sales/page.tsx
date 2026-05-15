@@ -80,6 +80,7 @@ export default async function SalesReportPage() {
   ]);
 
   const where: Prisma.SaleWhereInput = {
+    vehicleNumber: { not: "BPO-OUTBOUND" },
     ...(scopedToSalesPoint && assignedSalesPointId != null
       ? { salesPointId: assignedSalesPointId }
       : {}),

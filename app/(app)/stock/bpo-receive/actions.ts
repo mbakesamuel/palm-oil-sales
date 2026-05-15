@@ -1,6 +1,7 @@
 "use server";
 
 import { assertPermissionKey } from "@/lib/access-control";
+import { roleMayMutateBpoReceiveRows } from "@/lib/auth-roles";
 import { getServerSession } from "@/lib/auth-server";
 import {
   salesPointErrorForResource,
@@ -124,6 +125,13 @@ export async function updateReceivedBpoBatch(formData: FormData): Promise<BpoRec
     ({ actor, session } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  if (!roleMayMutateBpoReceiveRows(actor.role)) {
+    return {
+      ok: false,
+      error: "Only sales point staff (clerk, supervisor, or clerk in charge BPO) can edit a BPO receipt.",
+    };
   }
 
   const batchId = String(formData.get("batchId") ?? "").trim();

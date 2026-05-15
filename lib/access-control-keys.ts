@@ -22,6 +22,7 @@ export const PERMISSION_KEYS = [
   "route:/delivery-orders",
   "route:/consignment-notes",
   "route:/pos",
+  "route:/bpo-sales",
   "route:/stock/receive",
   "route:/stock/bpo-receive",
   "route:/stock/bpo-consignments",

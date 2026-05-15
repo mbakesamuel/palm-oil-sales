@@ -20,7 +20,8 @@ import {
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
 import { assertPermissionKey } from "@/lib/access-control";
-import { canValidateDocuments } from "@/lib/auth-roles";
+import { canValidateDocuments, roleSeesOnlyValidatedDeliveryOrders } from "@/lib/auth-roles";
+import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
 import {
   salesPointErrorForResource,
@@ -258,7 +259,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       if (!product) throw new Error("Product not found.");
       if (product.isBottledPalmOil) {
         throw new Error(
-          `Bottled Palm Oil ("${product.productName}") is not sold on this page. Post it from Stock → Bottled Palms Oil Gift / Out.`,
+          `Bottled Palm Oil ("${product.productName}") is not sold on this page. Use /bpo-sales (Bottled Palm Oil sales).`,
         );
       }
 
@@ -649,11 +650,22 @@ export async function lookupDeliveryOrderForSale(
 
   const orderSp = await prisma.deliveryOrder.findUnique({
     where: { deliveryOrderNo },
-    select: { salesPointId: true },
+    select: { salesPointId: true, status: true },
   });
   const accessErr = salesPointErrorForResource(actor, orderSp?.salesPointId ?? null);
   if (accessErr) {
     return { ok: false, error: accessErr };
+  }
+
+  if (
+    roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
+    orderSp?.status !== ValidationStatus.VALIDATED
+  ) {
+    return {
+      ok: false,
+      error:
+        "This delivery order is not validated yet. Pending orders are hidden until a manager validates them.",
+    };
   }
 
   const data = toDeliveryOrderLookupDto(ctx);

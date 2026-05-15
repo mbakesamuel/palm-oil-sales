@@ -21,6 +21,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/dashboard"] = true;
   base["route:/delivery-orders"] = true;
   base["route:/pos"] = true;
+  base["route:/bpo-sales"] = true;
   base["route:/stock/receive"] = true;
   base["route:/stock/bpo-receive"] = true;
   base["route:/stock/bpo-consignments"] = true;
@@ -37,6 +38,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     base["route:/stock/bpo-receive"] = true;
     base["route:/stock/bpo-consignments"] = true;
     base["route:/stock/bpo-outbound"] = true;
+    base["route:/bpo-sales"] = true;
     base["route:/reports"] = true;
     base["route:/reports/bpo"] = true;
   }

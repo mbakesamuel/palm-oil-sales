@@ -1,7 +1,7 @@
 "use server";
 
 import { assertPermissionKey } from "@/lib/access-control";
-import { canValidateBpoDocuments } from "@/lib/auth-roles";
+import { canValidateBpoDocuments, roleMayRaiseBpoConsignmentSenderVoucher } from "@/lib/auth-roles";
 import { getServerSession } from "@/lib/auth-server";
 import {
   salesPointErrorForResource,
@@ -18,6 +18,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { BpoMovementStatus, BpoMovementType, Prisma, UserRole, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import type { UserRole as AppUserRole } from "@/lib/domain";
 
 export type BpoMutationResult =
   | { ok: true; id?: string; voucherNo?: string }
@@ -330,6 +331,12 @@ export async function createBpoConsignmentVoucher(formData: FormData): Promise<B
   try {
     await assertPermissionKey("route:/stock/bpo-consignments");
     ({ session, actor } = await requireActor(prisma));
+    if (!roleMayRaiseBpoConsignmentSenderVoucher(actor.role as AppUserRole)) {
+      return {
+        ok: false,
+        error: "Only sales clerks can create sender consignment vouchers.",
+      };
+    }
     const botaId = await ensureBotaSalesPointId(prisma);
     const sourceRaw = String(formData.get("sourceSalesPointId") ?? "").trim();
     const sourceSalesPointId = session.salesPoint?.id ?? (sourceRaw ? Number.parseInt(sourceRaw, 10) : null);

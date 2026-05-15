@@ -59,6 +59,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/delivery-orders": Truck,
   "/consignment-notes": FileText,
   "/pos": ShoppingCart,
+  "/bpo-sales": CircleDollarSign,
   "/stock/receive": Inbox,
   "/stock/bpo-receive": Droplets,
   "/stock/bpo-consignments": Boxes,

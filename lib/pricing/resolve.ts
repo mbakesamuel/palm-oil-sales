@@ -115,6 +115,7 @@ export async function resolveVariantUnitPriceExTax(
     };
   }
 
+  // BPO: the schedule value is treated as the tax-inclusive unit price in business rules (DB column name is historical).
   return {
     ok: true,
     unitPriceExTax: row.unitPriceExTax,

@@ -142,8 +142,8 @@ export default async function DailySalesSummaryPage(props: {
 
   const saleScope: Prisma.SaleWhereInput =
     scopedToSalesPoint && assignedSalesPointId != null
-      ? { salesPointId: assignedSalesPointId }
-      : {};
+      ? { salesPointId: assignedSalesPointId, vehicleNumber: { not: "BPO-OUTBOUND" } }
+      : { vehicleNumber: { not: "BPO-OUTBOUND" } };
 
   const monthWhere: Prisma.SaleWhereInput = monthFilter
     ? {

@@ -19,7 +19,9 @@ import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
   canCreateOrEditDeliveryOrderDraft,
   canValidateDeliveryOrder,
+  roleSeesOnlyValidatedDeliveryOrders,
 } from "@/lib/auth-roles";
+import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
 import {
   salesPointErrorForResource,
@@ -268,6 +270,13 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
 
   const accessErr = salesPointErrorForResource(actor, order.salesPointId);
   if (accessErr) return null;
+
+  if (
+    roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
+    order.status !== ValidationStatus.VALIDATED
+  ) {
+    return null;
+  }
 
   return {
     id: order.id,
@@ -773,6 +782,13 @@ export async function loadDeliveryOrderPrintById(
   if (!order) return { ok: false, reason: "missing" };
 
   if (salesPointErrorForResource(actor, order.salesPointId)) {
+    return { ok: false, reason: "missing" };
+  }
+
+  if (
+    roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
+    order.status !== ValidationStatus.VALIDATED
+  ) {
     return { ok: false, reason: "missing" };
   }
 

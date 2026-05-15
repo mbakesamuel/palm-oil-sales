@@ -12,6 +12,24 @@ export function roleRequiresSalesPoint(role: UserRole): boolean {
   );
 }
 
+/** Sales-point staff see delivery orders only after manager validation (reports, load, print, POS lookup). */
+export function roleSeesOnlyValidatedDeliveryOrders(role: UserRole): boolean {
+  return roleRequiresSalesPoint(role);
+}
+
+/**
+ * Org-wide roles may record new BPO receipts at a chosen sales point, but must not
+ * change existing receipt rows; point-scoped roles may edit/delete their receipts.
+ */
+export function roleMayMutateBpoReceiveRows(role: UserRole): boolean {
+  return roleRequiresSalesPoint(role);
+}
+
+/** Only sales clerks raise draft BPO consignment vouchers from the sender depot to Bota. */
+export function roleMayRaiseBpoConsignmentSenderVoucher(role: UserRole): boolean {
+  return role === UserRole.CLERK;
+}
+
 /**
  * Roles allowed to validate **sales invoices** (and similar). Delivery orders use
  * {@link canValidateDeliveryOrder} (managers only).

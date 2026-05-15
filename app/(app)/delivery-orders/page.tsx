@@ -32,6 +32,7 @@ export default async function DeliveryOrdersPage() {
     ),
     prismaRetry(() =>
       prisma.product.findMany({
+        where: { isBottledPalmOil: false },
         orderBy: [{ productName: "asc" }],
         select: {
           productId: true,

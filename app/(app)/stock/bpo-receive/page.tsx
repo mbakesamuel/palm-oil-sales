@@ -16,11 +16,14 @@ export default async function BpoReceivePage() {
 
   const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
+  const pageTitle = scopedToSalesPoint
+    ? "Bottle Palm Oil Stock Reception."
+    : "Bottled Palm Oil Stock";
 
   if (scopedToSalesPoint && assignedSalesPointId == null) {
     return (
       <div className="space-y-4 max-w-xl">
-        <h1 className="text-2xl font-semibold">Receive BPO stock</h1>
+        <h1 className="text-2xl font-semibold">{pageTitle}</h1>
         <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200">
           Your role is tied to a sales point, but none is assigned. Ask an administrator.
         </div>
@@ -109,7 +112,7 @@ export default async function BpoReceivePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Receive BPO stock</h1>
+        <h1 className="text-2xl font-semibold">{pageTitle}</h1>
         <p className="mt-1 text-sm opacity-80">
           Record Bottled Palm Oil unit stock at non-Bota sales points. Bota receives BPO only after
           validating sender consignment documents.
@@ -132,6 +135,7 @@ export default async function BpoReceivePage() {
         recentReceipts={mappedReceipts}
         defaultSalesPointId={assignedSalesPointId}
         salesPointLocked={scopedToSalesPoint}
+        canEditReceiptRows={scopedToSalesPoint}
       />
     </div>
   );

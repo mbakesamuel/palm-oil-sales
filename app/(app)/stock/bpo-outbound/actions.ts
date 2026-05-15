@@ -24,9 +24,6 @@ import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { resolveVariantUnitPriceExTax } from "@/lib/pricing/resolve";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { VAT_TAX_CODE } from "@/lib/tax/constants";
-import { legacyVatSnapshotFromResolved } from "@/lib/tax/resolve";
-import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import {
   BpoEmployeeCollectedProduct,
   BpoMovementStatus,
@@ -124,6 +121,7 @@ function parseDate(raw: string): Date {
 
 function revalidateBpo() {
   revalidatePath("/stock/bpo-outbound");
+  revalidatePath("/bpo-sales");
   revalidatePath("/reports/bpo");
   revalidatePath("/reports/bpo-stock-cross");
   revalidatePath("/reports/sales");
@@ -246,7 +244,7 @@ export async function createBpoOutboundMovement(formData: FormData): Promise<Bpo
 export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutboundResult> {
   const prisma = getPrismaClient();
   try {
-    await assertPermissionKey("route:/stock/bpo-outbound");
+    await assertPermissionKey("route:/bpo-sales");
     const { actor, session } = await requireActor(prisma);
     if (!canValidateBpoDocuments(session.role as UserRole)) {
       return { ok: false, error: "Only authorized supervisors/managers can post BPO sales." };
@@ -285,6 +283,7 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
 
     const lines = parseLines(String(formData.get("lines") ?? "[]"));
     const preparedLines: PreparedBpoSaleLine[] = [];
+    // BPO variant schedule amounts are tax-inclusive (see setup copy); do not add customer taxes again.
     let net = new Prisma.Decimal(0);
     for (const line of lines) {
       const priced = await resolveVariantUnitPriceExTax(prisma, line.productVariantId, soldAt);
@@ -306,24 +305,9 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
       prisma,
       paymentMode === "CREDIT" ? "credit" : "cash",
     );
-    const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
-    const appliedTaxCreates = resolved.taxes.map((tax) => ({
-      taxTypeId: tax.taxTypeId,
-      codeSnapshot: tax.code,
-      labelSnapshot: tax.label,
-      rateSnapshot: tax.rate,
-      amount: money2(net.mul(tax.rate)),
-    }));
-    const totalTax = appliedTaxCreates.reduce(
-      (acc, row) => acc.add(row.amount),
-      new Prisma.Decimal(0),
-    );
-    const vatAmount = appliedTaxCreates
-      .filter((row) => row.codeSnapshot === VAT_TAX_CODE)
-      .reduce((acc, row) => acc.add(row.amount), new Prisma.Decimal(0));
-    const { vatRateSnapshot } = legacyVatSnapshotFromResolved(resolved.taxes);
-    const gross = money2(net.add(totalTax));
+    const vatAmount = new Prisma.Decimal(0);
+    const vatRateSnapshot = new Prisma.Decimal(0);
+    const gross = money2(net);
 
     const employeeMatricule = String(formData.get("employeeMatricule") ?? "").trim();
     const employeeName = String(formData.get("employeeName") ?? "").trim();
@@ -365,41 +349,18 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
               financialYear: postingFY,
               financialMonth: postingCalendarMonth,
               postingCalendarYear,
-              appliedTaxes: { create: appliedTaxCreates },
               lines: {
-                create: preparedLines.map((line, idx) => {
-                  const isLast = idx === preparedLines.length - 1;
-                  const lineTax = isLast
-                    ? money2(
-                        totalTax.sub(
-                          preparedLines
-                            .slice(0, idx)
-                            .reduce(
-                              (acc, prior) =>
-                                acc.add(
-                                  net.lte(0)
-                                    ? new Prisma.Decimal(0)
-                                    : money2(prior.lineNet.div(net).mul(totalTax)),
-                                ),
-                              new Prisma.Decimal(0),
-                            ),
-                        ),
-                      )
-                    : net.lte(0)
-                      ? new Prisma.Decimal(0)
-                      : money2(line.lineNet.div(net).mul(totalTax));
-                  return {
-                    productId: line.productId,
-                    productVariantId: line.productVariantId,
-                    qtyKg: new Prisma.Decimal(0),
-                    qtyUnits: line.qtyUnits,
-                    unitPricePerKg: line.unitPrice,
-                    unitPricePerUnit: line.unitPrice,
-                    lineNet: line.lineNet,
-                    lineVat: lineTax,
-                    lineGross: money2(line.lineNet.add(lineTax)),
-                  };
-                }),
+                create: preparedLines.map((line) => ({
+                  productId: line.productId,
+                  productVariantId: line.productVariantId,
+                  qtyKg: new Prisma.Decimal(0),
+                  qtyUnits: line.qtyUnits,
+                  unitPricePerKg: line.unitPrice,
+                  unitPricePerUnit: line.unitPrice,
+                  lineNet: line.lineNet,
+                  lineVat: new Prisma.Decimal(0),
+                  lineGross: line.lineNet,
+                })),
               },
               payments: {
                 create: {
@@ -484,7 +445,7 @@ export async function loadBpoOutboundSaleReceipt(
 ): Promise<BpoOutboundSaleReceiptResult> {
   const prisma = getPrismaClient();
   try {
-    await assertPermissionKey("route:/stock/bpo-outbound");
+    await assertPermissionKey("route:/bpo-sales");
     const { actor } = await requireActor(prisma);
     const settings = await getOrInitCompanySettings();
     const sale = await prisma.sale.findUnique({
@@ -509,6 +470,9 @@ export async function loadBpoOutboundSaleReceipt(
       },
     });
     if (!sale || sale.lines.length === 0) {
+      return { ok: false, error: "BPO sale receipt not found." };
+    }
+    if (sale.vehicleNumber !== "BPO-OUTBOUND") {
       return { ok: false, error: "BPO sale receipt not found." };
     }
     const accessErr = salesPointErrorForResource(actor, sale.salesPointId ?? null);

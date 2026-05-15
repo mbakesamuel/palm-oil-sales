@@ -38,10 +38,11 @@ const operationsNav = [
   { href: "/delivery-orders", label: "Delivery orders" },
   { href: "/consignment-notes", label: "VehicleConsignment notes" },
   { href: "/pos", label: "Sales" },
+  { href: "/bpo-sales", label: "Bottled Palm Oil sales" },
   { href: "/stock/receive", label: "Stock In" },
   { href: "/stock/bpo-receive", label: "Bottled Palms Oil Stock" },
   { href: "/stock/bpo-consignments", label: "Bottled Palms Oil Consignments" },
-  { href: "/stock/bpo-outbound", label: "Bottled Palms Oil Gift / Out" },
+  { href: "/stock/bpo-outbound", label: "Bottled Palm Oil gift / out" },
 ] as const;
 
 const reportNav = [

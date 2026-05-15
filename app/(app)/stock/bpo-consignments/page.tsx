@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { roleMayRaiseBpoConsignmentSenderVoucher, roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { getBotaSalesPointId } from "@/lib/bpo";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
@@ -196,10 +196,7 @@ export default async function BpoConsignmentsPage() {
       botaSalesPointId={botaSalesPointId}
       defaultSourceSalesPointId={assignedSalesPointId}
       salesPointLocked={scoped}
-      canCreateVoucher={
-        session.role !== UserRole.SENIOR_SUPERVISOR &&
-        session.role !== UserRole.MANAGER
-      }
+      canCreateVoucher={roleMayRaiseBpoConsignmentSenderVoucher(session.role as UserRole)}
       canPrintCreatedVoucher={
         session.role === UserRole.CLERK &&
         assignedSalesPointId != null &&
