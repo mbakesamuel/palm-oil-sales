@@ -40,6 +40,8 @@ export async function saveUser(formData: FormData) {
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
   const service = String(formData.get("service") ?? "").trim() || null;
+  const commercialServiceRaw = String(formData.get("commercialServiceId") ?? "").trim();
+  const commercialServiceId = commercialServiceRaw.length ? commercialServiceRaw : null;
 
   if (!username) throw new Error("Username is required.");
   if (!name) throw new Error("Display name is required.");
@@ -51,6 +53,9 @@ export async function saveUser(formData: FormData) {
     const sp = await prisma.salesPoint.findUnique({ where: { id: salesPointId } });
     if (!sp) throw new Error("Sales point not found.");
   }
+
+  const current = await getServerSession();
+  const selfUpdated = id != null && id === current?.userId;
 
   if (id) {
     const clash = await prisma.user.findFirst({
@@ -67,6 +72,7 @@ export async function saveUser(formData: FormData) {
           name,
           role,
           service,
+          commercialServiceId,
           salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
         },
       });
@@ -79,6 +85,7 @@ export async function saveUser(formData: FormData) {
           passwordPlain: password,
           role,
           service,
+          commercialServiceId,
           salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
         },
       });
@@ -97,6 +104,7 @@ export async function saveUser(formData: FormData) {
         passwordPlain: password,
         role,
         service,
+        commercialServiceId,
         salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
       },
     });
@@ -105,6 +113,11 @@ export async function saveUser(formData: FormData) {
   revalidatePath("/users");
   revalidatePath("/login");
   revalidatePath("/setup");
+  revalidatePath("/setup/commercial-services");
+  if (selfUpdated) {
+    revalidatePath("/");
+    revalidatePath("/dashboard");
+  }
 }
 
 export async function setUserActive(formData: FormData) {

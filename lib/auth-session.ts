@@ -10,6 +10,12 @@ export type AuthSalesPoint = {
   name: string;
 };
 
+export type AuthCommercialService = {
+  id: string;
+  name: string;
+  invoicePrefix: string;
+};
+
 export type AuthSession = {
   userId: string;
   username: string;
@@ -19,6 +25,8 @@ export type AuthSession = {
   salesPoint: AuthSalesPoint | null;
   /** Optional sub-unit / service line (from `User.service`). */
   service: string | null;
+  /** Structured commercial line for invoices / letterhead when assigned. */
+  commercialService: AuthCommercialService | null;
 };
 
 export function parseAuthSession(raw: string | null): AuthSession | null {
@@ -45,6 +53,22 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
     if (typeof o.service === "string" && o.service.trim() !== "") {
       service = o.service.trim();
     }
+    let commercialService: AuthCommercialService | null = null;
+    const cs = o.commercialService;
+    if (
+      cs &&
+      typeof cs === "object" &&
+      typeof (cs as Record<string, unknown>).id === "string" &&
+      typeof (cs as Record<string, unknown>).name === "string" &&
+      typeof (cs as Record<string, unknown>).invoicePrefix === "string"
+    ) {
+      const r = cs as Record<string, unknown>;
+      commercialService = {
+        id: String(r.id).trim(),
+        name: String(r.name).trim(),
+        invoicePrefix: String(r.invoicePrefix).trim(),
+      };
+    }
     return {
       userId: o.userId.trim(),
       username: o.username.trim(),
@@ -52,6 +76,7 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
       role: o.role as UserRole,
       salesPoint,
       service,
+      commercialService,
     };
   } catch {
     return null;

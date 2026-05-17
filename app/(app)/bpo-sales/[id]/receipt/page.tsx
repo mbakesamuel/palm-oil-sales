@@ -51,7 +51,7 @@ export default async function BpoSalesReceiptPage(props: { params: Promise<{ id:
         <header className="border-b border-border pb-4 text-center print:border-black/20">
           <ReportHeader
             companyName={settings.companyName}
-            department={settings.department}
+            department={data.department}
             logoSrc={settings.logoUrl}
             title="Bottled Palm Oil Sales Receipt"
           />

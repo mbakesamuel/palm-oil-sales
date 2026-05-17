@@ -139,6 +139,7 @@ function NavGroup(props: {
 export function Sidebar(props: {
   brand: string;
   department?: string | null;
+  logoSrc: string;
   subtitle: string;
   dashboardNav: NavItem[];
   setupNav: NavItem[];
@@ -148,6 +149,7 @@ export function Sidebar(props: {
   const {
     brand,
     department,
+    logoSrc,
     subtitle,
     dashboardNav,
     setupNav,
@@ -274,7 +276,7 @@ export function Sidebar(props: {
     });
   }
 
-  const widthLg = collapsed ? "lg:w-[72px]" : "lg:w-[260px]";
+  const widthLg = collapsed ? "lg:w-20" : "lg:w-[300px]";
 
   return (
     <aside
@@ -282,37 +284,51 @@ export function Sidebar(props: {
         "rounded-2xl border border-border bg-sidebar text-sidebar-foreground p-3 flex transition-[width] duration-200",
         "max-md:flex-row max-md:items-stretch max-md:gap-2 max-md:min-h-13",
         "md:h-full md:max-h-full md:flex-col md:gap-0",
-        "w-full md:w-16 md:max-w-16 lg:max-w-none",
+        "w-full md:w-20 md:max-w-20 lg:max-w-none",
         widthLg,
       ].join(" ")}
     >
-      <div className="max-lg:hidden lg:flex items-start justify-between gap-2 shrink-0">
-        <div className={collapsed ? "hidden" : "min-w-0 flex-1"}>
-          <div className="font-semibold leading-tight truncate">{brand}</div>
-          {department ? (
-            <div className="text-[11px] opacity-70 mt-0.5 leading-snug truncate">
-              {department}
-            </div>
-          ) : null}
-          <div className="text-xs opacity-70 mt-1 truncate">{subtitle}</div>
+      <div
+        className={[
+          "hidden lg:flex flex-col gap-1.5 shrink-0",
+          collapsed ? "lg:items-center lg:w-full" : "",
+        ].join(" ")}
+      >
+        <div className="relative flex w-full items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to /public or http(s) URLs */}
+          <img
+            src={logoSrc}
+            alt=""
+            className="h-6 max-h-6 w-auto max-w-[72px] shrink-0 object-contain"
+          />
+          <button
+            type="button"
+            onClick={toggle}
+            className="absolute right-0 top-1/2 hidden -translate-y-1/2 lg:block shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/5"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand" : "Collapse"}
+          >
+            {collapsed ? "»" : "«"}
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={toggle}
-          className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/5"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand" : "Collapse"}
-        >
-          {collapsed ? "»" : "«"}
-        </button>
+        {!collapsed ? (
+          <div className="hidden lg:block min-w-0 w-full">
+            <div className="text-sm font-semibold leading-tight truncate">{brand}</div>
+            {department ? (
+              <div className="text-[11px] opacity-70 mt-0.5 leading-snug truncate">
+                {department}
+              </div>
+            ) : null}
+            <div className="text-xs opacity-70 mt-1 truncate">{subtitle}</div>
+          </div>
+        ) : null}
       </div>
 
       <nav
         className={[
           "flex gap-1 flex-1 min-h-0",
           "max-md:flex-row max-md:overflow-x-auto max-md:overflow-y-hidden max-md:min-w-0 max-md:py-0.5",
-          "md:mt-3 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:pr-1",
+          "md:flex-col md:overflow-y-auto md:overflow-x-hidden md:pr-1 lg:mt-3",
         ].join(" ")}
       >
         {dashboardNav.map((item) => {
@@ -412,12 +428,18 @@ export function Sidebar(props: {
               <div className="font-medium truncate" title={session.displayName}>
                 {session.displayName}
               </div>
-              {session.service?.trim() ? (
+              {(session.commercialService?.name?.trim() || session.service?.trim()) ? (
                 <div
                   className="opacity-70 truncate text-[11px]"
-                  title={session.service}
+                  title={
+                    session.commercialService?.name?.trim()
+                      ? `${session.commercialService.name} (${session.commercialService.invoicePrefix})`
+                      : (session.service ?? "")
+                  }
                 >
-                  {session.service}
+                  {session.commercialService?.name?.trim()
+                    ? session.commercialService.name
+                    : session.service}
                 </div>
               ) : null}
               <div

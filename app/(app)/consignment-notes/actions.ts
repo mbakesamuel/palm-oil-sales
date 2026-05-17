@@ -595,13 +595,18 @@ export async function loadConsignmentPrintById(
       ? settings.logoUrl.trim()
       : "/cdc-logo-svg.svg";
 
+  const deptParts = [
+    settings.department?.trim(),
+    note.sale.commercialServiceNameSnapshot?.trim(),
+  ].filter((s): s is string => Boolean(s && s.length > 0));
+
   return {
     ok: true,
     data: {
       companyName: settings.companyName,
-      department: settings.department ?? null,
-      companyPhone: settings.phone ?? null,
-      companyAddress: settings.address ?? null,
+      department: deptParts.length > 0 ? deptParts.join(" · ") : null,
+      companyPhone: note.sale.issuerPhoneSnapshot ?? null,
+      companyAddress: note.sale.issuerAddressSnapshot ?? null,
       logoSrc,
       note: noteModel,
     },

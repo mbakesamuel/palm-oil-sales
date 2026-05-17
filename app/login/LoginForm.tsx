@@ -54,14 +54,15 @@ export function LoginForm(props: {
             className="absolute left-0 top-1/2 h-9 max-h-9 w-auto max-w-[80px] -translate-y-1/2 object-contain"
           />
           <div className="w-full px-16 text-center">
-            <div className="text-lg font-semibold leading-tight">
+            <div className="text-md font-semibold leading-tight">
               {companyName.trim()}
             </div>
-            {department?.trim() ? (
+            <div className="text-sm font-medium opacity-80 mt-0.5">Sales Management Application</div>
+            {/*  {department?.trim() ? (
               <div className="text-sm font-medium opacity-80 mt-0.5">
                 {department.trim()}
               </div>
-            ) : null}
+            ) : null} */}
           </div>
         </div>
       </div>

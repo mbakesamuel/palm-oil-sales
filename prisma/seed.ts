@@ -13,8 +13,8 @@ const prisma = new PrismaClient({
 
 /** Always available for local / QA sign-in. Replace with real provisioning in production. */
 const TEST_ADMIN = {
-  username: "testadmin",
-  passwordPlain: "testadmin",
+  username: "puru",
+  passwordPlain: "sammym1986",
   name: "Test administrator",
 } as const;
 

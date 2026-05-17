@@ -55,28 +55,39 @@ export async function ensureTaxCatalogSynced(companySettings: {
   });
 }
 
-/** When legacy Setup VAT rate changes, keep the latest VAT schedule row in sync (single-row update). */
-export async function syncLatestVatScheduleToCompanyRate(vatRate: Prisma.Decimal) {
+/**
+ * Sets VAT rate for a given statutory effective calendar day without rewriting other dated rows.
+ * Also updates CompanySettings.vatRate as headline display metadata.
+ */
+export async function upsertVatScheduleForEffectiveDate(rate: Prisma.Decimal, effectiveFrom: Date) {
   const prisma = getPrismaClient();
-  const vatType = await prisma.taxType.findUnique({ where: { code: VAT_TAX_CODE } });
-  if (!vatType) return;
-  const latest = await prisma.taxRateSchedule.findFirst({
-    where: { taxTypeId: vatType.id },
-    orderBy: { effectiveFrom: "desc" },
-  });
-  if (!latest) {
-    await prisma.taxRateSchedule.create({
-      data: {
-        taxTypeId: vatType.id,
-        rate: vatRate,
-        effectiveFrom: new Date("1970-01-01T00:00:00.000Z"),
-      },
+
+  let vatType = await prisma.taxType.findUnique({ where: { code: VAT_TAX_CODE } });
+  if (!vatType) {
+    vatType = await prisma.taxType.create({
+      data: { code: VAT_TAX_CODE, name: "VAT", sortOrder: 0 },
     });
-    return;
   }
-  if (latest.rate.equals(vatRate)) return;
-  await prisma.taxRateSchedule.update({
-    where: { id: latest.id },
-    data: { rate: vatRate },
+
+  await prisma.taxRateSchedule.upsert({
+    where: {
+      taxTypeId_effectiveFrom_variant: {
+        taxTypeId: vatType.id,
+        effectiveFrom,
+        variant: "DEFAULT",
+      },
+    },
+    create: {
+      taxTypeId: vatType.id,
+      variant: "DEFAULT",
+      rate,
+      effectiveFrom,
+    },
+    update: { rate },
+  });
+
+  await prisma.companySettings.updateMany({
+    where: { id: "default" },
+    data: { vatRate: rate },
   });
 }

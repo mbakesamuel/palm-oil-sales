@@ -14,6 +14,7 @@ import { getOrInitCompanySettings } from "@/lib/settings";
 import {
   combinedVatAndOtherRates,
 } from "@/lib/tax/resolve";
+import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
 import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
@@ -388,6 +389,8 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
     const financialYear = postingFY;
     const financialMonth = postingCalendarMonth;
 
+    const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
+
     if (idRaw) {
       const id = Number.parseInt(idRaw, 10);
       if (!Number.isFinite(id)) return { ok: false, error: "Invalid order." };
@@ -414,6 +417,10 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
           financialMonth,
           postingCalendarYear,
           createdByUserId: existing.createdByUserId ?? session.userId,
+          commercialServiceId: commercialService.id,
+          issuerPhoneSnapshot: commercialService.phone ?? null,
+          issuerAddressSnapshot: commercialService.address ?? null,
+          commercialServiceNameSnapshot: commercialService.name,
         },
       });
 
@@ -440,6 +447,10 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
         postingCalendarYear,
         createdByUserId: session.userId,
         status: ValidationStatus.PENDING,
+        commercialServiceId: commercialService.id,
+        issuerPhoneSnapshot: commercialService.phone ?? null,
+        issuerAddressSnapshot: commercialService.address ?? null,
+        commercialServiceNameSnapshot: commercialService.name,
       },
       select: { id: true, deliveryOrderNo: true },
     });
@@ -831,13 +842,17 @@ export async function loadDeliveryOrderPrintById(
       ? settings.logoUrl.trim()
       : "/cdc-logo-svg.svg";
 
+  const deptParts = [settings.department?.trim(), order.commercialServiceNameSnapshot?.trim()].filter(
+    (s): s is string => Boolean(s && s.length > 0),
+  );
+
   return {
     ok: true,
     data: {
       companyName: settings.companyName,
-      department: settings.department ?? null,
-      companyPhone: settings.phone ?? null,
-      companyAddress: settings.address ?? null,
+      department: deptParts.length > 0 ? deptParts.join(" · ") : null,
+      companyPhone: order.issuerPhoneSnapshot ?? null,
+      companyAddress: order.issuerAddressSnapshot ?? null,
       logoSrc,
       order: orderModel,
     },

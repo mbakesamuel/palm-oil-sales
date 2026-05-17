@@ -18,16 +18,34 @@ export default async function SetupPage() {
   const users = await prisma.user.findMany({
     where: { isActive: true },
     orderBy: [{ role: "asc" }, { username: "asc" }],
-    select: { id: true, username: true, name: true, role: true, service: true },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+      role: true,
+      service: true,
+      commercialServiceId: true,
+      commercialService: {
+        select: { id: true, name: true, invoicePrefix: true },
+      },
+    },
   });
 
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Company Parameters</h1>
+        <h1 className="text-2xl font-semibold">General Parameters</h1>
         <p className="text-sm opacity-75">
-          Configure company information, department, VAT rate, invoice prefix,
-          financial year, and optional agro-themed appearance.
+          Configure company branding, headline VAT rate (with statutory
+          effective date), financial year, and appearance. Invoice prefix,
+          letterhead phone and address are configured under{" "}
+          <a
+            className="underline underline-offset-4"
+            href="/setup/commercial-services"
+          >
+            Services
+          </a>
+          .
         </p>
       </div>
 
@@ -75,40 +93,21 @@ export default async function SetupPage() {
             className="rounded-md border border-border bg-transparent px-3 py-2"
           />
           <div className="text-xs opacity-70">
-            Shown in the app shell, delivery order PDFs,sales Invoices/receipts
-            and confirm dialogs.
-            <span className="font-medium">Services</span> (e.g Palm Oil Sales,
-            Rubber Sales etc) are <span className="font-medium">per user</span>{" "}
-            and edited under{" "}
+            Shown in the app shell and shared reports.
+            <span className="font-medium">services</span> (invoice prefix,
+            letterhead phone and address) are configured under{" "}
+            <a
+              className="underline underline-offset-4"
+              href="/setup/commercial-services"
+            >
+              services
+            </a>
+            ; assign each user to a service line under{" "}
             <a className="underline underline-offset-4" href="/users">
               Users
             </a>
             .
           </div>
-        </div>
-
-        <div className="grid gap-2">
-          <label className="text-sm font-medium" htmlFor="phone">
-            Phone (optional)
-          </label>
-          <input
-            id="phone"
-            name="phone"
-            defaultValue={settings.phone ?? ""}
-            className="rounded-md border border-border bg-transparent px-3 py-2"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <label className="text-sm font-medium" htmlFor="address">
-            Address (optional)
-          </label>
-          <input
-            id="address"
-            name="address"
-            defaultValue={settings.address ?? ""}
-            className="rounded-md border border-border bg-transparent px-3 py-2"
-          />
         </div>
 
         <div className="grid gap-2">
@@ -127,16 +126,20 @@ export default async function SetupPage() {
         </div>
 
         <div className="grid gap-2">
-          <label className="text-sm font-medium" htmlFor="invoicePrefix">
-            Invoice prefix
+          <label className="text-sm font-medium" htmlFor="vatEffectiveFrom">
+            VAT effective from
           </label>
           <input
-            id="invoicePrefix"
-            name="invoicePrefix"
-            defaultValue={settings.invoicePrefix}
+            id="vatEffectiveFrom"
+            name="vatEffectiveFrom"
+            type="date"
             className="rounded-md border border-border bg-transparent px-3 py-2"
-            required
           />
+          <div className="text-xs opacity-70">
+            Calendar day when this VAT rate applies for new postings (UTC date).
+            Leave blank for today. Existing invoices keep their stored tax
+            amounts.
+          </div>
         </div>
 
         <div className="grid gap-2">
@@ -255,12 +258,19 @@ export default async function SetupPage() {
                       <span className="mx-1 opacity-40">·</span>
                       {u.name}
                     </span>
-                    {u.service?.trim() ? (
+                    {u.commercialService?.name?.trim() ? (
+                      <div
+                        className="text-xs opacity-70 truncate"
+                        title={`${u.commercialService.name} (${u.commercialService.invoicePrefix})`}
+                      >
+                        Line: {u.commercialService.name}
+                      </div>
+                    ) : u.service?.trim() ? (
                       <div
                         className="text-xs opacity-70 truncate"
                         title={u.service}
                       >
-                        Service: {u.service}
+                        Service note: {u.service}
                       </div>
                     ) : null}
                   </div>

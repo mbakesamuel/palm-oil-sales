@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { refreshCurrentUserSession } from "@/app/(app)/users/session-actions";
 import type { AuthSession } from "@/lib/auth-session";
 
 type AuthStatus = "loading" | "ready";
@@ -10,6 +11,7 @@ type AuthContextValue = {
   session: AuthSession | null;
   signIn: (session: AuthSession) => void;
   signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 };
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -82,9 +84,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshSession = React.useCallback(async () => {
+    await refreshCurrentUserSession();
+    const s = await fetchSession();
+    setSession(s);
+    setStatus("ready");
+  }, []);
+
   const value = React.useMemo(
-    () => ({ status, session, signIn, signOut }),
-    [status, session, signIn, signOut],
+    () => ({ status, session, signIn, signOut, refreshSession }),
+    [status, session, signIn, signOut, refreshSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

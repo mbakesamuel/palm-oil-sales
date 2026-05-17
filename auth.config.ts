@@ -88,6 +88,11 @@ export default {
           displayName: string;
           salesPoint: { id: number; name: string } | null;
           service?: string | null;
+          commercialService?: {
+            id: string;
+            name: string;
+            invoicePrefix: string;
+          } | null;
         };
         token.sub = u.id;
         token.userId = u.id;
@@ -96,6 +101,7 @@ export default {
         token.displayName = u.displayName;
         token.salesPoint = u.salesPoint;
         token.service = u.service ?? null;
+        token.commercialService = u.commercialService ?? null;
       }
       return token;
     },
@@ -109,6 +115,21 @@ export default {
       session.service =
         typeof token.service === "string" && token.service.trim() !== ""
           ? token.service.trim()
+          : null;
+      const csRaw = token.commercialService as
+        | { id: string; name: string; invoicePrefix: string }
+        | null
+        | undefined;
+      session.commercialService =
+        csRaw &&
+        typeof csRaw.id === "string" &&
+        typeof csRaw.name === "string" &&
+        typeof csRaw.invoicePrefix === "string"
+          ? {
+              id: csRaw.id,
+              name: csRaw.name,
+              invoicePrefix: csRaw.invoicePrefix,
+            }
           : null;
       if (session.user) {
         session.user.id = token.userId as string;

@@ -5,9 +5,34 @@ import authConfig from "@/auth.config";
 import { getPrismaClient } from "@/lib/prisma";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import type { UserRole } from "@/lib/domain";
+import {
+  loadAuthSessionByUserId,
+  mapAuthSessionToToken,
+} from "@/lib/load-auth-session";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user, trigger, session }) {
+      const next = await authConfig.callbacks.jwt({
+        token,
+        user,
+        trigger,
+        session,
+      });
+
+      if (trigger === "update") {
+        const userId = next.userId as string | undefined;
+        if (!userId) return next;
+        const fresh = await loadAuthSessionByUserId(userId);
+        if (!fresh) return next;
+        return { ...next, ...mapAuthSessionToToken(fresh) };
+      }
+
+      return next;
+    },
+  },
   providers: [
     Credentials({
       credentials: {
@@ -22,7 +47,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const prisma = getPrismaClient();
         const user = await prisma.user.findUnique({
           where: { username },
-          include: { salesPoint: { select: { id: true, name: true } } },
+          include: {
+            salesPoint: { select: { id: true, name: true } },
+            commercialService: {
+              select: { id: true, name: true, invoicePrefix: true, isActive: true },
+            },
+          },
         });
         if (!user || !user.isActive) return null;
 
@@ -55,6 +85,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             ? user.service.trim()
             : null;
 
+        const commercialService =
+          user.commercialService?.isActive === true
+            ? {
+                id: user.commercialService.id,
+                name: user.commercialService.name,
+                invoicePrefix: user.commercialService.invoicePrefix,
+              }
+            : null;
+
         return {
           id: user.id,
           name: displayName,
@@ -64,6 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           displayName,
           salesPoint,
           service,
+          commercialService,
         };
       },
     }),

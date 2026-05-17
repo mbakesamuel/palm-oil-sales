@@ -2,7 +2,7 @@
 
 import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
-import { syncLatestVatScheduleToCompanyRate } from "@/lib/tax/bootstrap";
+import { ensureTaxCatalogSynced, upsertVatScheduleForEffectiveDate } from "@/lib/tax/bootstrap";
 import { Prisma, type UiThemePreset } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -25,6 +25,21 @@ function parseUiThemePreset(raw: string): UiThemePreset {
   return "default";
 }
 
+/** Calendar day (YYYY-MM-DD) for VAT schedule row (UTC midnight). Blank = UTC today. */
+function parseVatEffectiveIsoDate(raw: string): string | null {
+  const s = String(raw ?? "").trim();
+  const fallback = () => {
+    const t = new Date();
+    const y = t.getUTCFullYear();
+    const m = String(t.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(t.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+  if (!s) return fallback();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  return s;
+}
+
 export async function saveCompanySettings(formData: FormData) {
   await assertPermissionKey("route:/setup");
   const prisma = getPrismaClient();
@@ -38,10 +53,8 @@ export async function saveCompanySettings(formData: FormData) {
       ? logoUrlRaw
       : null;
   const department = String(formData.get("department") ?? "").trim() || null;
-  const phone = String(formData.get("phone") ?? "").trim() || null;
-  const address = String(formData.get("address") ?? "").trim() || null;
-  const invoicePrefix = String(formData.get("invoicePrefix") ?? "").trim() || "PO";
   const vatRateRaw = String(formData.get("vatRate") ?? "").trim();
+  const vatEffectiveRaw = String(formData.get("vatEffectiveFrom") ?? "").trim();
   const fiscalYearStartMonth = parseFiscalYearStartMonth(
     String(formData.get("fiscalYearStartMonth") ?? "1"),
   );
@@ -55,6 +68,10 @@ export async function saveCompanySettings(formData: FormData) {
   if (!vatRate) {
     throw new Error("VAT rate must be a decimal like 0.1925.");
   }
+  const vatEffectiveIso = parseVatEffectiveIsoDate(vatEffectiveRaw);
+  if (!vatEffectiveIso) {
+    throw new Error("VAT effective from must be YYYY-MM-DD.");
+  }
   if (fiscalYearStartMonth == null) {
     throw new Error("Financial year start month must be between 1 and 12.");
   }
@@ -66,9 +83,6 @@ export async function saveCompanySettings(formData: FormData) {
       companyName,
       logoUrl,
       department,
-      phone,
-      address,
-      invoicePrefix,
       vatRate,
       fiscalYearStartMonth,
       uiThemePreset,
@@ -77,16 +91,20 @@ export async function saveCompanySettings(formData: FormData) {
       companyName,
       logoUrl,
       department,
-      phone,
-      address,
-      invoicePrefix,
       vatRate,
       fiscalYearStartMonth,
       uiThemePreset,
     },
   });
 
-  await syncLatestVatScheduleToCompanyRate(new Prisma.Decimal(vatRate));
+  const merged = await prisma.companySettings.findUniqueOrThrow({
+    where: { id: "default" },
+  });
+  await ensureTaxCatalogSynced(merged);
+  await upsertVatScheduleForEffectiveDate(
+    new Prisma.Decimal(vatRate),
+    new Date(`${vatEffectiveIso}T00:00:00.000Z`),
+  );
 
   // Ensure there is at least one admin and one clerk user for per-user cash tracking.
   const userCount = await prisma.user.count();

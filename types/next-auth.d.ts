@@ -9,6 +9,11 @@ declare module "next-auth" {
     salesPoint: { id: number; name: string } | null;
     /** Optional sub-unit / service line for this user (from `User.service`). */
     service: string | null;
+    commercialService: {
+      id: string;
+      name: string;
+      invoicePrefix: string;
+    } | null;
   }
 }
 
@@ -20,5 +25,10 @@ declare module "next-auth/jwt" {
     role?: UserRole;
     salesPoint?: { id: number; name: string } | null;
     service?: string | null;
+    commercialService?: {
+      id: string;
+      name: string;
+      invoicePrefix: string;
+    } | null;
   }
 }

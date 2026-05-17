@@ -3,6 +3,9 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateInvoiceNo } from "@/lib/invoice";
 import {
+  resolveCommercialServiceForUserId,
+} from "@/lib/commercial-service";
+import {
   assertPostingPeriod,
   assertTransactionDateInWorkingMonth,
   getOpenFinancialYearPeriod,
@@ -195,8 +198,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   if (!Array.isArray(payments) || payments.length === 0)
     return { ok: false, error: "Add at least one payment." };
 
-  const [settings, customer, openPeriod] = await Promise.all([
-    getOrInitCompanySettings(),
+  const [customer, openPeriod] = await Promise.all([
     prisma.customer.findUnique({
       where: { id: customerId },
       select: {
@@ -211,6 +213,8 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   ]);
 
   if (!customer) return { ok: false, error: "Customer not found." };
+
+  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
 
   if (!Number.isFinite(postingFY) || !Number.isFinite(postingCalendarYear) || !Number.isFinite(postingCalendarMonth)) {
     return {
@@ -430,7 +434,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     return { ok: false, error: "No credit sales: payment total must equal gross amount." };
   }
 
-  const invoiceNo = await allocateInvoiceNo(settings.invoicePrefix, soldAt);
+  const invoiceNo = await allocateInvoiceNo(prisma, commercialService.id, soldAt);
 
   const created = await prisma.sale.create({
     data: {
@@ -453,6 +457,10 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       financialYear: postingFY,
       financialMonth: postingCalendarMonth,
       postingCalendarYear,
+      commercialServiceId: commercialService.id,
+      issuerPhoneSnapshot: commercialService.phone ?? null,
+      issuerAddressSnapshot: commercialService.address ?? null,
+      commercialServiceNameSnapshot: commercialService.name,
       appliedTaxes: { create: appliedTaxCreates },
       lines: { create: lineCreates },
       payments: {
@@ -916,13 +924,18 @@ export async function loadSalePrintById(
     })),
   };
 
+  const deptParts = [settings.department?.trim(), sale.commercialServiceNameSnapshot?.trim()].filter(
+    (s): s is string => Boolean(s && s.length > 0),
+  );
+  const departmentLine = deptParts.length > 0 ? deptParts.join(" · ") : null;
+
   return {
     ok: true,
     data: {
       companyName: settings.companyName,
-      department: settings.department ?? null,
-      companyPhone: settings.phone ?? null,
-      companyAddress: settings.address ?? null,
+      department: departmentLine,
+      companyPhone: sale.issuerPhoneSnapshot ?? null,
+      companyAddress: sale.issuerAddressSnapshot ?? null,
       sale: saleModel,
     },
   };

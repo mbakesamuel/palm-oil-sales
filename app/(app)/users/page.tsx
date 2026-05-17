@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 export default async function UsersPage() {
   const prisma = getPrismaClient();
-  const [users, salesPoints] = await Promise.all([
+  const [users, salesPoints, commercialServices] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ isActive: "desc" }, { username: "asc" }],
       select: {
@@ -19,11 +19,19 @@ export default async function UsersPage() {
         salesPointId: true,
         salesPoint: { select: { id: true, name: true } },
         service: true,
+        commercialServiceId: true,
+        commercialService: {
+          select: { id: true, name: true, invoicePrefix: true },
+        },
       },
     }),
     prisma.salesPoint.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
+    }),
+    prisma.commercialService.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, invoicePrefix: true, isActive: true },
     }),
   ]);
 
@@ -31,6 +39,7 @@ export default async function UsersPage() {
     <UsersClient
       users={users}
       salesPoints={salesPoints}
+      commercialServices={commercialServices}
       saveUserAction={saveUser}
       setUserActiveAction={setUserActive}
     />

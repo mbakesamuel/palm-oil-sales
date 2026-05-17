@@ -24,6 +24,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { resolveVariantUnitPriceExTax } from "@/lib/pricing/resolve";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
 import {
   BpoEmployeeCollectedProduct,
   BpoMovementStatus,
@@ -321,10 +322,12 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
       }
     }
 
-    const invoiceNo = await allocateInvoiceNo((await getOrInitCompanySettings()).invoicePrefix, soldAt);
+    const commercialService = await resolveCommercialServiceForUserId(prisma, actor.id);
+
     const created = await prismaRetry(() =>
       prisma.$transaction(
         async (tx) => {
+          const invoiceNo = await allocateInvoiceNo(tx, commercialService.id, soldAt);
           const sale = await tx.sale.create({
             data: {
               invoiceNo,
@@ -349,6 +352,10 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
               financialYear: postingFY,
               financialMonth: postingCalendarMonth,
               postingCalendarYear,
+              commercialServiceId: commercialService.id,
+              issuerPhoneSnapshot: commercialService.phone ?? null,
+              issuerAddressSnapshot: commercialService.address ?? null,
+              commercialServiceNameSnapshot: commercialService.name,
               lines: {
                 create: preparedLines.map((line) => ({
                   productId: line.productId,
@@ -479,13 +486,17 @@ export async function loadBpoOutboundSaleReceipt(
     if (accessErr) return { ok: false, error: accessErr };
 
     const employee = sale.bpoEmployeeCreditSale?.employee;
+    const deptParts = [
+      settings.department?.trim(),
+      sale.commercialServiceNameSnapshot?.trim(),
+    ].filter((s): s is string => Boolean(s && s.length > 0));
     return {
       ok: true,
       data: {
         companyName: settings.companyName,
-        department: settings.department ?? null,
-        companyPhone: settings.phone ?? null,
-        companyAddress: settings.address ?? null,
+        department: deptParts.length > 0 ? deptParts.join(" · ") : null,
+        companyPhone: sale.issuerPhoneSnapshot ?? null,
+        companyAddress: sale.issuerAddressSnapshot ?? null,
         invoiceNo: sale.invoiceNo,
         soldAtIso: sale.soldAt.toISOString(),
         customerName: sale.customerNameSnapshot,

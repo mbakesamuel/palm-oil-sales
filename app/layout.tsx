@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { getServerSession } from "@/lib/auth-server";
+import { getDefaultCommercialInvoicePrefix } from "@/lib/commercial-service";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { uiThemePresetToDataAttribute } from "@/lib/ui-theme";
 import "./globals.css";
@@ -32,16 +34,23 @@ export default async function RootLayout({
   let footerLine = "Currency: XAF · VAT: 19.25% · Invoice prefix: PO";
   let uiTheme = uiThemePresetToDataAttribute(undefined);
   try {
-    const s = await getOrInitCompanySettings();
+    const [s, defaultInvoicePrefix, session] = await Promise.all([
+      getOrInitCompanySettings(),
+      getDefaultCommercialInvoicePrefix(),
+      getServerSession(),
+    ]);
     uiTheme = uiThemePresetToDataAttribute(s.uiThemePreset);
     const vatPct = (Number.parseFloat(String(s.vatRate)) * 100).toFixed(2);
-    const dept = s.department?.trim();
+    const dept = s.department?.trim() || null;
+    const serviceName = session?.commercialService?.name?.trim() || null;
+    const invoicePrefix =
+      session?.commercialService?.invoicePrefix?.trim() || defaultInvoicePrefix;
     footerLine = [
-      s.companyName,
-      dept ? dept : null,
+      dept,
+      serviceName,
       `Currency: XAF`,
       `VAT: ${vatPct}%`,
-      `Invoice prefix: ${s.invoicePrefix}`,
+      `Invoice prefix: ${invoicePrefix}`,
     ]
       .filter(Boolean)
       .join(" · ");

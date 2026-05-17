@@ -11,6 +11,8 @@ import { INVOKE_PATH_HEADER } from "@/auth.config";
 import { headers } from "next/headers";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { prismaDateToIso } from "@/lib/posting-calendar";
+import { resolveCompanyLogoSrc } from "@/lib/company-logo";
+import { getDefaultCommercialInvoicePrefix } from "@/lib/commercial-service";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { redirect } from "next/navigation";
 import { Sidebar } from "./Sidebar";
@@ -18,7 +20,8 @@ import { Sidebar } from "./Sidebar";
 const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
-  { href: "/setup", label: "Company Parameters" },
+  { href: "/setup", label: "General Parameters" },
+  { href: "/setup/commercial-services", label: "Commercial services" },
   { href: "/setup/sales-budget", label: "Sales budget Phasing" },
   { href: "/setup/product-pricing", label: "Product pricing" },
   { href: "/setup/bpo-variants", label: "Bottled Palm Oil Products/pricing" },
@@ -90,15 +93,16 @@ export default async function AppLayout({
   }
   await assertRouteAllowedForPath(pathname, session.role);
 
-  const [settings, openPeriod] = await Promise.all([
+  const [settings, openPeriod, invoicePrefix] = await Promise.all([
     getOrInitCompanySettings(),
     getOpenFinancialYearPeriod(),
+    getDefaultCommercialInvoicePrefix(),
   ]);
   const vatPct = new Prisma.Decimal(String(settings.vatRate))
     .mul(100)
     .toDecimalPlaces(2)
     .toString();
-  const subtitle = `Currency: XAF · VAT: ${vatPct}%`;
+  const subtitle = `Currency: XAF · VAT: ${vatPct}% · Invoice prefix: ${invoicePrefix}`;
 
   return (
     <BrandingProvider
@@ -118,10 +122,11 @@ export default async function AppLayout({
       >
         <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[min(100rem,calc(100vw-1.5rem))] px-4 py-6 h-full min-h-0 flex flex-col gap-4 md:flex-row md:gap-6 print:max-w-none print:px-6 print:py-4 print:block">
-            <div className="print:hidden shrink-0 w-full max-md:min-w-0 md:h-full md:w-16 md:max-w-16 md:shrink-0 md:overflow-y-auto lg:max-w-none lg:w-auto overflow-x-auto overflow-y-visible md:overflow-x-visible">
+            <div className="print:hidden shrink-0 w-full max-md:min-w-0 md:h-full md:w-20 md:max-w-20 md:shrink-0 md:overflow-y-auto lg:max-w-none lg:w-auto overflow-x-auto overflow-y-visible md:overflow-x-visible">
               <Sidebar
                 brand={settings.companyName}
                 department={settings.department}
+                logoSrc={resolveCompanyLogoSrc(settings.logoUrl)}
                 subtitle={subtitle}
                 dashboardNav={[...dashboardNav]}
                 setupNav={[...setupNav]}
