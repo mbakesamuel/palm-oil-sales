@@ -6,14 +6,18 @@
 export const PERMISSION_KEYS = [
   "route:/dashboard",
   "route:/setup",
+  "route:/setup/commercial-services",
   "route:/setup/permissions",
   "route:/setup/product-pricing",
   "route:/setup/bpo-variants",
+  "route:/setup/product-variants",
   "route:/setup/sales-budget",
   "route:/users",
   "route:/customers",
   "route:/financial-years",
   "route:/sales-points",
+  "route:/factories",
+  "route:/rubber",
   "route:/storage-locations",
   "route:/tax-regimes",
   "route:/tax-types",
@@ -23,6 +27,10 @@ export const PERMISSION_KEYS = [
   "route:/consignment-notes",
   "route:/pos",
   "route:/bpo-sales",
+  "route:/stock",
+  "route:/stock/receipts",
+  "route:/stock/movements",
+  "route:/stock/issues",
   "route:/stock/receive",
   "route:/stock/bpo-receive",
   "route:/stock/bpo-consignments",
@@ -44,7 +52,19 @@ export const PERMISSION_KEYS = [
   "route:/reports/bpo-sales-crosstab",
   "route:/reports/bpo-stock-cross",
   "ui:validate-documents",
+  "ui:validate-delivery-orders",
   "ui:manage-access-control",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
+
+const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
+  "ui:validate-documents": "Validate sales invoices and similar documents",
+  "ui:validate-delivery-orders": "Validate delivery orders",
+  "ui:manage-access-control": "Manage access control (Setup → Permissions)",
+};
+
+/** Human-readable label for permission keys shown in Setup → Permissions. */
+export function permissionLabelForKey(key: PermissionKey): string {
+  return PERMISSION_LABELS[key] ?? key;
+}

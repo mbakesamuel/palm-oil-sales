@@ -1,5 +1,12 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { getServerSession } from "@/lib/auth-server";
+import { getPermissionsForSession } from "@/lib/access-control";
+import {
+  customerWhereForScope,
+  productWhereForScope,
+  resolveServiceScope,
+} from "@/lib/service-scope";
 import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
 import {
   deleteDeliveryOrder,
@@ -17,10 +24,19 @@ export const runtime = "nodejs";
 
 export default async function DeliveryOrdersPage() {
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
+  const canValidateDeliveryOrder =
+    session != null
+      ? (await getPermissionsForSession(session))["ui:validate-delivery-orders"]
+      : false;
+  const productWhere = productWhereForScope(scope, { form: { not: "BOTTLED" } });
+  const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, products, salesPoints] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
+        where: customerWhere,
         orderBy: { name: "asc" },
         select: {
           id: true,
@@ -32,7 +48,7 @@ export default async function DeliveryOrdersPage() {
     ),
     prismaRetry(() =>
       prisma.product.findMany({
-        where: { isBottledPalmOil: false },
+        where: productWhere,
         orderBy: [{ productName: "asc" }],
         select: {
           productId: true,
@@ -55,7 +71,7 @@ export default async function DeliveryOrdersPage() {
       customers={customers.map((c) => ({
         id: c.id,
         name: c.name,
-        vatApplies: c.taxRegime.vatApplies,
+        vatApplies: c.taxRegime?.vatApplies ?? false,
       }))}
       products={products}
       salesPoints={salesPoints}
@@ -67,6 +83,7 @@ export default async function DeliveryOrdersPage() {
       deleteDeliveryOrder={deleteDeliveryOrder}
       validateDeliveryOrder={validateDeliveryOrder}
       previewProductUnitPriceAction={previewProductUnitPrice}
+      canValidateDeliveryOrder={canValidateDeliveryOrder}
     />
   );
 }

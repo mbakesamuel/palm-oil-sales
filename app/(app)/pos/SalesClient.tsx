@@ -10,7 +10,6 @@ import {
 } from "@/contexts/WorkingPeriodContext";
 import { utcIsoDateToday } from "@/lib/posting-calendar";
 import { useAuth } from "@/contexts/AuthContext";
-import { canValidateDocuments } from "@/lib/auth-roles";
 import { ValidationStatus } from "@/lib/domain";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
@@ -24,8 +23,8 @@ import type {
 type Customer = {
   id: string;
   name: string;
-  taxRegimeId: string;
-  taxRegime: { name: string; vatApplies: boolean };
+  taxRegimeId: string | null;
+  taxRegime: { name: string; vatApplies: boolean } | null;
 };
 
 type Product = {
@@ -36,7 +35,6 @@ type Product = {
 
 type Line = {
   productId: string;
-  productVariantId?: string;
   qtyKg: string;
   qtyUnits?: string;
   unitPricePerKg: string;
@@ -61,7 +59,6 @@ function parseDec(s: string) {
 function linesFromDeliveryOrderProducts(data: DeliveryOrderLookupDto): Line[] {
   return data.perProduct.map((row) => ({
     productId: String(row.productId),
-    productVariantId: "",
     qtyKg: "0",
     unitPricePerKg: "0",
   }));
@@ -98,6 +95,7 @@ export function SalesClient(props: {
     | { ok: false; error: string }
   >;
   validateSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
+  canValidateDocuments: boolean;
   deleteSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
   previewProductUnitPriceAction: (
     customerId: string,
@@ -116,6 +114,7 @@ export function SalesClient(props: {
     loadSaleByInvoiceNo,
     lookupDeliveryOrderAction,
     validateSaleAction,
+    canValidateDocuments: canValidateDocumentsProp,
     deleteSaleAction,
     previewProductUnitPriceAction,
   } = props;
@@ -147,7 +146,6 @@ export function SalesClient(props: {
   const [lines, setLines] = React.useState<Line[]>(() => [
     {
       productId: "",
-      productVariantId: "",
       qtyKg: "0",
       unitPricePerKg: "0",
     },
@@ -495,7 +493,6 @@ export function SalesClient(props: {
     setLines([
       {
         productId: "",
-        productVariantId: "",
         qtyKg: "0",
         unitPricePerKg: "0",
       },
@@ -534,7 +531,6 @@ export function SalesClient(props: {
       s.lines.length > 0
         ? s.lines.map((l) => ({
             productId: String(l.productId),
-            productVariantId: l.productVariantId ?? "",
             qtyKg: l.qtyKg,
             qtyUnits: l.qtyUnits ?? l.qtyKg,
             unitPricePerKg: l.unitPricePerKg,
@@ -543,7 +539,6 @@ export function SalesClient(props: {
         : [
             {
               productId: "",
-              productVariantId: "",
               qtyKg: "0",
               unitPricePerKg: "0",
             },
@@ -838,7 +833,7 @@ export function SalesClient(props: {
             </select>
             <div className="text-xs opacity-70 space-y-0.5">
               <div>
-                Regime: {customer?.taxRegime.name ?? "-"}
+                Regime: {customer?.taxRegime?.name ?? "-"}
                 {vatChargedHint ? " · VAT may apply" : ""}
               </div>
               {saleId == null && taxPreviewError ? (
@@ -1069,7 +1064,6 @@ export function SalesClient(props: {
                   ...prev,
                   {
                     productId: "",
-                    productVariantId: "",
                     qtyKg: "0",
                     unitPricePerKg: "0",
                   },
@@ -1113,7 +1107,6 @@ export function SalesClient(props: {
                             ? {
                                 ...x,
                                 productId: e.target.value,
-                                productVariantId: "",
                               }
                             : x,
                         ),
@@ -1448,7 +1441,7 @@ export function SalesClient(props: {
                   : "Save sale (create invoice)"}
             </button>
             {saleId && saleStatus === ValidationStatus.PENDING && session ? (
-              canValidateDocuments(session.role) ? (
+              canValidateDocumentsProp ? (
                 <button
                   type="button"
                   disabled={busy !== null}

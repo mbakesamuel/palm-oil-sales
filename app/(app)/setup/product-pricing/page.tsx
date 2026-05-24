@@ -17,13 +17,13 @@ export default async function ProductPricingPage() {
       prisma.productUnitPriceSchedule.findMany({
         orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
         include: {
-          product: { select: { productName: true, productCatId: true } },
+          product: { select: { productName: true, productCatId: true, form: true } },
         },
       }),
     ),
     prismaRetry(() =>
       prisma.product.findMany({
-        where: { isBottledPalmOil: false },
+        where: { form: { not: "SECONDARY" } },
         orderBy: { productName: "asc" },
         select: { productId: true, productName: true, productCatId: true },
       }),

@@ -6,6 +6,7 @@ const LABELS: Record<UserRole, string> = {
   [UserRole.ADMIN]: "Admin",
   [UserRole.DIRECTOR]: "Director",
   [UserRole.MANAGER]: "Manager",
+  [UserRole.OFFICER]: "Officer",
   [UserRole.SENIOR_SUPERVISOR]: "Senior sales supervisor",
   [UserRole.SUPERVISOR]: "Sales supervisor",
   [UserRole.CLERK]: "Sales clerk",

@@ -4,10 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
-import type { BpoOutboundResult } from "@/app/(app)/stock/bpo-outbound/actions";
+import type { BpoOutboundResult } from "@/app/(app)/bpo-sales/actions";
 
-type VariantOpt = { id: string; label: string };
-type Line = { productVariantId: string; qtyUnits: string };
+type ProductOpt = { productId: number; label: string };
+type Line = { productId: string; qtyUnits: string };
 type PaymentMode = "CASH" | "CREDIT";
 
 function defaultDateWithinBounds(minIso: string | null, maxIso: string | null) {
@@ -25,17 +25,17 @@ type SaleRow = {
   customerName: string;
   grossAmount: string;
   employeeLabel: string | null;
-  lines: Array<{ variantLabel: string; qtyUnits: string; lineGross: string }>;
+  lines: Array<{ productLabel: string; qtyUnits: string; lineGross: string }>;
 };
 
 export function BpoSalesClient(props: {
-  variants: VariantOpt[];
+  products: ProductOpt[];
   sales: SaleRow[];
   canPost: boolean;
   botaAvailable: boolean;
   createSaleAction: (formData: FormData) => Promise<BpoOutboundResult>;
 }) {
-  const { variants, sales, canPost, botaAvailable, createSaleAction } = props;
+  const { products, sales, canPost, botaAvailable, createSaleAction } = props;
   const router = useRouter();
   const workingPeriod = useWorkingPeriod();
   const defaultSaleDate = defaultDateWithinBounds(
@@ -47,7 +47,7 @@ export function BpoSalesClient(props: {
     "BOTTLED_PALM_OIL",
   );
   const [lines, setLines] = React.useState<Line[]>([
-    { productVariantId: variants[0]?.id ?? "", qtyUnits: "0" },
+    { productId: String(products[0]?.productId ?? ""), qtyUnits: "0" },
   ]);
   const [lastSaleReceipt, setLastSaleReceipt] = React.useState<{
     id: string;
@@ -61,8 +61,8 @@ export function BpoSalesClient(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Bottled Palm Oil sales</h1>
         <p className="text-sm opacity-75">
-          Post cash or employee credit BPO sales at Bota. Approved variant prices are tax-inclusive; no extra tax is
-          added at checkout.
+          Post cash or employee credit bottled sales at Bota. Approved product prices are tax-inclusive; no extra tax
+          is added at checkout.
         </p>
       </div>
 
@@ -209,7 +209,12 @@ export function BpoSalesClient(props: {
             <button
               type="button"
               className="text-sm underline"
-              onClick={() => setLines((prev) => [...prev, { productVariantId: variants[0]?.id ?? "", qtyUnits: "0" }])}
+              onClick={() =>
+                setLines((prev) => [
+                  ...prev,
+                  { productId: String(products[0]?.productId ?? ""), qtyUnits: "0" },
+                ])
+              }
             >
               Add line
             </button>
@@ -218,14 +223,16 @@ export function BpoSalesClient(props: {
             <div key={idx} className="grid gap-2 sm:grid-cols-12">
               <select
                 className="sm:col-span-7 rounded-md border border-border bg-transparent px-3 py-2"
-                value={l.productVariantId}
+                value={l.productId}
                 onChange={(e) =>
-                  setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, productVariantId: e.target.value } : x)))
+                  setLines((prev) =>
+                    prev.map((x, i) => (i === idx ? { ...x, productId: e.target.value } : x)),
+                  )
                 }
               >
-                {variants.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
+                {products.map((p) => (
+                  <option key={p.productId} value={String(p.productId)}>
+                    {p.label}
                   </option>
                 ))}
               </select>
@@ -252,7 +259,7 @@ export function BpoSalesClient(props: {
           disabled={
             !canPost ||
             !botaAvailable ||
-            variants.length === 0 ||
+            products.length === 0 ||
             busy ||
             (paymentMode === "CREDIT" && collectedProduct === "LOOSE_PALM_OIL")
           }
@@ -287,8 +294,8 @@ export function BpoSalesClient(props: {
               </div>
               <ul className="mt-2 text-sm space-y-1">
                 {s.lines.map((l) => (
-                  <li key={`${s.invoiceNo}-${l.variantLabel}`} className="flex justify-between gap-3">
-                    <span>{l.variantLabel}</span>
+                  <li key={`${s.invoiceNo}-${l.productLabel}`} className="flex justify-between gap-3">
+                    <span>{l.productLabel}</span>
                     <span className="tabular-nums">{l.qtyUnits}</span>
                   </li>
                 ))}

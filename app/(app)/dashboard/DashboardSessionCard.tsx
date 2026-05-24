@@ -39,6 +39,9 @@ export function DashboardSessionCard() {
       ) : (
         <div className="opacity-80">All sales points</div>
       )}
+      {session.commercialService ? (
+        <div className="opacity-80">Commercial line: {session.commercialService.name}</div>
+      ) : null}
     </div>
   );
 }

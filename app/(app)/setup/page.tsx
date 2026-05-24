@@ -37,8 +37,8 @@ export default async function SetupPage() {
         <h1 className="text-2xl font-semibold">General Parameters</h1>
         <p className="text-sm opacity-75">
           Configure company branding, headline VAT rate (with statutory
-          effective date), financial year, and appearance. Invoice prefix,
-          letterhead phone and address are configured under{" "}
+          effective date), financial year, and appearance. Configure invoice prefix,
+          letterhead details (phone and address) and sales services under {" "}
           <a
             className="underline underline-offset-4"
             href="/setup/commercial-services"

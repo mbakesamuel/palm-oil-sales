@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { PrintButton } from "@/components/PrintButton";
 import { getServerSession } from "@/lib/auth-server";
-import { loadBpoOutboundSaleReceipt } from "@/app/(app)/stock/bpo-outbound/actions";
+import { loadBpoOutboundSaleReceipt } from "@/app/(app)/bpo-sales/actions";
 import { ReportHeader } from "@/components/ReportHeader";
 import { getOrInitCompanySettings } from "@/lib/settings";
 

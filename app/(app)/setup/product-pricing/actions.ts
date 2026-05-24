@@ -4,7 +4,7 @@ import { assertActorIsAdmin } from "@/lib/access-control";
 import { MAIN_PRODUCT_CATEGORY_ID } from "@/lib/pricing/constants";
 import { getPrismaClient } from "@/lib/prisma";
 import { CustomerType, Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePricingPaths } from "@/lib/pricing/revalidate";
 
 function parseIsoDate(raw: string): Date | null {
   const s = String(raw ?? "").trim();
@@ -49,13 +49,19 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
 
   const product = await prisma.product.findUnique({
     where: { productId },
-    select: { productCatId: true, productName: true },
+    select: { productCatId: true, productName: true, form: true },
   });
   if (!product) throw new Error("Product not found.");
 
   const isMain = product.productCatId === MAIN_PRODUCT_CATEGORY_ID;
+  const isBottled = product.form === "BOTTLED";
   let customerType: CustomerType | null = null;
-  if (isMain) {
+  if (isBottled) {
+    const ct = String(formData.get("customerType") ?? "").trim();
+    if (ct) {
+      throw new Error("Bottled products use one direct unit price (leave customer type empty).");
+    }
+  } else if (isMain) {
     customerType = parseCustomerTypeMain(String(formData.get("customerType") ?? ""));
   } else {
     const ct = String(formData.get("customerType") ?? "").trim();
@@ -94,7 +100,7 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
     throw e;
   }
 
-  revalidatePath("/setup/product-pricing");
+  revalidatePricingPaths();
 }
 
 export async function deleteProductUnitPriceSchedule(formData: FormData) {
@@ -104,5 +110,5 @@ export async function deleteProductUnitPriceSchedule(formData: FormData) {
   if (!id) throw new Error("Missing id.");
 
   await prisma.productUnitPriceSchedule.delete({ where: { id } });
-  revalidatePath("/setup/product-pricing");
+  revalidatePricingPaths();
 }

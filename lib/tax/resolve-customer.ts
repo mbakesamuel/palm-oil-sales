@@ -14,6 +14,14 @@ export type CustomerResolvedTax = {
 
 type PrismaForTax = ReturnType<typeof getPrismaClient>;
 
+type CustomerTaxContext = {
+  residency: string;
+  customerType: string;
+  hasTaxpayerId: boolean;
+  taxRegimeId: string | null;
+  taxRegimeKind: TaxRegimeKind | null;
+};
+
 async function resolveRateRow(
   prisma: PrismaForTax,
   taxTypeId: string,
@@ -28,27 +36,75 @@ async function resolveRateRow(
   });
 }
 
-export async function resolveTaxesForCustomer(
+async function resolveTaxesFromCatalog(
   prisma: PrismaForTax,
-  customerId: string,
+  customer: CustomerTaxContext,
   soldAt: Date,
 ): Promise<{ ok: true; taxes: CustomerResolvedTax[] } | { ok: false; error: string }> {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-    select: {
-      residency: true,
-      customerType: true,
-      hasTaxpayerId: true,
-      taxRegimeId: true,
-      taxRegime: { select: { kind: true } },
-    },
+  const types = await prisma.taxType.findMany({
+    where: { code: { in: [VAT_TAX_CODE, SALES_TAX_CODE] } },
+    select: { id: true, code: true, name: true, sortOrder: true },
   });
-  if (!customer) return { ok: false, error: "Customer not found." };
 
-  // Start with taxes linked to regime (keeps admin control of what taxes exist at all),
-  // then apply the customer-specific business rules as filters/variants.
+  const ordered = [...types].sort((a, b) => {
+    const so = a.sortOrder - b.sortOrder;
+    if (so !== 0) return so;
+    return a.code.localeCompare(b.code);
+  });
+
+  const taxes: CustomerResolvedTax[] = [];
+  for (const taxType of ordered) {
+    if (taxType.code === VAT_TAX_CODE && customer.residency !== "LOCAL") {
+      continue;
+    }
+
+    if (taxType.code === SALES_TAX_CODE) {
+      if (customer.residency !== "LOCAL") continue;
+      if (customer.customerType === "INDUSTRY") continue;
+
+      const variant = TaxRateVariant.NO_TAXPAYER_ID;
+      const row = await resolveRateRow(prisma, taxType.id, soldAt, variant);
+      if (!row) {
+        return {
+          ok: false,
+          error: `No Sales Tax rate scheduled for variant ${variant} on this date. Add a rate row in Tax types (code ${SALES_TAX_CODE}).`,
+        };
+      }
+      taxes.push({
+        taxTypeId: taxType.id,
+        code: taxType.code,
+        label: taxType.name,
+        rate: row.rate,
+      });
+      continue;
+    }
+
+    const row = await resolveRateRow(prisma, taxType.id, soldAt, TaxRateVariant.DEFAULT);
+    if (!row) {
+      const dayIso = prismaDateToIso(soldAt);
+      return {
+        ok: false,
+        error: `No tax rate scheduled for "${taxType.name}" (${taxType.code}) on or before ${dayIso}. Add a rate with an effective date in Tax setup.`,
+      };
+    }
+    taxes.push({
+      taxTypeId: taxType.id,
+      code: taxType.code,
+      label: taxType.name,
+      rate: row.rate,
+    });
+  }
+
+  return { ok: true, taxes };
+}
+
+async function resolveTaxesFromRegimeLinks(
+  prisma: PrismaForTax,
+  customer: CustomerTaxContext,
+  soldAt: Date,
+): Promise<{ ok: true; taxes: CustomerResolvedTax[] } | { ok: false; error: string }> {
   const links = await prisma.taxRegimeTax.findMany({
-    where: { taxRegimeId: customer.taxRegimeId },
+    where: { taxRegimeId: customer.taxRegimeId! },
     include: { taxType: { select: { id: true, code: true, name: true, sortOrder: true } } },
   });
 
@@ -60,21 +116,19 @@ export async function resolveTaxesForCustomer(
 
   const taxes: CustomerResolvedTax[] = [];
   for (const link of ordered) {
-    // Rule 1: VAT only for LOCAL
     if (link.taxType.code === VAT_TAX_CODE && customer.residency !== "LOCAL") {
       continue;
     }
 
-    // Rule 2: Sales Tax only for LOCAL and not for INDUSTRY; pick variant.
     if (link.taxType.code === SALES_TAX_CODE) {
       if (customer.residency !== "LOCAL") continue;
       if (customer.customerType === "INDUSTRY") continue;
 
-      const variant = !customer.hasTaxpayerId
-        ? TaxRateVariant.NO_TAXPAYER_ID
-        : customer.taxRegime.kind === TaxRegimeKind.REAL
+      const variant = customer.hasTaxpayerId
+        ? customer.taxRegimeKind === TaxRegimeKind.REAL
           ? TaxRateVariant.REAL
-          : TaxRateVariant.SIMPLIFIED;
+          : TaxRateVariant.SIMPLIFIED
+        : TaxRateVariant.NO_TAXPAYER_ID;
 
       const row = await resolveRateRow(prisma, link.taxType.id, soldAt, variant);
       if (!row) {
@@ -93,7 +147,6 @@ export async function resolveTaxesForCustomer(
       continue;
     }
 
-    // Default behavior: resolve DEFAULT variant.
     const row = await resolveRateRow(prisma, link.taxType.id, soldAt, TaxRateVariant.DEFAULT);
     if (!row) {
       const dayIso = prismaDateToIso(soldAt);
@@ -113,3 +166,34 @@ export async function resolveTaxesForCustomer(
   return { ok: true, taxes };
 }
 
+export async function resolveTaxesForCustomer(
+  prisma: PrismaForTax,
+  customerId: string,
+  soldAt: Date,
+): Promise<{ ok: true; taxes: CustomerResolvedTax[] } | { ok: false; error: string }> {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: {
+      residency: true,
+      customerType: true,
+      hasTaxpayerId: true,
+      taxRegimeId: true,
+      taxRegime: { select: { kind: true } },
+    },
+  });
+  if (!customer) return { ok: false, error: "Customer not found." };
+
+  const ctx: CustomerTaxContext = {
+    residency: customer.residency,
+    customerType: customer.customerType,
+    hasTaxpayerId: customer.taxRegimeId != null ? true : false,
+    taxRegimeId: customer.taxRegimeId,
+    taxRegimeKind: customer.taxRegime?.kind ?? null,
+  };
+
+  if (!ctx.taxRegimeId) {
+    return resolveTaxesFromCatalog(prisma, ctx, soldAt);
+  }
+
+  return resolveTaxesFromRegimeLinks(prisma, ctx, soldAt);
+}

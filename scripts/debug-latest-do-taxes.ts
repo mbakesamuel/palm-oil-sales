@@ -24,9 +24,13 @@ async function resolveTaxesForCustomerLikeApp(
     },
   });
   if (!customer) return { ok: false as const, error: "Customer not found." };
+  if (!customer.taxRegimeId || !customer.taxRegime) {
+    return { ok: false as const, error: "Customer has no tax regime." };
+  }
 
   const day = isoDate(soldAt);
   const asOfStartUtc = new Date(`${day}T00:00:00.000Z`);
+  const taxRegimeKind = customer.taxRegime.kind;
 
   const links = await prisma.taxRegimeTax.findMany({
     where: { taxRegimeId: customer.taxRegimeId },
@@ -62,7 +66,7 @@ async function resolveTaxesForCustomerLikeApp(
 
       const variant = !customer.hasTaxpayerId
         ? TaxRateVariant.NO_TAXPAYER_ID
-        : customer.taxRegime.kind === TaxRegimeKind.REAL
+        : taxRegimeKind === TaxRegimeKind.REAL
           ? TaxRateVariant.REAL
           : TaxRateVariant.SIMPLIFIED;
 
@@ -141,12 +145,19 @@ async function main() {
       customerType: order.customer.customerType,
       hasTaxpayerId: order.customer.hasTaxpayerId,
     });
-    console.log("Tax regime:", {
-      id: order.customer.taxRegime.id,
-      name: order.customer.taxRegime.name,
-      kind: order.customer.taxRegime.kind,
-      linkedTaxCodes: order.customer.taxRegime.taxTypeLinks.map((l) => l.taxType.code),
-    });
+    console.log(
+      "Tax regime:",
+      order.customer.taxRegime
+        ? {
+            id: order.customer.taxRegime.id,
+            name: order.customer.taxRegime.name,
+            kind: order.customer.taxRegime.kind,
+            linkedTaxCodes: order.customer.taxRegime.taxTypeLinks.map(
+              (l) => l.taxType.code,
+            ),
+          }
+        : null,
+    );
 
     const soldAt = new Date(
       `${order.dateIssued.toISOString().slice(0, 10)}T12:00:00.000Z`,

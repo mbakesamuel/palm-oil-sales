@@ -49,13 +49,122 @@ function pickLatestRows(rows: ScheduleRow[]): ScheduleRow[] {
   return [...bestByKey.values()];
 }
 
+type VariantPriceRow = {
+  id: string;
+  variantLabel: string;
+  effectiveFromIso: string;
+  unitPriceExTax: string;
+};
+
+function VariantPricingReportSection(props: { rows: VariantPriceRow[] }) {
+  const latest = React.useMemo(() => {
+    const best = new Map<string, VariantPriceRow>();
+    for (const r of props.rows) {
+      const prev = best.get(r.variantLabel);
+      if (!prev || r.effectiveFromIso > prev.effectiveFromIso) {
+        best.set(r.variantLabel, r);
+      }
+    }
+    return [...best.values()].sort((a, b) =>
+      a.variantLabel.localeCompare(b.variantLabel, undefined, { sensitivity: "base" }),
+    );
+  }, [props.rows]);
+
+  return (
+    <section id="bottled" className="space-y-2 print:break-inside-avoid scroll-mt-8">
+      <h3 className="text-base font-semibold">Bottled products</h3>
+      {latest.length === 0 ? (
+        <p className="text-sm opacity-75">No bottled variant prices.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg bg-background text-foreground">
+          <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
+            <thead>
+              <tr className="text-left">
+                <th className="border border-border p-2 font-medium print:border-black/25">
+                  Product
+                </th>
+                <th className="border border-border p-2 font-medium print:border-black/25">
+                  Effective from
+                </th>
+                <th className="border border-border p-2 text-right font-medium print:border-black/25">
+                  Unit price
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {latest.map((r) => (
+                <tr key={r.id} className="align-top">
+                  <td className="border border-border p-2 print:border-black/25">
+                    {r.variantLabel}
+                  </td>
+                  <td className="border border-border p-2 tabular-nums print:border-black/25">
+                    {r.effectiveFromIso}
+                  </td>
+                  <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
+                    {r.unitPriceExTax}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PricingReportSection(props: { title: string; rows: ScheduleRow[] }) {
+  return (
+    <section className="space-y-2 print:break-inside-avoid">
+      <h3 className="text-base font-semibold">{props.title}</h3>
+      {props.rows.length === 0 ? (
+        <p className="text-sm opacity-75">No rows.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg bg-background text-foreground">
+          <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
+            <thead>
+              <tr className="text-left">
+                <th className="border border-border p-2 font-medium print:border-black/25">
+                  Product
+                </th>
+                <th className="border border-border p-2 font-medium print:border-black/25">
+                  Customer type
+                </th>
+                <th className="border border-border p-2 text-right font-medium print:border-black/25">
+                  Unit price (ex tax)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((r) => (
+                <tr key={r.id} className="align-top">
+                  <td className="border border-border p-2 print:border-black/25">
+                    {r.productName}
+                  </td>
+                  <td className="border border-border p-2 print:border-black/25">
+                    {labelCustomerType(r.customerType)}
+                  </td>
+                  <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
+                    {r.unitPriceExTax}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function PricingReport(props: {
   companyName: string;
   department: string | null;
   logoUrl?: string | null;
   schedules: ScheduleRow[];
+  variantSchedules?: VariantPriceRow[];
 }) {
-  const { companyName, department, logoUrl, schedules } = props;
+  const { companyName, department, logoUrl, schedules, variantSchedules = [] } = props;
   const generated = new Date();
   const [effectiveFromIso, setEffectiveFromIso] = React.useState("");
 
@@ -79,50 +188,6 @@ export function PricingReport(props: {
   const LPO_NAME = "loose palm oil";
   const loosePalmOil = rows.filter((r) => normalizeName(r.productName) === LPO_NAME);
   const otherProducts = rows.filter((r) => normalizeName(r.productName) !== LPO_NAME);
-
-  function Section(props: { title: string; rows: ScheduleRow[] }) {
-    return (
-      <section className="space-y-2 print:break-inside-avoid">
-        <h3 className="text-base font-semibold">{props.title}</h3>
-        {props.rows.length === 0 ? (
-          <p className="text-sm opacity-75">No rows.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg bg-background text-foreground">
-            <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
-              <thead>
-                <tr className="text-left">
-                  <th className="border border-border p-2 font-medium print:border-black/25">
-                    Product
-                  </th>
-                  <th className="border border-border p-2 font-medium print:border-black/25">
-                    Customer type
-                  </th>
-                  <th className="border border-border p-2 text-right font-medium print:border-black/25">
-                    Unit price (ex tax)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {props.rows.map((r) => (
-                  <tr key={r.id} className="align-top">
-                    <td className="border border-border p-2 print:border-black/25">
-                      {r.productName}
-                    </td>
-                    <td className="border border-border p-2 print:border-black/25">
-                      {labelCustomerType(r.customerType)}
-                    </td>
-                    <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
-                      {r.unitPriceExTax}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    );
-  }
 
   return (
     <section className="space-y-4 print:space-y-3">
@@ -168,12 +233,17 @@ export function PricingReport(props: {
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && variantSchedules.length === 0 ? (
         <p className="text-sm opacity-75">No scheduled prices found.</p>
       ) : (
         <div className="space-y-6">
-          <Section title="Loose Palm Oil" rows={loosePalmOil} />
-          <Section title="Other products" rows={otherProducts} />
+          {rows.length > 0 ? (
+            <>
+              <PricingReportSection title="Loose Palm Oil" rows={loosePalmOil} />
+              <PricingReportSection title="Other products" rows={otherProducts} />
+            </>
+          ) : null}
+          <VariantPricingReportSection rows={variantSchedules} />
         </div>
       )}
     </section>

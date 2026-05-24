@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export default async function TaxRegimesPage() {
   const prisma = getPrismaClient();
 
-  const [regimes, taxTypes] = await Promise.all([
+  const [regimes, taxTypes, commercialServices] = await Promise.all([
     prisma.taxRegime.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -16,6 +16,8 @@ export default async function TaxRegimesPage() {
         name: true,
         kind: true,
         vatApplies: true,
+        commercialServiceId: true,
+        commercialService: { select: { id: true, name: true } },
         taxTypeLinks: {
           select: { taxTypeId: true, taxType: { select: { code: true } } },
         },
@@ -26,16 +28,24 @@ export default async function TaxRegimesPage() {
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
       select: { id: true, code: true, name: true },
     }),
+    prisma.commercialService.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
   ]);
 
   return (
     <TaxRegimesClient
+      commercialServices={commercialServices}
       taxTypes={taxTypes}
       regimes={regimes.map((r) => ({
         id: r.id,
         name: r.name,
         kind: r.kind,
         vatApplies: r.vatApplies,
+        commercialServiceId: r.commercialServiceId,
+        commercialServiceName: r.commercialService?.name ?? null,
         taxTypeIds: r.taxTypeLinks.map((l) => l.taxTypeId),
         taxCodes: r.taxTypeLinks.map((l) => l.taxType.code),
         customersCount: r._count.customers,

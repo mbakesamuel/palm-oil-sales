@@ -1,6 +1,13 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { getServerSession } from "@/lib/auth-server";
+import { getPermissionsForSession } from "@/lib/access-control";
+import {
+  customerWhereForScope,
+  productWhereForScope,
+  resolveServiceScope,
+} from "@/lib/service-scope";
 import {
   createSale,
   deleteSale,
@@ -19,10 +26,19 @@ export const runtime = "nodejs";
 export default async function PosPage() {
   await getOrInitCompanySettings();
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
+  const canValidateDocuments =
+    session != null
+      ? (await getPermissionsForSession(session))["ui:validate-documents"]
+      : false;
+  const productWhere = productWhereForScope(scope, { form: { not: "BOTTLED" } });
+  const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, grades, salesPoints] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
+        where: customerWhere,
         orderBy: { name: "asc" },
         select: {
           id: true,
@@ -35,7 +51,7 @@ export default async function PosPage() {
     ),
     prismaRetry(() =>
       prisma.product.findMany({
-        where: { isBottledPalmOil: false },
+        where: productWhere,
         orderBy: [{ productName: "asc" }],
         select: {
           productId: true,
@@ -94,6 +110,7 @@ export default async function PosPage() {
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
           previewProductUnitPriceAction={previewProductUnitPrice}
+          canValidateDocuments={canValidateDocuments}
         />
       )}
     </div>

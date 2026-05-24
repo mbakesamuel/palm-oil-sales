@@ -7,8 +7,8 @@ import { firstDayOfCalendarMonth } from "@/lib/posting-calendar";
 type Customer = {
   id: string;
   name: string;
-  taxRegimeId: string;
-  taxRegime: { name: string; vatApplies: boolean };
+  taxRegimeId: string | null;
+  taxRegime: { name: string; vatApplies: boolean } | null;
 };
 type Product = { productId: number; productName: string; productCat: { productCat: string } };
 type Line = { productId: string; qtyKg: string; unitPricePerKg: string };
@@ -32,7 +32,7 @@ export function PosForm(props: {
   ]);
 
   const customer = customers.find((c) => c.id === customerId);
-  const vatApplicable = customer?.taxRegime.vatApplies ?? false;
+  const vatApplicable = customer?.taxRegime?.vatApplies ?? false;
   const vatRate = vatApplicable ? Number.parseFloat(vatRateDecimal) : 0;
 
   const net = lines.reduce((sum, l) => {
@@ -89,7 +89,7 @@ export function PosForm(props: {
           ))}
         </select>
         <div className="text-xs opacity-70">
-          VAT: {vatApplicable ? "applies" : "exempt"} · Regime: {customer?.taxRegime.name ?? "-"}
+          VAT: {vatApplicable ? "applies" : "exempt"} · Regime: {customer?.taxRegime?.name ?? "-"}
         </div>
       </div>
 

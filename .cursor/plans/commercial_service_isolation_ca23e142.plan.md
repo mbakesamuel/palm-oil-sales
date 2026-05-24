@@ -4,7 +4,7 @@ overview: "Recommend a service-line scoping layer on top of your existing Commer
 todos:
   - id: service-scope-lib
     content: Add lib/service-scope.ts with resolveServiceScope + Prisma where builders for Sale/DO
-    status: pending
+    status: in_progress
   - id: scope-pos-do
     content: Apply service scope to POS and delivery-orders list/create/update actions
     status: pending

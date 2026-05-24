@@ -1,4 +1,5 @@
 import * as React from "react";
+import { ReportHeader } from "@/components/ReportHeader";
 
 function formatDisplayDate(iso: string) {
   try {
@@ -63,7 +64,7 @@ export function DeliveryOrderPrint(props: {
   department: string | null;
   companyPhone: string | null;
   companyAddress: string | null;
-  logoSrc: string;
+  logoSrc?: string | null;
   order: DeliveryOrderPrintModel;
 }) {
   const {
@@ -78,34 +79,23 @@ export function DeliveryOrderPrint(props: {
   return (
     <article className="delivery-order-print text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
       <header className="border-b border-black/20 pb-4 mb-6">
-        <div className="w-full">
-          <div className="relative flex min-h-8 items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
-            <img
-              src={logoSrc}
-              alt=""
-              className="absolute left-0 top-1/2 h-8 max-h-8 w-auto max-w-[72px] -translate-y-1/2 object-contain"
-            />
-            <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
-              {companyName}
-            </h1>
-          </div>
-          {department ? (
-            <p className="mt-1 text-center text-sm opacity-80">{department}</p>
-          ) : null}
+        <ReportHeader
+          companyName={companyName}
+          department={department}
+          logoSrc={logoSrc}
+          title="Delivery order"
+        />
+        {companyAddress || companyPhone ? (
           <div className="mt-2 text-center text-sm opacity-90 space-y-0.5">
             {companyAddress ? <p>{companyAddress}</p> : null}
             {companyPhone ? <p>Tel: {companyPhone}</p> : null}
           </div>
-        </div>
+        ) : null}
       </header>
 
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-lg font-bold uppercase tracking-wide">
-            Delivery order
-          </h2>
-          <p className="text-sm mt-1">
+          <p className="text-sm">
             <span className="opacity-70">No.</span>{" "}
             <span className="font-semibold tabular-nums">
               {order.deliveryOrderNo}
@@ -206,7 +196,7 @@ export function DeliveryOrderPrint(props: {
         </table>
       </div>
 
-      <div className="flex justify-end mb-8">
+      <div className="flex justify-end mb-8 border border-black/20 p-2">
         <div className="text-sm space-y-1 min-w-[240px]">
           <div className="flex justify-between gap-8">
             <span className="opacity-70">Subtotal (ex VAT)</span>

@@ -1,6 +1,6 @@
 "use server";
 
-import { assertPermissionKey } from "@/lib/access-control";
+import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
 import {
@@ -19,7 +19,6 @@ import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
   canCreateOrEditDeliveryOrderDraft,
-  canValidateDeliveryOrder,
   roleSeesOnlyValidatedDeliveryOrders,
 } from "@/lib/auth-roles";
 import type { UserRole as AppUserRole } from "@/lib/domain";
@@ -28,6 +27,12 @@ import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
+import { validateCustomerForCommercialPosting } from "@/lib/customer-commercial";
+import {
+  commercialServiceErrorForOperations,
+  commercialServiceErrorForResource,
+  resolveServiceScope,
+} from "@/lib/service-scope";
 import type { DeliveryOrderPrintModel } from "@/components/DeliveryOrderPrint";
 import { PaymentMethod, Prisma, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -180,9 +185,10 @@ export async function previewDeliveryOrderTaxes(
   { ok: true; preview: DeliveryOrderTaxPreview } | { ok: false; error: string }
 > {
   const prisma = getPrismaClient();
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/delivery-orders");
-    await requireActor(prisma);
+    ({ session } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
@@ -194,6 +200,19 @@ export async function previewDeliveryOrderTaxes(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     return { ok: false, error: "Date issued must be YYYY-MM-DD." };
   }
+
+  const scope = resolveServiceScope(session);
+  const csOpErr = commercialServiceErrorForOperations(scope);
+  if (csOpErr) return { ok: false, error: csOpErr };
+
+  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
+  const custCheck = await validateCustomerForCommercialPosting(
+    prisma,
+    scope,
+    cid,
+    commercialService.id,
+  );
+  if (!custCheck.ok) return custCheck;
 
   const soldAt = new Date(`${iso}T12:00:00.000Z`);
   const customer = await prisma.customer.findUnique({
@@ -238,12 +257,15 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
 
   const prisma = getPrismaClient();
   let actor;
+  let session;
   try {
     await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
+    ({ session, actor } = await requireActor(prisma));
   } catch {
     return null;
   }
+
+  const scope = resolveServiceScope(session);
 
   const order = await prisma.deliveryOrder.findUnique({
     where: { deliveryOrderNo },
@@ -271,6 +293,8 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
 
   const accessErr = salesPointErrorForResource(actor, order.salesPointId);
   if (accessErr) return null;
+  const csErr = commercialServiceErrorForResource(scope, order.commercialServiceId);
+  if (csErr) return null;
 
   if (
     roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
@@ -284,7 +308,7 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
     deliveryOrderNo: order.deliveryOrderNo,
     customerId: order.customerId,
     customerName: order.customer.name,
-    vatApplies: order.customer.taxRegime.vatApplies,
+    vatApplies: order.customer.taxRegime?.vatApplies ?? false,
     dateIssued: order.dateIssued.toISOString().slice(0, 10),
     orderRef: order.orderRef,
     salesPointId: order.salesPointId,
@@ -348,6 +372,10 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const spSubmitErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
   if (spSubmitErr) return { ok: false, error: spSubmitErr };
 
+  const scope = resolveServiceScope(session);
+  const csOpErr = commercialServiceErrorForOperations(scope);
+  if (csOpErr) return { ok: false, error: csOpErr };
+
   if (!canCreateOrEditDeliveryOrderDraft(session.role)) {
     return {
       ok: false,
@@ -390,6 +418,13 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
     const financialMonth = postingCalendarMonth;
 
     const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
+    const custCheck = await validateCustomerForCommercialPosting(
+      prisma,
+      scope,
+      customerId,
+      commercialService.id,
+    );
+    if (!custCheck.ok) return custCheck;
 
     if (idRaw) {
       const id = Number.parseInt(idRaw, 10);
@@ -397,7 +432,12 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
 
       const existing = await prisma.deliveryOrder.findUnique({
         where: { id },
-        select: { status: true, createdByUserId: true, salesPointId: true },
+        select: {
+          status: true,
+          createdByUserId: true,
+          salesPointId: true,
+          commercialServiceId: true,
+        },
       });
       if (!existing) return { ok: false, error: "Order not found." };
       if (existing.status === ValidationStatus.VALIDATED) {
@@ -405,6 +445,8 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
       }
       const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
       if (accessErr) return { ok: false, error: accessErr };
+      const csResErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+      if (csResErr) return { ok: false, error: csResErr };
 
       await prisma.deliveryOrder.update({
         where: { id },
@@ -470,12 +512,15 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
     return { ok: false, error: "Save the delivery order header first." };
   }
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
+    ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
+
+  const scope = resolveServiceScope(session);
 
   if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
     return {
@@ -499,7 +544,13 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
   try {
     const order = await prisma.deliveryOrder.findUnique({
       where: { id: deliveryOrderId },
-      select: { customerId: true, status: true, salesPointId: true, dateIssued: true },
+      select: {
+        customerId: true,
+        status: true,
+        salesPointId: true,
+        dateIssued: true,
+        commercialServiceId: true,
+      },
     });
     if (!order) return { ok: false, error: "Order not found." };
     if (order.status === ValidationStatus.VALIDATED) {
@@ -507,6 +558,8 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
     }
     const accessErr = salesPointErrorForResource(actor, order.salesPointId);
     if (accessErr) return { ok: false, error: accessErr };
+    const csErr = commercialServiceErrorForResource(scope, order.commercialServiceId);
+    if (csErr) return { ok: false, error: csErr };
 
     const [resolvedTaxes, customer] = await Promise.all([
       resolveTaxesForCustomer(prisma, order.customerId, order.dateIssued),
@@ -596,12 +649,15 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
     return { ok: false, error: "Save the delivery order header first." };
   }
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
+    ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
+
+  const scope = resolveServiceScope(session);
 
   if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
     return {
@@ -620,7 +676,13 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
   try {
     const order = await prisma.deliveryOrder.findUnique({
       where: { id: deliveryOrderId },
-      select: { id: true, dateIssued: true, salesPointId: true, status: true },
+      select: {
+        id: true,
+        dateIssued: true,
+        salesPointId: true,
+        status: true,
+        commercialServiceId: true,
+      },
     });
     if (!order) return { ok: false, error: "Order not found." };
     if (order.status === ValidationStatus.VALIDATED) {
@@ -628,6 +690,8 @@ export async function saveDeliveryOrderPayments(formData: FormData): Promise<Sav
     }
     const accessErr = salesPointErrorForResource(actor, order.salesPointId);
     if (accessErr) return { ok: false, error: accessErr };
+    const csErr = commercialServiceErrorForResource(scope, order.commercialServiceId);
+    if (csErr) return { ok: false, error: csErr };
 
     const dateIssued = order.dateIssued;
 
@@ -675,20 +739,25 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
   if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
+    ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
 
+  const scope = resolveServiceScope(session);
+
   const existing = await prisma.deliveryOrder.findUnique({
     where: { id },
-    select: { status: true, salesPointId: true },
+    select: { status: true, salesPointId: true, commercialServiceId: true },
   });
   if (!existing) return { ok: false, error: "Delivery order not found." };
   const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
   if (accessErr) return { ok: false, error: accessErr };
+  const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+  if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) {
     return { ok: false, error: "Validated delivery orders cannot be deleted." };
   }
@@ -717,20 +786,25 @@ export async function validateDeliveryOrder(formData: FormData): Promise<SaveSec
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-  if (!canValidateDeliveryOrder(session.role)) {
+  const perms = await getPermissionsForSession(session);
+  if (!perms["ui:validate-delivery-orders"]) {
     return {
       ok: false,
-      error: "Only managers can validate a delivery order.",
+      error: "You do not have permission to validate delivery orders.",
     };
   }
 
+  const scope = resolveServiceScope(session);
+
   const existing = await prisma.deliveryOrder.findUnique({
     where: { id },
-    select: { status: true, salesPointId: true },
+    select: { status: true, salesPointId: true, commercialServiceId: true },
   });
   if (!existing) return { ok: false, error: "Order not found." };
   const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
   if (accessErr) return { ok: false, error: accessErr };
+  const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+  if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
   await prisma.deliveryOrder.update({
@@ -757,15 +831,19 @@ export async function loadDeliveryOrderPrintById(
 > {
   const prisma = getPrismaClient();
   let actor;
+  let session;
   let settings;
   try {
     await assertPermissionKey("route:/delivery-orders");
     const r = await requireActor(prisma);
     actor = r.actor;
+    session = r.session;
     settings = await getOrInitCompanySettings();
   } catch {
     return { ok: false, reason: "auth" };
   }
+
+  const scope = resolveServiceScope(session);
 
   const order = await prisma.deliveryOrder.findUnique({
     where: { id },
@@ -793,6 +871,9 @@ export async function loadDeliveryOrderPrintById(
   if (!order) return { ok: false, reason: "missing" };
 
   if (salesPointErrorForResource(actor, order.salesPointId)) {
+    return { ok: false, reason: "missing" };
+  }
+  if (commercialServiceErrorForResource(scope, order.commercialServiceId)) {
     return { ok: false, reason: "missing" };
   }
 

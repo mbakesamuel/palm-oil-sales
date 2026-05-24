@@ -7,8 +7,8 @@ import {
   utcIsoDateToday,
 } from "@/lib/posting-calendar";
 import {
+  resolveBottledUnitPriceExTax,
   resolveUnitPriceExTax,
-  resolveVariantUnitPriceExTax,
 } from "@/lib/pricing/resolve";
 
 export async function previewProductUnitPrice(
@@ -45,19 +45,27 @@ export async function previewProductUnitPrice(
   return { ok: true, unitPriceExTax: r.unitPriceExTax.toString() };
 }
 
+/** @deprecated Use previewBottledUnitPrice — variants removed. */
 export async function previewProductVariantUnitPrice(
-  productVariantId: string,
+  productIdRaw: string,
+  dateIsoRaw: string,
+): Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }> {
+  return previewBottledUnitPrice(productIdRaw, dateIsoRaw);
+}
+
+export async function previewBottledUnitPrice(
+  productIdRaw: string,
   dateIsoRaw: string,
 ): Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }> {
   const prisma = getPrismaClient();
   const dateIso = normalizeIsoDateInput(dateIsoRaw.trim()) ?? utcIsoDateToday();
   const soldAt = noonUtcFromIsoDate(dateIso);
-  const variantId = String(productVariantId ?? "").trim();
-  if (!variantId) {
-    return { ok: false, error: "Select a Bottled Palm Oil variant." };
+  const productId = Number.parseInt(String(productIdRaw ?? "").trim(), 10);
+  if (!Number.isFinite(productId)) {
+    return { ok: false, error: "Select a bottled product." };
   }
 
-  const r = await resolveVariantUnitPriceExTax(prisma, variantId, soldAt);
+  const r = await resolveBottledUnitPriceExTax(prisma, productId, soldAt);
   if (!r.ok) return r;
   return { ok: true, unitPriceExTax: r.unitPriceExTax.toString() };
 }

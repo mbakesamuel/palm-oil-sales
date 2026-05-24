@@ -1,5 +1,10 @@
 import { UserRole } from "@/lib/domain";
 
+export {
+  roleRequiresCommercialServiceAssignment,
+  roleSeesAllCommercialServices,
+} from "@/lib/service-scope";
+
 /**
  * Roles that must have a fixed sales point on the user record (assigned by admin).
  * Server actions enforce posting scope for these roles via `lib/auth-sales-point-scope`.
@@ -31,22 +36,26 @@ export function roleMayRaiseBpoConsignmentSenderVoucher(role: UserRole): boolean
 }
 
 /**
- * Roles allowed to validate **sales invoices** (and similar). Delivery orders use
- * {@link canValidateDeliveryOrder} (managers only).
+ * Roles allowed to validate **sales invoices** (legacy helper; POS uses
+ * permission `ui:validate-documents`). Excludes senior supervisors — they
+ * draft DOs / BPO workflows; line supervisors validate clerk invoices.
  */
 export function canValidateDocuments(role: UserRole): boolean {
   return (
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
     role === UserRole.MANAGER ||
-    role === UserRole.SENIOR_SUPERVISOR ||
     role === UserRole.SUPERVISOR
   );
 }
 
-/** Validate BPO consignment receipt/outbound workflows without granting general invoice validation. */
+/** BPO consignment sender validation and related stock/BPO actions. */
 export function canValidateBpoDocuments(role: UserRole): boolean {
-  return canValidateDocuments(role) || role === UserRole.CLERK_IN_CHARGE_BPO;
+  return (
+    canValidateDocuments(role) ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.CLERK_IN_CHARGE_BPO
+  );
 }
 
 /** Draft delivery orders: created / edited / deleted while still pending. */

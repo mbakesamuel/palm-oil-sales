@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { ReportSignatory } from "@/components/ReportSignatory";
+import { reportsByGroup } from "@/lib/reports-catalog";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default function ReportsIndexPage() {
+  const groups = reportsByGroup();
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">Reports</h1>
         <p className="text-sm opacity-80 mt-1">
@@ -15,130 +18,24 @@ export default function ReportsIndexPage() {
         </p>
       </div>
 
-      <ul className="space-y-3">
-        <li>
-          <Link
-            href="/reports/sales"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Sales register</div>
-            <div className="text-sm opacity-75">Invoices, customers, net / VAT / gross (XAF).</div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/daily-sales-summary"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Daily sales summary</div>
-            <div className="text-sm opacity-75">
-              One calendar day inside the working month: validated sales only — customers, DOs,
-              quantities, DO balance (kg), and totals by customer type.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/delivery-orders"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Delivery orders</div>
-            <div className="text-sm opacity-75">Recent delivery orders with line totals and fiscal period.</div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/delivery-order-monitor"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Delivery order monitor</div>
-            <div className="text-sm opacity-75">
-              Look up by DO number: header, sales history, quantities and amounts vs invoiced.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/customer-delivery-monitor"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Delivery orders by customer</div>
-            <div className="text-sm opacity-75">
-              All delivery orders for a customer with lines, sales, and complete / incomplete status.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/do-commitment-crosstab"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Commitment by Customer/Product</div>
-            <div className="text-sm opacity-75">
-              Customer - product × sales points: outstanding ordered vs invoiced quantity, with row and
-              column totals (validated DOs and sales).
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/stock-on-hand"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Stock on hand</div>
-            <div className="text-sm opacity-75">
-              Remaining kg by storage location and product (crosstab); consolidated grade summary when
-              applicable.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/stock-vs-commitments"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Stock vs commitments</div>
-            <div className="text-sm opacity-75">
-              By product: physical stock vs outstanding validated delivery order quantity (ordered minus
-              invoiced) per collection point, with balance.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/pricing"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Product pricing</div>
-            <div className="text-sm opacity-75">
-              Unit prices (ex tax) for the open financial year — Loose Palm Oil (by customer type) and other
-              products; filter by effective date or show latest schedules.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/bpo-pricing"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Bottled Palm Oil pricing</div>
-            <div className="text-sm opacity-75">
-              BPO bottle sizes (variants) and scheduled ex-tax unit prices per variant; printable report.
-            </div>
-          </Link>
-        </li>
-        <li>
-          <Link
-            href="/reports/bpo"
-            className="block rounded-lg border border-border p-4 hover:bg-accent/25"
-          >
-            <div className="font-medium">Bottled Palm Oil monitor</div>
-            <div className="text-sm opacity-75">
-              BPO stock, two-stage consignments, Bota sales, gift/out movements, and discrepancies.
-            </div>
-          </Link>
-        </li>
-      </ul>
+      {groups.map((group) => (
+        <section key={group.id} className="space-y-3">
+          <h2 className="text-lg font-semibold">{group.label}</h2>
+          <ul className="space-y-2">
+            {group.reports.map((report) => (
+              <li key={report.href}>
+                <Link
+                  href={report.href}
+                  className="block rounded-lg border border-border p-4 hover:bg-accent/25"
+                >
+                  <div className="font-medium">{report.label}</div>
+                  <div className="text-sm opacity-75">{report.description}</div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
       <div className="hidden print:block">
         <ReportSignatory />

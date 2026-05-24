@@ -1,6 +1,14 @@
 "use server";
 
 import { assertPermissionKey } from "@/lib/access-control";
+import { getServerSession } from "@/lib/auth-server";
+import {
+  assertProductAccessible,
+  canPickProductCommercialLine,
+  productCommercialServiceIdForCreate,
+  productCommercialServiceIdForUpdate,
+} from "@/lib/product-commercial";
+import { parseProductFormFromFormData, uomForProductForm } from "@/lib/product-form";
 import { getPrismaClient } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
@@ -13,10 +21,20 @@ function revalidateAll() {
 export async function createProduct(formData: FormData) {
   await assertPermissionKey("route:/products");
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  const isAdmin = canPickProductCommercialLine(session.role);
+  const assignedLineId = session.commercialService?.id ?? null;
+
   const productName = String(formData.get("productName") ?? "").trim();
   const productCodeRaw = String(formData.get("productCode") ?? "").trim();
   const productCatIdRaw = String(formData.get("productCatId") ?? "").trim();
-  const isBottledPalmOil = String(formData.get("isBottledPalmOil") ?? "") === "on";
+  const form = parseProductFormFromFormData(formData);
+  const commercialServiceId = productCommercialServiceIdForCreate(
+    isAdmin,
+    assignedLineId,
+    String(formData.get("commercialServiceId") ?? ""),
+  );
 
   if (!productName) throw new Error("Product name is required.");
   if (!productCatIdRaw) throw new Error("Category is required.");
@@ -29,7 +47,9 @@ export async function createProduct(formData: FormData) {
       productName,
       productCode: productCodeRaw || null,
       productCatId,
-      isBottledPalmOil,
+      form,
+      uom: uomForProductForm(form),
+      commercialServiceId,
     },
   });
 
@@ -39,14 +59,25 @@ export async function createProduct(formData: FormData) {
 export async function updateProduct(formData: FormData) {
   await assertPermissionKey("route:/products");
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  const isAdmin = canPickProductCommercialLine(session.role);
+
   const idRaw = String(formData.get("productId") ?? "").trim();
   const productName = String(formData.get("productName") ?? "").trim();
   const productCodeRaw = String(formData.get("productCode") ?? "").trim();
   const productCatIdRaw = String(formData.get("productCatId") ?? "").trim();
-  const isBottledPalmOil = String(formData.get("isBottledPalmOil") ?? "") === "on";
+  const form = parseProductFormFromFormData(formData);
 
   const productId = Number.parseInt(idRaw, 10);
   if (!Number.isFinite(productId)) throw new Error("Invalid product.");
+
+  const existing = await assertProductAccessible(prisma, session, productId);
+  const commercialServiceId = productCommercialServiceIdForUpdate(
+    isAdmin,
+    existing.commercialServiceId,
+    String(formData.get("commercialServiceId") ?? ""),
+  );
   if (!productName) throw new Error("Product name is required.");
   if (!productCatIdRaw) throw new Error("Category is required.");
 
@@ -59,7 +90,9 @@ export async function updateProduct(formData: FormData) {
       productName,
       productCode: productCodeRaw || null,
       productCatId,
-      isBottledPalmOil,
+      form,
+      uom: uomForProductForm(form),
+      commercialServiceId,
     },
   });
 
@@ -76,19 +109,23 @@ export async function saveProduct(formData: FormData) {
 export async function deleteProduct(formData: FormData) {
   await assertPermissionKey("route:/products");
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+
   const idRaw = String(formData.get("productId") ?? "").trim();
   const productId = Number.parseInt(idRaw, 10);
   if (!Number.isFinite(productId)) throw new Error("Invalid product.");
+
+  await assertProductAccessible(prisma, session, productId);
 
   const counts = await prisma.product.findUnique({
     where: { productId },
     select: {
       _count: {
         select: {
-          batches: true,
+          stockLots: true,
           saleLines: true,
           deliveryOrderDetails: true,
-          variants: true,
         },
       },
     },
@@ -96,13 +133,12 @@ export async function deleteProduct(formData: FormData) {
   if (!counts) throw new Error("Product not found.");
 
   const n =
-    counts._count.batches +
+    counts._count.stockLots +
     counts._count.saleLines +
-    counts._count.deliveryOrderDetails +
-    counts._count.variants;
+    counts._count.deliveryOrderDetails;
   if (n > 0) {
     throw new Error(
-      "Cannot delete this product while it is used on batches, sales, delivery orders, or variants.",
+      "Cannot delete this product while it is used on batches, sales, or delivery orders.",
     );
   }
 

@@ -1,15 +1,14 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  canCreateOrEditDeliveryOrderDraft,
-  canValidateDeliveryOrder,
-} from "@/lib/auth-roles";
+import { canCreateOrEditDeliveryOrderDraft } from "@/lib/auth-roles";
 import { ValidationStatus } from "@/lib/domain";
 import type {
   DeliveryOrderTaxPreview,
@@ -69,6 +68,7 @@ export function DeliveryOrdersClient(props: {
   saveDeliveryOrderPayments: (formData: FormData) => Promise<SaveSectionResult>;
   deleteDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
+  canValidateDeliveryOrder: boolean;
   previewProductUnitPriceAction: (
     customerId: string,
     productId: number,
@@ -86,6 +86,7 @@ export function DeliveryOrdersClient(props: {
     saveDeliveryOrderPayments,
     deleteDeliveryOrder,
     validateDeliveryOrder,
+    canValidateDeliveryOrder: canValidateDeliveryOrderProp,
     previewProductUnitPriceAction,
   } = props;
 
@@ -492,7 +493,7 @@ export function DeliveryOrdersClient(props: {
       ? canCreateOrEditDeliveryOrderDraft(session.role)
       : false;
   const canValidateDO =
-    authStatus === "ready" && session ? canValidateDeliveryOrder(session.role) : false;
+    authStatus === "ready" && session && canValidateDeliveryOrderProp;
   const draftFormLocked =
     docStatus === ValidationStatus.VALIDATED || !canDraftDO;
   const linesReadOnly =
