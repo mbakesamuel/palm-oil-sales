@@ -21,7 +21,7 @@ export default async function BpoSalesPage() {
   const [products, sales] = await Promise.all([
     prismaRetry(() =>
       prisma.product.findMany({
-        where: { form: "BOTTLED" },
+        where: { productCat: { isBottled: true } },
         orderBy: { productName: "asc" },
         select: { productId: true, productName: true },
       }),
@@ -30,7 +30,7 @@ export default async function BpoSalesPage() {
       prisma.sale.findMany({
         where: {
           ...(botaSalesPointId != null ? { salesPointId: botaSalesPointId } : {}),
-          lines: { some: { product: { form: "BOTTLED" } } },
+          lines: { some: { product: { productCat: { isBottled: true } } } },
         },
         orderBy: { createdAt: "desc" },
         take: 50,
@@ -42,7 +42,7 @@ export default async function BpoSalesPage() {
             },
           },
           lines: {
-            where: { product: { form: "BOTTLED" } },
+            where: { product: { productCat: { isBottled: true } } },
             include: {
               product: { select: { productName: true } },
             },

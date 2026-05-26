@@ -1,7 +1,6 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
-import { isBottledForm } from "@/lib/product-form";
 
 export const BPO_PRODUCT_LABEL = "Bottled Palm Oil";
 export const BOTA_SALES_POINT_NAME = "Bota";
@@ -52,16 +51,15 @@ export async function isBottledPalmOilProduct(
     product: {
       findUnique: (args: {
         where: { productId: number };
-        select: { form: true };
-      }) => Promise<{ form: import("@prisma/client").ProductForm } | null>;
+        select: { productCat: { select: { isBottled: true } } };
+      }) => Promise<{ productCat: { isBottled: boolean } | null } | null>;
     };
   },
   productId: number,
 ): Promise<boolean> {
   const product = await prisma.product.findUnique({
     where: { productId },
-    select: { form: true },
+    select: { productCat: { select: { isBottled: true } } },
   });
-  if (!product) return false;
-  return isBottledForm(product.form);
+  return product?.productCat?.isBottled === true;
 }

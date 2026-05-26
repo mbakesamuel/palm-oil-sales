@@ -8,7 +8,7 @@ import {
   productCommercialServiceIdForCreate,
   productCommercialServiceIdForUpdate,
 } from "@/lib/product-commercial";
-import { parseProductFormFromFormData, uomForProductForm } from "@/lib/product-form";
+import { uomForCategory } from "@/lib/product-form";
 import { getPrismaClient } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
@@ -29,7 +29,6 @@ export async function createProduct(formData: FormData) {
   const productName = String(formData.get("productName") ?? "").trim();
   const productCodeRaw = String(formData.get("productCode") ?? "").trim();
   const productCatIdRaw = String(formData.get("productCatId") ?? "").trim();
-  const form = parseProductFormFromFormData(formData);
   const commercialServiceId = productCommercialServiceIdForCreate(
     isAdmin,
     assignedLineId,
@@ -42,13 +41,18 @@ export async function createProduct(formData: FormData) {
   const productCatId = Number.parseInt(productCatIdRaw, 10);
   if (!Number.isFinite(productCatId)) throw new Error("Invalid category.");
 
+  const category = await prisma.productCat.findUnique({
+    where: { productCatId },
+    select: { isBottled: true },
+  });
+  if (!category) throw new Error("Category not found.");
+
   await prisma.product.create({
     data: {
       productName,
       productCode: productCodeRaw || null,
       productCatId,
-      form,
-      uom: uomForProductForm(form),
+      uom: uomForCategory(category),
       commercialServiceId,
     },
   });
@@ -67,7 +71,6 @@ export async function updateProduct(formData: FormData) {
   const productName = String(formData.get("productName") ?? "").trim();
   const productCodeRaw = String(formData.get("productCode") ?? "").trim();
   const productCatIdRaw = String(formData.get("productCatId") ?? "").trim();
-  const form = parseProductFormFromFormData(formData);
 
   const productId = Number.parseInt(idRaw, 10);
   if (!Number.isFinite(productId)) throw new Error("Invalid product.");
@@ -84,14 +87,19 @@ export async function updateProduct(formData: FormData) {
   const productCatId = Number.parseInt(productCatIdRaw, 10);
   if (!Number.isFinite(productCatId)) throw new Error("Invalid category.");
 
+  const category = await prisma.productCat.findUnique({
+    where: { productCatId },
+    select: { isBottled: true },
+  });
+  if (!category) throw new Error("Category not found.");
+
   await prisma.product.update({
     where: { productId },
     data: {
       productName,
       productCode: productCodeRaw || null,
       productCatId,
-      form,
-      uom: uomForProductForm(form),
+      uom: uomForCategory(category),
       commercialServiceId,
     },
   });

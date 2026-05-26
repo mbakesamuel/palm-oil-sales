@@ -22,7 +22,7 @@ export type ProductOption = {
   productId: number;
   productName: string;
   uom: string;
-  form: "LOOSE" | "BOTTLED" | "SECONDARY";
+  isBottled: boolean;
 };
 
 export type StockBalanceRow = {
@@ -167,8 +167,8 @@ async function requireSession() {
   return session;
 }
 
-function uomFor(form: "LOOSE" | "BOTTLED" | "SECONDARY"): string {
-  return form === "BOTTLED" ? "Unit" : "Kg";
+function uomForBottled(isBottled: boolean): string {
+  return isBottled ? "Unit" : "Kg";
 }
 
 async function salesPointScopeForActor(
@@ -199,7 +199,12 @@ export async function loadStockBootstrap(): Promise<StockBootstrap> {
       }),
       prisma.product.findMany({
         orderBy: { productName: "asc" },
-        select: { productId: true, productName: true, form: true, uom: true },
+        select: {
+          productId: true,
+          productName: true,
+          uom: true,
+          productCat: { select: { isBottled: true } },
+        },
       }),
       loadOnHand(prisma, scopedSalesPointId),
       loadMovements(prisma, { scopedSalesPointId, limit: 200 }),
@@ -223,8 +228,8 @@ export async function loadStockBootstrap(): Promise<StockBootstrap> {
     products: products.map((p) => ({
       productId: p.productId,
       productName: p.productName,
-      form: p.form as ProductOption["form"],
-      uom: p.uom?.trim() || uomFor(p.form as ProductOption["form"]),
+      isBottled: p.productCat?.isBottled === true,
+      uom: p.uom?.trim() || uomForBottled(p.productCat?.isBottled === true),
     })),
     onHand,
     movements,
@@ -245,7 +250,13 @@ async function loadOnHand(
     where,
     include: {
       salesPoint: { select: { name: true } },
-      product: { select: { productName: true, form: true, uom: true } },
+      product: {
+        select: {
+          productName: true,
+          uom: true,
+          productCat: { select: { isBottled: true } },
+        },
+      },
     },
     orderBy: [
       { salesPoint: { name: "asc" } },
@@ -258,7 +269,9 @@ async function loadOnHand(
     salesPointName: r.salesPoint.name,
     productId: r.productId,
     productName: r.product.productName,
-    uom: r.product.uom?.trim() || uomFor(r.product.form as ProductOption["form"]),
+    uom:
+      r.product.uom?.trim() ||
+      uomForBottled(r.product.productCat?.isBottled === true),
     qty: r.qty.toString(),
   }));
 }
@@ -293,7 +306,13 @@ async function loadMovements(
     where,
     include: {
       salesPoint: { select: { name: true } },
-      product: { select: { productName: true, form: true, uom: true } },
+      product: {
+        select: {
+          productName: true,
+          uom: true,
+          productCat: { select: { isBottled: true } },
+        },
+      },
       user: { select: { name: true } },
     },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
@@ -347,7 +366,9 @@ async function loadMovements(
     salesPointName: r.salesPoint.name,
     productId: r.productId,
     productName: r.product.productName,
-    uom: r.product.uom?.trim() || uomFor(r.product.form as ProductOption["form"]),
+    uom:
+      r.product.uom?.trim() ||
+      uomForBottled(r.product.productCat?.isBottled === true),
     kind: r.kind,
     qty: r.qty.toString(),
     sourceKind: r.sourceKind,
@@ -504,7 +525,13 @@ export async function loadReceiptDetail(id: string): Promise<ReceiptDetail | nul
       postedBy: { select: { name: true } },
       lines: {
         include: {
-          product: { select: { productName: true, form: true, uom: true } },
+          product: {
+            select: {
+              productName: true,
+              uom: true,
+              productCat: { select: { isBottled: true } },
+            },
+          },
         },
         orderBy: { id: "asc" },
       },
@@ -537,7 +564,9 @@ export async function loadReceiptDetail(id: string): Promise<ReceiptDetail | nul
       id: l.id,
       productId: l.productId,
       productName: l.product.productName,
-      uom: l.product.uom?.trim() || uomFor(l.product.form as ProductOption["form"]),
+      uom:
+        l.product.uom?.trim() ||
+        uomForBottled(l.product.productCat?.isBottled === true),
       qty: l.qty.toString(),
     })),
   };
@@ -559,7 +588,13 @@ export async function loadTransferDetail(id: string): Promise<TransferDetail | n
       receivedBy: { select: { name: true } },
       lines: {
         include: {
-          product: { select: { productName: true, form: true, uom: true } },
+          product: {
+            select: {
+              productName: true,
+              uom: true,
+              productCat: { select: { isBottled: true } },
+            },
+          },
         },
         orderBy: { id: "asc" },
       },
@@ -600,7 +635,9 @@ export async function loadTransferDetail(id: string): Promise<TransferDetail | n
       id: l.id,
       productId: l.productId,
       productName: l.product.productName,
-      uom: l.product.uom?.trim() || uomFor(l.product.form as ProductOption["form"]),
+      uom:
+        l.product.uom?.trim() ||
+        uomForBottled(l.product.productCat?.isBottled === true),
       qty: l.qty.toString(),
     })),
   };
@@ -620,7 +657,13 @@ export async function loadAdjustmentDetail(id: string): Promise<AdjustmentDetail
       postedBy: { select: { name: true } },
       lines: {
         include: {
-          product: { select: { productName: true, form: true, uom: true } },
+          product: {
+            select: {
+              productName: true,
+              uom: true,
+              productCat: { select: { isBottled: true } },
+            },
+          },
         },
         orderBy: { id: "asc" },
       },
@@ -646,7 +689,9 @@ export async function loadAdjustmentDetail(id: string): Promise<AdjustmentDetail
       id: l.id,
       productId: l.productId,
       productName: l.product.productName,
-      uom: l.product.uom?.trim() || uomFor(l.product.form as ProductOption["form"]),
+      uom:
+        l.product.uom?.trim() ||
+        uomForBottled(l.product.productCat?.isBottled === true),
       deltaQty: l.deltaQty.toString(),
     })),
   };

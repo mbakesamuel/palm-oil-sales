@@ -364,7 +364,7 @@ export async function loadBpoOutboundSaleReceipt(
           },
         },
         lines: {
-          where: { product: { form: "BOTTLED" } },
+          where: { product: { productCat: { isBottled: true } } },
           include: {
             product: { select: { productName: true } },
           },

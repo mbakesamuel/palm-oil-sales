@@ -16,7 +16,7 @@ type ScheduleRow = {
 };
 
 function labelCustomerType(ct: string | null) {
-  if (!ct) return "—";
+  if (!ct) return "Direct price";
   switch (ct) {
     case CustomerType.INDUSTRY:
       return "Industry";
@@ -31,10 +31,20 @@ function labelCustomerType(ct: string | null) {
   }
 }
 
-function normalizeName(s: string) {
-  return s.trim().toLowerCase();
+/** Stable ordering for customer-type rows within a product group. */
+const CUSTOMER_TYPE_ORDER: Record<string, number> = {
+  [CustomerType.INDUSTRY]: 0,
+  [CustomerType.WHOLE_SALE]: 1,
+  [CustomerType.RETAIL]: 2,
+  [CustomerType.WORKER]: 3,
+};
+
+function customerTypeRank(ct: string | null): number {
+  if (!ct) return -1;
+  return CUSTOMER_TYPE_ORDER[ct] ?? 99;
 }
 
+/** Reduces a flat list of price-schedule rows to the latest row per (product, customerType). */
 function pickLatestRows(rows: ScheduleRow[]): ScheduleRow[] {
   const bestByKey = new Map<string, ScheduleRow>();
   for (const r of rows) {
@@ -49,112 +59,42 @@ function pickLatestRows(rows: ScheduleRow[]): ScheduleRow[] {
   return [...bestByKey.values()];
 }
 
-type VariantPriceRow = {
-  id: string;
-  variantLabel: string;
+type ProductGroup = {
+  productId: number;
+  productName: string;
+  /** Latest effective date across all rows of this product. */
   effectiveFromIso: string;
-  unitPriceExTax: string;
+  rows: ScheduleRow[];
 };
 
-function VariantPricingReportSection(props: { rows: VariantPriceRow[] }) {
-  const latest = React.useMemo(() => {
-    const best = new Map<string, VariantPriceRow>();
-    for (const r of props.rows) {
-      const prev = best.get(r.variantLabel);
-      if (!prev || r.effectiveFromIso > prev.effectiveFromIso) {
-        best.set(r.variantLabel, r);
-      }
+function buildGroups(rows: ScheduleRow[]): ProductGroup[] {
+  const byProduct = new Map<number, ProductGroup>();
+  for (const r of rows) {
+    const existing = byProduct.get(r.productId);
+    if (!existing) {
+      byProduct.set(r.productId, {
+        productId: r.productId,
+        productName: r.productName,
+        effectiveFromIso: r.effectiveFromIso,
+        rows: [r],
+      });
+      continue;
     }
-    return [...best.values()].sort((a, b) =>
-      a.variantLabel.localeCompare(b.variantLabel, undefined, { sensitivity: "base" }),
+    existing.rows.push(r);
+    if (r.effectiveFromIso > existing.effectiveFromIso) {
+      existing.effectiveFromIso = r.effectiveFromIso;
+    }
+  }
+  const groups = [...byProduct.values()];
+  for (const g of groups) {
+    g.rows.sort(
+      (a, b) => customerTypeRank(a.customerType) - customerTypeRank(b.customerType),
     );
-  }, [props.rows]);
-
-  return (
-    <section id="bottled" className="space-y-2 print:break-inside-avoid scroll-mt-8">
-      <h3 className="text-base font-semibold">Bottled products</h3>
-      {latest.length === 0 ? (
-        <p className="text-sm opacity-75">No bottled variant prices.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg bg-background text-foreground">
-          <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
-            <thead>
-              <tr className="text-left">
-                <th className="border border-border p-2 font-medium print:border-black/25">
-                  Product
-                </th>
-                <th className="border border-border p-2 font-medium print:border-black/25">
-                  Effective from
-                </th>
-                <th className="border border-border p-2 text-right font-medium print:border-black/25">
-                  Unit price
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {latest.map((r) => (
-                <tr key={r.id} className="align-top">
-                  <td className="border border-border p-2 print:border-black/25">
-                    {r.variantLabel}
-                  </td>
-                  <td className="border border-border p-2 tabular-nums print:border-black/25">
-                    {r.effectiveFromIso}
-                  </td>
-                  <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
-                    {r.unitPriceExTax}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+  }
+  groups.sort((a, b) =>
+    a.productName.localeCompare(b.productName, undefined, { sensitivity: "base" }),
   );
-}
-
-function PricingReportSection(props: { title: string; rows: ScheduleRow[] }) {
-  return (
-    <section className="space-y-2 print:break-inside-avoid">
-      <h3 className="text-base font-semibold">{props.title}</h3>
-      {props.rows.length === 0 ? (
-        <p className="text-sm opacity-75">No rows.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg bg-background text-foreground">
-          <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
-            <thead>
-              <tr className="text-left">
-                <th className="border border-border p-2 font-medium print:border-black/25">
-                  Product
-                </th>
-                <th className="border border-border p-2 font-medium print:border-black/25">
-                  Customer type
-                </th>
-                <th className="border border-border p-2 text-right font-medium print:border-black/25">
-                  Unit price (ex tax)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {props.rows.map((r) => (
-                <tr key={r.id} className="align-top">
-                  <td className="border border-border p-2 print:border-black/25">
-                    {r.productName}
-                  </td>
-                  <td className="border border-border p-2 print:border-black/25">
-                    {labelCustomerType(r.customerType)}
-                  </td>
-                  <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
-                    {r.unitPriceExTax}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
+  return groups;
 }
 
 export function PricingReport(props: {
@@ -162,32 +102,20 @@ export function PricingReport(props: {
   department: string | null;
   logoUrl?: string | null;
   schedules: ScheduleRow[];
-  variantSchedules?: VariantPriceRow[];
 }) {
-  const { companyName, department, logoUrl, schedules, variantSchedules = [] } = props;
+  const { companyName, department, logoUrl, schedules } = props;
   const generated = new Date();
   const [effectiveFromIso, setEffectiveFromIso] = React.useState("");
 
-  const rows = React.useMemo(() => {
+  const groups = React.useMemo(() => {
     const base =
       effectiveFromIso.trim() !== ""
         ? schedules.filter((r) => r.effectiveFromIso === effectiveFromIso.trim())
         : pickLatestRows(schedules);
-
-    return [...base].sort((a, b) => {
-      if (a.productName !== b.productName) {
-        return a.productName.localeCompare(b.productName, undefined, { sensitivity: "base" });
-      }
-      const ca = labelCustomerType(a.customerType);
-      const cb = labelCustomerType(b.customerType);
-      if (ca !== cb) return ca.localeCompare(cb, undefined, { sensitivity: "base" });
-      return b.unitPriceExTax.localeCompare(a.unitPriceExTax);
-    });
+    return buildGroups(base);
   }, [effectiveFromIso, schedules]);
 
-  const LPO_NAME = "loose palm oil";
-  const loosePalmOil = rows.filter((r) => normalizeName(r.productName) === LPO_NAME);
-  const otherProducts = rows.filter((r) => normalizeName(r.productName) !== LPO_NAME);
+  const totalRows = groups.reduce((sum, g) => sum + g.rows.length, 0);
 
   return (
     <section className="space-y-4 print:space-y-3">
@@ -210,9 +138,12 @@ export function PricingReport(props: {
             })}
             {" · "}
             Effective from{" "}
-            <span className="font-medium">{effectiveFromIso.trim() ? effectiveFromIso : "Latest"}</span>
+            <span className="font-medium">
+              {effectiveFromIso.trim() ? effectiveFromIso : "Latest"}
+            </span>
             {" · "}
-            {rows.length} row{rows.length === 1 ? "" : "s"}
+            {totalRows} row{totalRows === 1 ? "" : "s"} across {groups.length} product
+            {groups.length === 1 ? "" : "s"}
           </p>
         </div>
         <div className="print:hidden flex flex-col items-start gap-2">
@@ -227,26 +158,59 @@ export function PricingReport(props: {
               onChange={(e) => setEffectiveFromIso(e.target.value)}
               className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
             />
-            <p className="text-xs opacity-70">Leave blank to show latest per product/customer.</p>
+            <p className="text-xs opacity-70">
+              Leave blank to show latest per product/customer.
+            </p>
           </div>
           <PrintButton label="Print report" />
         </div>
       </div>
 
-      {rows.length === 0 && variantSchedules.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="text-sm opacity-75">No scheduled prices found.</p>
       ) : (
-        <div className="space-y-6">
-          {rows.length > 0 ? (
-            <>
-              <PricingReportSection title="Loose Palm Oil" rows={loosePalmOil} />
-              <PricingReportSection title="Other products" rows={otherProducts} />
-            </>
-          ) : null}
-          <VariantPricingReportSection rows={variantSchedules} />
+        <div className="overflow-x-auto rounded-lg bg-background text-foreground print:break-inside-auto">
+          <table className="min-w-full border-collapse border border-border text-sm print:border-black/30">
+            <thead>
+              <tr className="text-left">
+                <th className="border border-border p-2 font-medium print:border-black/25">
+                  Customer type
+                </th>
+                <th className="border border-border p-2 text-right font-medium print:border-black/25">
+                  Unit price (ex tax)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <React.Fragment key={g.productId}>
+                  <tr className="bg-foreground/6 print:bg-black/4 print:break-inside-avoid">
+                    <td
+                      colSpan={2}
+                      className="border border-border p-2 font-semibold print:border-black/25"
+                    >
+                      <span>{g.productName}</span>
+                      <span className="ml-2 text-xs font-normal opacity-70 tabular-nums">
+                        — Effective from {g.effectiveFromIso}
+                      </span>
+                    </td>
+                  </tr>
+                  {g.rows.map((r) => (
+                    <tr key={r.id} className="align-top print:break-inside-avoid">
+                      <td className="border border-border p-2 pl-6 print:border-black/25">
+                        {labelCustomerType(r.customerType)}
+                      </td>
+                      <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
+                        {r.unitPriceExTax}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </section>
   );
 }
-

@@ -20,7 +20,12 @@ export default async function ProductsPage() {
   const [categories, commercialServices, products] = await Promise.all([
     prisma.productCat.findMany({
       orderBy: { productCat: "asc" },
-      select: { productCatId: true, productCat: true, productCode: true },
+      select: {
+        productCatId: true,
+        productCat: true,
+        productCode: true,
+        isBottled: true,
+      },
     }),
     prisma.commercialService.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -34,9 +39,11 @@ export default async function ProductsPage() {
         productName: true,
         productCode: true,
         productCatId: true,
-        form: true,
+        uom: true,
         commercialServiceId: true,
-        productCat: { select: { productCatId: true, productCat: true } },
+        productCat: {
+          select: { productCatId: true, productCat: true, isBottled: true },
+        },
         commercialService: { select: { id: true, name: true, invoicePrefix: true } },
       },
     }),

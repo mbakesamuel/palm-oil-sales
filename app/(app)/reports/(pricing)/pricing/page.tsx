@@ -47,7 +47,11 @@ export default async function PricingReportPage() {
     prisma.productUnitPriceSchedule.findMany({
       where: fyWhere,
       orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
-      include: { product: { select: { productName: true, productCatId: true, form: true } } },
+      include: {
+        product: {
+          select: { productName: true, productCatId: true },
+        },
+      },
     }),
   );
 
@@ -61,22 +65,12 @@ export default async function PricingReportPage() {
     unitPriceExTax: r.unitPriceExTax.toString(),
   }));
 
-  const looseAndOther = scheduleModels.filter((r) => {
-    const p = schedules.find((s) => s.id === r.id)?.product;
-    return p?.form !== "BOTTLED";
-  });
-
-  const bottled = scheduleModels.filter((r) => {
-    const p = schedules.find((s) => s.id === r.id)?.product;
-    return p?.form === "BOTTLED";
-  });
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold print:text-xl">Product pricing</h1>
         <p className="text-sm opacity-80 mt-1 print:hidden">
-          Unit prices for the open financial year — loose/catalog and bottled products. FY{" "}
+          Unit prices for the open financial year, grouped by product. FY{" "}
           {String(openFy.financialYear)} (
           {openFy.startDate.toISOString().slice(0, 10)}–{openFy.endDate.toISOString().slice(0, 10)}).
         </p>
@@ -86,13 +80,7 @@ export default async function PricingReportPage() {
         companyName={settings.companyName}
         department={settings.department ?? null}
         logoUrl={settings.logoUrl}
-        schedules={looseAndOther}
-        variantSchedules={bottled.map((r) => ({
-          id: r.id,
-          variantLabel: r.productName,
-          effectiveFromIso: r.effectiveFromIso,
-          unitPriceExTax: r.unitPriceExTax,
-        }))}
+        schedules={scheduleModels}
       />
 
       <div className="hidden print:block">

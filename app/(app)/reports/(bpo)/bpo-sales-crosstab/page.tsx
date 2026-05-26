@@ -253,7 +253,7 @@ export default async function BpoSalesCrosstabReportPage(props: {
     ),
     prismaRetry(() =>
       getPrismaClient().product.findMany({
-        where: { form: "BOTTLED" },
+        where: { productCat: { isBottled: true } },
         orderBy: { productName: "asc" },
         select: { productId: true, productName: true },
       }),
@@ -294,7 +294,7 @@ export default async function BpoSalesCrosstabReportPage(props: {
   const saleLines = await prismaRetry(() =>
     prisma.saleLine.findMany({
       where: {
-        product: { form: "BOTTLED" },
+        product: { productCat: { isBottled: true } },
         sale: {
           status: ValidationStatus.VALIDATED,
           soldAt: { gte: reportStart, lte: reportEnd },

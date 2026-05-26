@@ -149,14 +149,14 @@ export function productCatalogHintWhereForServiceCode(
     normalized === "bottled-palm-oil" ||
     normalized === "bottled_palm_oil"
   ) {
-    return { form: "BOTTLED" };
+    return { productCat: { isBottled: true } };
   }
   if (
     normalized.includes("rubber") ||
     normalized === "default" ||
     normalized.includes("palm")
   ) {
-    return { form: { not: "BOTTLED" } };
+    return { productCat: { isBottled: false } };
   }
   return undefined;
 }

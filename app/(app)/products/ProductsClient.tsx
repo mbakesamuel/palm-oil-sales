@@ -3,14 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ProductForm } from "@prisma/client";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { PRODUCT_FORM_OPTIONS, productFormLabel } from "@/lib/product-form";
+import { uomForCategory } from "@/lib/product-form";
 
 type ProductCatOption = {
   productCatId: number;
   productCat: string;
   productCode: string;
+  isBottled: boolean;
 };
 
 type CommercialOption = {
@@ -25,9 +25,9 @@ type ProductRow = {
   productName: string;
   productCode: string | null;
   productCatId: number;
-  form: ProductForm;
+  uom: string;
   commercialServiceId: string | null;
-  productCat: { productCatId: number; productCat: string };
+  productCat: { productCatId: number; productCat: string; isBottled: boolean };
   commercialService: { id: string; name: string; invoicePrefix: string } | null;
 };
 
@@ -82,7 +82,6 @@ export function ProductsClient(props: {
   const [productCatId, setProductCatId] = React.useState(() =>
     String(categories[0]?.productCatId ?? ""),
   );
-  const [form, setForm] = React.useState<ProductForm>("LOOSE");
   const [commercialServiceId, setCommercialServiceId] = React.useState(() =>
     canPickCommercialLine ? "" : (defaultCommercialServiceId ?? ""),
   );
@@ -98,12 +97,15 @@ export function ProductsClient(props: {
       ? String(categories[0]?.productCatId ?? "")
       : productCatId;
 
+  const selectedCategory =
+    categories.find((c) => String(c.productCatId) === productCatIdForSelect) ??
+    null;
+
   function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
     setProductName("");
     setProductCode("");
     setProductCatId(String(categories[0]?.productCatId ?? ""));
-    setForm("LOOSE");
     setCommercialServiceId(
       canPickCommercialLine ? "" : (defaultCommercialServiceId ?? ""),
     );
@@ -126,7 +128,6 @@ export function ProductsClient(props: {
     setProductName(p.productName);
     setProductCode(p.productCode ?? "");
     setProductCatId(String(p.productCatId));
-    setForm(p.form);
     setCommercialServiceId(
       p.commercialServiceId ??
         (canPickCommercialLine ? "" : (defaultCommercialServiceId ?? "")),
@@ -152,7 +153,6 @@ export function ProductsClient(props: {
     setBanner(null);
     const fd = new FormData(e.currentTarget);
     if (editingId != null) fd.set("productId", String(editingId));
-    fd.set("form", form);
 
     const wasEdit = editingId != null;
     try {
@@ -360,25 +360,14 @@ export function ProductsClient(props: {
               )}
 
               <div className={fieldRowClass}>
-                <label className={fieldLabelClass} htmlFor="form">
-                  Form
-                </label>
+                <span className={fieldLabelClass}>UoM</span>
                 <div className={fieldControlClass}>
-                  <select
-                    id="form"
-                    name="form"
-                    className={selectClass}
-                    value={form}
-                    onChange={(e) => setForm(e.target.value as ProductForm)}
+                  <p
+                    className={`${fieldControlClass} text-xs opacity-80 py-1.5`}
                   >
-                    {PRODUCT_FORM_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className={hintClass}>
-                    {PRODUCT_FORM_OPTIONS.find((o) => o.value === form)?.hint}
+                    {selectedCategory
+                      ? `${uomForCategory(selectedCategory)} \u2014 ${selectedCategory.isBottled ? "bottled SKU (BPO outbound only)" : "POS / Delivery Orders"}`
+                      : "Pick a category to derive the UoM"}
                   </p>
                 </div>
               </div>
@@ -428,7 +417,7 @@ export function ProductsClient(props: {
                   <th className="p-2 font-medium">Category</th>
                   <th className="p-2 font-medium">Line</th>
                   <th className="p-2 font-medium">Code</th>
-                  <th className="p-2 font-medium w-28">Form</th>
+                  <th className="p-2 font-medium w-20">UoM</th>
                   <th className="p-2 font-medium w-36 text-right">Actions</th>
                 </tr>
               </thead>
@@ -454,9 +443,7 @@ export function ProductsClient(props: {
                     <td className="p-2 text-xs opacity-80">
                       {p.productCode ?? "—"}
                     </td>
-                    <td className="p-2 text-xs">
-                      {productFormLabel(p.form)}
-                    </td>
+                    <td className="p-2 text-xs">{p.uom}</td>
                     <td className="p-2 text-right">
                       <div className="flex justify-end gap-2 flex-wrap">
                         {canManageProducts && categories.length > 0 ? (

@@ -53,12 +53,6 @@ enum ValidationStatus {
   REJECTED
 }
 
-enum ProductForm {
-  LOOSE
-  BOTTLED
-  SECONDARY
-}
-
 enum BpoEmployeeCollectedProduct {
   LOOSE_PALM_OIL
   BOTTLED_PALM_OIL
@@ -538,8 +532,10 @@ model Product {
   productName         String
   productCode         String? // nullable
   productCatId        Int
-  form                ProductForm @default(LOOSE)
-  uom                 String      @default("Kg")
+  /// Unit of measure for catalog/print purposes. Auto-derived from
+  /// `productCat.isBottled` at create/update time (BPO -> "Unit",
+  /// everything else -> "Kg").
+  uom                 String  @default("Kg")
   /// When set, product appears only for that commercial line (null = shared catalog).
   commercialServiceId String?
 
@@ -572,6 +568,12 @@ model ProductCat {
   /// index on the DB side). Other categories use a single direct price per
   /// product (customerType null on schedule).
   isMain       Boolean @default(false)
+  /// When true, products in this category are bottled SKUs sold per unit;
+  /// they are excluded from POS / Delivery Orders and flow through BPO
+  /// outbound instead. Exactly one row is expected to carry this flag
+  /// (enforced by a partial unique index on the DB side). Drives the
+  /// product UoM ("Unit" if bottled, "Kg" otherwise).
+  isBottled    Boolean @default(false)
 
   products  Product[]
   createdAt DateTime  @default(now())

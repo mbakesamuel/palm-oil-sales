@@ -50,14 +50,13 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
     where: { productId },
     select: {
       productName: true,
-      form: true,
-      productCat: { select: { isMain: true } },
+      productCat: { select: { isMain: true, isBottled: true } },
     },
   });
   if (!product) throw new Error("Product not found.");
 
   const isMain = product.productCat?.isMain === true;
-  const isBottled = product.form === "BOTTLED";
+  const isBottled = product.productCat?.isBottled === true;
   let customerType: CustomerType | null = null;
   if (isBottled) {
     const ct = String(formData.get("customerType") ?? "").trim();

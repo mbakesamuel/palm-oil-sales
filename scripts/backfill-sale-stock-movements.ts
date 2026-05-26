@@ -11,7 +11,7 @@
  */
 
 import "dotenv/config";
-import { Prisma, PrismaClient, ProductForm } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const connectionString = process.env.DATABASE_URL;
@@ -99,7 +99,12 @@ async function main() {
           productId: true,
           qtyKg: true,
           qtyUnits: true,
-          product: { select: { form: true, productName: true } },
+          product: {
+            select: {
+              productName: true,
+              productCat: { select: { isBottled: true } },
+            },
+          },
         },
       },
       salesPoint: { select: { name: true } },
@@ -143,10 +148,9 @@ async function main() {
         async (tx) => {
           let count = 0;
           for (const line of sale.lines) {
-            const qty =
-              line.product.form === ProductForm.LOOSE
-                ? new Prisma.Decimal(line.qtyKg)
-                : new Prisma.Decimal(line.qtyUnits ?? line.qtyKg);
+            const qty = line.product.productCat?.isBottled
+              ? new Prisma.Decimal(line.qtyUnits ?? line.qtyKg)
+              : new Prisma.Decimal(line.qtyKg);
             if (qty.lte(0)) continue;
             await applySaleMovement(tx, {
               salesPointId,

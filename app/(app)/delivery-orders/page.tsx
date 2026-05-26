@@ -14,9 +14,7 @@ import {
   loadDeliveryOrderByNo,
   previewDeliveryOrderTaxes,
   previewStockOnHandForDeliveryOrder,
-  saveDeliveryOrderDetails,
-  saveDeliveryOrderHeader,
-  saveDeliveryOrderPayments,
+  saveDeliveryOrder,
   validateDeliveryOrder,
 } from "./actions";
 import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
@@ -32,7 +30,9 @@ export default async function DeliveryOrdersPage() {
     session != null
       ? (await getPermissionsForSession(session))["ui:validate-delivery-orders"]
       : false;
-  const productWhere = productWhereForScope(scope, { form: { not: "BOTTLED" } });
+  const productWhere = productWhereForScope(scope, {
+    productCat: { isBottled: false },
+  });
   const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, products, salesPoints] = await Promise.all([
@@ -55,7 +55,6 @@ export default async function DeliveryOrdersPage() {
         select: {
           productId: true,
           productName: true,
-          productCat: { select: { productCat: true } },
         },
         take: 200,
       }),
@@ -79,9 +78,7 @@ export default async function DeliveryOrdersPage() {
       salesPoints={salesPoints}
       previewDeliveryOrderTaxesAction={previewDeliveryOrderTaxes}
       loadDeliveryOrderByNo={loadDeliveryOrderByNo}
-      saveDeliveryOrderHeader={saveDeliveryOrderHeader}
-      saveDeliveryOrderDetails={saveDeliveryOrderDetails}
-      saveDeliveryOrderPayments={saveDeliveryOrderPayments}
+      saveDeliveryOrder={saveDeliveryOrder}
       deleteDeliveryOrder={deleteDeliveryOrder}
       validateDeliveryOrder={validateDeliveryOrder}
       previewProductUnitPriceAction={previewProductUnitPrice}

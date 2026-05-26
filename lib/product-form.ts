@@ -1,63 +1,46 @@
-import type { ProductForm, Prisma } from "@prisma/client";
-import { ProductForm as ProductFormEnum } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
-export const PRODUCT_FORM_OPTIONS: { value: ProductForm; label: string; hint: string }[] = [
-  {
-    value: "LOOSE",
-    label: "Loose (bulk kg)",
-    hint: "POS sales and delivery orders (kg).",
-  },
-  {
-    value: "BOTTLED",
-    label: "Bottled (units)",
-    hint: "Variants and BPO sales (units).",
-  },
-  {
-    value: "SECONDARY",
-    label: "Secondary",
-    hint: "Catalog only.",
-  },
-];
+/**
+ * Category-classification helpers. The legacy per-product `Product.form` enum
+ * (LOOSE / BOTTLED / SECONDARY) was dropped in
+ * `20260526120000_drop_product_form_use_category_bottled` in favour of a
+ * single `ProductCat.isBottled` flag. Routing rule is now binary:
+ *   - bottled categories (BPO)  -> BPO outbound only
+ *   - non-bottled categories    -> POS + Delivery Orders
+ */
 
-export function uomForProductForm(form: ProductForm): string {
-  switch (form) {
-    case "BOTTLED":
-      return "Unit";
-    case "LOOSE":
-      return "Kg";
-    default:
-      return "Unit";
-  }
+/** UoM defaults derived from a product's category. */
+export function uomForCategory(
+  category: { isBottled: boolean } | null | undefined,
+): string {
+  return category?.isBottled ? "Unit" : "Kg";
 }
 
-export function productFormLabel(form: ProductForm): string {
-  return PRODUCT_FORM_OPTIONS.find((o) => o.value === form)?.label ?? form;
+/** Convenience: takes the product directly (with the category eagerly loaded). */
+export function uomForProduct(
+  product: { productCat?: { isBottled: boolean } | null } | null | undefined,
+): string {
+  return uomForCategory(product?.productCat ?? null);
 }
 
-export function parseProductForm(raw: string): ProductForm {
-  const v = String(raw ?? "").trim().toUpperCase();
-  if (v === "BOTTLED" || v === "LOOSE" || v === "SECONDARY") {
-    return v as ProductForm;
-  }
-  return ProductFormEnum.LOOSE;
+export function isBottledProduct(
+  product: { productCat?: { isBottled: boolean } | null } | null | undefined,
+): boolean {
+  return Boolean(product?.productCat?.isBottled);
 }
 
-export function parseProductFormFromFormData(formData: FormData): ProductForm {
-  return parseProductForm(String(formData.get("form") ?? ""));
+export function isLooseProduct(
+  product: { productCat?: { isBottled: boolean } | null } | null | undefined,
+): boolean {
+  return !isBottledProduct(product);
 }
 
-export function isLooseForm(form: ProductForm): boolean {
-  return form === "LOOSE";
-}
-
-export function isBottledForm(form: ProductForm): boolean {
-  return form === "BOTTLED";
-}
-
+/** Prisma WHERE filter: bottled products only. */
 export function productWhereBottled(): Prisma.ProductWhereInput {
-  return { form: "BOTTLED" };
+  return { productCat: { isBottled: true } };
 }
 
+/** Prisma WHERE filter: non-bottled (POS / DO eligible) products. */
 export function productWhereNotBottled(): Prisma.ProductWhereInput {
-  return { form: { not: "BOTTLED" } };
+  return { productCat: { isBottled: false } };
 }

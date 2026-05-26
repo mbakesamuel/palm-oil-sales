@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 /** Bump when a migration changes the DB shape so dev hot-reload drops a stale Prisma singleton. */
-const PRISMA_CLIENT_CACHE_KEY = "20260525060000_add_stock_management";
+const PRISMA_CLIENT_CACHE_KEY = "20260526120000_drop_product_form_use_category_bottled";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -103,16 +103,26 @@ function clientHasProductUnitPriceSchedule(client: PrismaClient): boolean {
   );
 }
 
-/** Product.form replaced isBottledPalmOil/stockTracking — stale clients still query dropped columns. */
+/**
+ * Detects whether the loaded Prisma Client matches the current product model.
+ * `Product.form` was dropped in `20260526120000_drop_product_form_use_category_bottled`;
+ * the bottled-product signal now lives on `ProductCat.isBottled`. Stale dev
+ * clients would still try to read the removed column, so we refuse to use them.
+ */
 function clientMatchesCurrentProductModel(): boolean {
   const product = Prisma.dmmf.datamodel.models.find((m) => m.name === "Product");
-  if (!product) return false;
-  const names = new Set(product.fields.map((f) => f.name));
+  const productCat = Prisma.dmmf.datamodel.models.find(
+    (m) => m.name === "ProductCat",
+  );
+  if (!product || !productCat) return false;
+  const productNames = new Set(product.fields.map((f) => f.name));
+  const productCatNames = new Set(productCat.fields.map((f) => f.name));
   return (
-    names.has("form") &&
-    !names.has("isBottledPalmOil") &&
-    !names.has("stockTracking") &&
-    !names.has("variants")
+    !productNames.has("form") &&
+    !productNames.has("isBottledPalmOil") &&
+    !productNames.has("stockTracking") &&
+    !productNames.has("variants") &&
+    productCatNames.has("isBottled")
   );
 }
 
@@ -141,7 +151,7 @@ export function getPrismaClient() {
   const client = createPrismaClient();
   if (!clientMatchesCurrentProductModel()) {
     throw new Error(
-      "Prisma Client is out of date (Product.form). Run: npx prisma generate, then restart the dev server.",
+      "Prisma Client is out of date (Product.form dropped; ProductCat.isBottled added). Run: npx prisma generate, then restart the dev server.",
     );
   }
   if (!clientHasFinancialYearPeriod(client)) {

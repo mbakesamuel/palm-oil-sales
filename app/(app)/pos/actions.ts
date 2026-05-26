@@ -47,7 +47,6 @@ import { applyMovement } from "@/lib/stock/post";
 import {
   PaymentMethod,
   Prisma,
-  ProductForm,
   StockMovementKind,
   ValidationStatus,
   UserRole,
@@ -286,10 +285,13 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       if (!Number.isFinite(productId)) throw new Error("Invalid product selected.");
       const product = await prisma.product.findUnique({
         where: { productId },
-        select: { productName: true, form: true },
+        select: {
+          productName: true,
+          productCat: { select: { isBottled: true } },
+        },
       });
       if (!product) throw new Error("Product not found.");
-      if (product.form === "BOTTLED") {
+      if (product.productCat?.isBottled === true) {
         throw new Error(
           `Bottled product "${product.productName}" is not sold on this page. Use Bottled Palm Oil sales (/bpo-sales).`,
         );
@@ -836,7 +838,9 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
           productId: true,
           qtyKg: true,
           qtyUnits: true,
-          product: { select: { form: true } },
+          product: {
+            select: { productCat: { select: { isBottled: true } } },
+          },
         },
       },
     },
@@ -859,10 +863,9 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
     await prisma.$transaction(
       async (tx) => {
         for (const line of existing.lines) {
-          const qty =
-            line.product.form === ProductForm.LOOSE
-              ? line.qtyKg
-              : (line.qtyUnits ?? line.qtyKg);
+          const qty = line.product.productCat?.isBottled
+            ? (line.qtyUnits ?? line.qtyKg)
+            : line.qtyKg;
           if (new Prisma.Decimal(qty).lte(0)) continue;
           await applyMovement(tx, {
             salesPointId: stockSalesPointId,

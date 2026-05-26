@@ -30,7 +30,6 @@ type Customer = {
 type Product = {
   productId: number;
   productName: string;
-  productCat: { productCat: string };
 };
 
 type Line = {
@@ -327,9 +326,24 @@ export function SalesClient(props: {
   React.useEffect(() => {
     let alive = true;
     if (saleId != null) return;
+    const productIdByIdx = lineProductKey.split(",");
+    const hasAnyProductPicked = productIdByIdx.some(
+      (id) => id.trim() !== "",
+    );
     if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
       window.queueMicrotask(() => {
-        if (alive) setLinePriceErrors({});
+        if (!alive) return;
+        if (!customerId && hasAnyProductPicked) {
+          const hint: Record<number, string> = {};
+          productIdByIdx.forEach((id, idx) => {
+            if (id.trim() !== "") {
+              hint[idx] = "Select a customer first to load the unit price.";
+            }
+          });
+          setLinePriceErrors(hint);
+        } else {
+          setLinePriceErrors({});
+        }
       });
       return () => {
         alive = false;
@@ -341,12 +355,11 @@ export function SalesClient(props: {
     void (async () => {
       const errs: Record<number, string> = {};
       const priceByIdx: Record<number, string> = {};
-      const productIds = lineProductKey
-        ? lineProductKey.split(",").filter((id) => id.trim() !== "")
-        : [];
       await Promise.all(
-        productIds.map(async (productId, idx) => {
-          const pid = Number.parseInt(productId, 10);
+        productIdByIdx.map(async (productIdRaw, idx) => {
+          const trimmed = productIdRaw.trim();
+          if (trimmed === "") return;
+          const pid = Number.parseInt(trimmed, 10);
           if (!Number.isFinite(pid)) return;
           const r = await previewProductUnitPriceAction(
             customerId,
@@ -718,60 +731,58 @@ export function SalesClient(props: {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-border p-4 sm:p-5 space-y-3">
-        <div className="text-sm font-semibold">Open existing invoice</div>
-        <p className="text-xs opacity-75">
-          Enter the invoice number (e.g. PO-2026-000001) to load it.
-        </p>
+      <div className="rounded-lg border border-border p-3 sm:p-4">
         <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-          <div className="grid gap-1 flex-1">
+          <div className="grid gap-1 flex-1 min-w-0">
             <label className="text-xs font-medium opacity-70">
-              Invoice no.
+              Open existing invoice
             </label>
             <input
-              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
               value={lookupNo}
               onChange={(e) => setLookupNo(e.target.value)}
               placeholder="PO-2026-000001"
             />
           </div>
-          <button
-            type="button"
-            disabled={busy !== null || !lookupNo.trim()}
-            onClick={() => void onLoadByNo()}
-            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {busy === "load" ? "Loading…" : "Load invoice"}
-          </button>
-          <button
-            type="button"
-            onClick={resetNew}
-            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25"
-          >
-            New sale
-          </button>
-          {saleId ? (
-            <Link
-              href={`/sales/${saleId}`}
-              className="rounded-md border border-border px-4 py-2 text-sm text-center hover:bg-accent/25"
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+            <button
+              type="button"
+              disabled={busy !== null || !lookupNo.trim()}
+              onClick={() => void onLoadByNo()}
+              className="rounded-md bg-brand text-brand-foreground px-3 py-2 text-sm font-medium disabled:opacity-50"
             >
-              View / print
-            </Link>
-          ) : null}
+              {busy === "load" ? "Loading…" : "Load"}
+            </button>
+            <button
+              type="button"
+              onClick={resetNew}
+              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent/25"
+            >
+              New sale
+            </button>
+            {saleId ? (
+              <Link
+                href={`/sales/${saleId}`}
+                className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent/25"
+              >
+                View / print
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+      <section className="rounded-lg border border-border p-3 sm:p-4 space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
             <h2 className="text-lg font-semibold">Sale (invoice)</h2>
-            <p className="text-xs opacity-75 mt-1">
-              Posting period:{" "}
-              <span className="font-medium tabular-nums">FY {wp.fyLabel}</span>{" "}
-              · <span className="font-medium">{wp.workingMonthLabel}</span>
-            </p>
-            <p className="text-xs opacity-75 mt-1">
-              <span className="opacity-70">Sold at</span>{" "}
+            <span className="text-xs opacity-75">
+              <span className="opacity-70">FY</span>{" "}
+              <span className="font-medium tabular-nums">{wp.fyLabel}</span>
+              <span className="opacity-50"> · </span>
+              <span className="font-medium">{wp.workingMonthLabel}</span>
+              <span className="opacity-50"> · </span>
+              <span className="opacity-70">Sold</span>{" "}
               <span className="font-medium tabular-nums">
                 {soldAtIso
                   ? new Date(soldAtIso)
@@ -780,14 +791,27 @@ export function SalesClient(props: {
                       .replace("T", " ")
                   : "—"}
               </span>
-            </p>
-            <p className="text-xs opacity-75 mt-1">
+              <span className="opacity-50"> · </span>
               <span className="opacity-70">Status</span>{" "}
-              <span className="font-medium">{saleStatus ?? "—"}</span>
+              {saleStatus ? (
+                <span
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                    saleStatus === ValidationStatus.VALIDATED
+                      ? "bg-emerald-600/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+                      : saleStatus === ValidationStatus.REJECTED
+                        ? "bg-red-600/15 text-red-700 dark:bg-red-500/20 dark:text-red-300"
+                        : "bg-amber-500/20 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200"
+                  }`}
+                >
+                  {saleStatus}
+                </span>
+              ) : (
+                <span className="font-medium">—</span>
+              )}
               {saleStatus === ValidationStatus.VALIDATED ? (
-                <span className="opacity-70">
-                  {" "}
-                  · Validated by{" "}
+                <>
+                  <span className="opacity-50"> · </span>
+                  <span className="opacity-70">by</span>{" "}
                   <span className="font-medium">{validatedByName || "—"}</span>
                   {validatedAtIso ? (
                     <span className="opacity-70">
@@ -800,30 +824,30 @@ export function SalesClient(props: {
                       )
                     </span>
                   ) : null}
-                </span>
+                </>
               ) : null}
-            </p>
+            </span>
           </div>
           {invoiceNo ? (
-            <div className="text-sm">
+            <div className="text-sm shrink-0">
               <span className="opacity-70">Invoice</span>{" "}
               <span className="font-semibold tabular-nums">{invoiceNo}</span>
             </div>
           ) : null}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Customer</label>
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-x-4">
+          <div className="grid gap-1">
+            <label className="text-xs font-medium opacity-80">Customer</label>
             <select
-              className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
               disabled={saleId != null}
               required
             >
               <option value="" disabled>
-                Select Customer
+                Select customer
               </option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -831,7 +855,7 @@ export function SalesClient(props: {
                 </option>
               ))}
             </select>
-            <div className="text-xs opacity-70 space-y-0.5">
+            <div className="text-[11px] opacity-70 leading-tight space-y-0.5">
               <div>
                 Regime: {customer?.taxRegime?.name ?? "-"}
                 {vatChargedHint ? " · VAT may apply" : ""}
@@ -850,24 +874,25 @@ export function SalesClient(props: {
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">
-              Reference no. (optional)
+          <div className="grid gap-1">
+            <label className="text-xs font-medium opacity-80">
+              Reference no.{" "}
+              <span className="font-normal opacity-60">(optional)</span>
             </label>
             <input
-              className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
               placeholder="Voucher / customer ref"
               disabled={saleId != null}
             />
-            <div className="text-xs opacity-70 min-h-4">
+            <p className="text-[11px] opacity-70 leading-tight">
               Printed as reference number.
-            </div>
+            </p>
           </div>
 
-          <div className="grid gap-2 sm:col-start-1">
-            <label className="text-sm font-medium">Sales point</label>
+          <div className="grid gap-1">
+            <label className="text-xs font-medium opacity-80">Sales point</label>
             {session?.salesPoint ? (
               <>
                 <input
@@ -875,38 +900,37 @@ export function SalesClient(props: {
                   value={session.salesPoint.name}
                   readOnly
                 />
-                <div className="text-xs opacity-70">
-                  This comes from your login session and cannot be changed here.
-                </div>
+                <p className="text-[11px] opacity-70 leading-tight">
+                  From your login session.
+                </p>
               </>
             ) : (
               <>
                 <select
-                  className="w-full rounded-md border border-border bg-transparent px-3 py-2"
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                   value={salesPointId}
                   onChange={(e) => setSalesPointId(e.target.value)}
                   disabled={saleId != null}
                 >
-                  <option value="">select Sales Point</option>
+                  <option value="">select sales point</option>
                   {salesPoints.map((sp) => (
                     <option key={sp.id} value={String(sp.id)}>
                       {sp.name}
                     </option>
                   ))}
                 </select>
-                <div className="text-xs opacity-70">
-                  Optional for manager/admin sessions without a fixed sales
-                  point.
-                </div>
+                <p className="text-[11px] opacity-70 leading-tight">
+                  Optional for manager/admin sessions.
+                </p>
               </>
             )}
           </div>
 
-          <div className="grid gap-2 sm:col-span-2">
-            <label className="text-sm font-medium">Sale date</label>
+          <div className="grid gap-1">
+            <label className="text-xs font-medium opacity-80">Sale date</label>
             <input
               type="date"
-              className="w-full max-w-xs rounded-md border border-border bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
               value={transactionDate}
               min={transactionDateBounds?.minIso}
               max={transactionDateBounds?.maxIso}
@@ -914,8 +938,8 @@ export function SalesClient(props: {
               disabled={saleId != null || wp.openFinancialYear == null}
               required
             />
-            <p className="text-xs opacity-70">
-              Must fall within your working calendar month (
+            <p className="text-[11px] opacity-70 leading-tight">
+              Within working month (
               {transactionDateBounds
                 ? `${transactionDateBounds.minIso}–${transactionDateBounds.maxIso}`
                 : "—"}
@@ -923,31 +947,31 @@ export function SalesClient(props: {
             </p>
           </div>
 
-          <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Vehicle number</label>
-              <input
-                className="w-full rounded-md border border-border bg-transparent px-3 py-2"
-                value={vehicleNumber}
-                onChange={(e) => setVehicleNumber(e.target.value)}
-                placeholder="Registration / fleet id"
-                disabled={saleId != null}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">
-                Delivery order no.{" "}
-                <span className="font-normal opacity-70">(optional)</span>
-              </label>
-              <input
-                className="w-full rounded-md border border-border bg-transparent px-3 py-2"
-                value={deliveryOrderNo}
-                onChange={(e) => setDeliveryOrderNo(e.target.value)}
-                placeholder="Link to delivery order for qty control"
-                disabled={saleId != null}
-              />
-            </div>
+          <div className="grid gap-1">
+            <label className="text-xs font-medium opacity-80">
+              Vehicle number
+            </label>
+            <input
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+              value={vehicleNumber}
+              onChange={(e) => setVehicleNumber(e.target.value)}
+              placeholder="Registration / fleet id"
+              disabled={saleId != null}
+              required
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="text-xs font-medium opacity-80">
+              Delivery order no.{" "}
+              <span className="font-normal opacity-60">(optional)</span>
+            </label>
+            <input
+              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+              value={deliveryOrderNo}
+              onChange={(e) => setDeliveryOrderNo(e.target.value)}
+              placeholder="Link to D.O. for qty control"
+              disabled={saleId != null}
+            />
           </div>
 
           {deliveryOrderNo.trim() ? (
@@ -1087,18 +1111,18 @@ export function SalesClient(props: {
           <div className="rounded-lg border border-border overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
               <div className="col-span-5">Product</div>
-              <div className="col-span-3">Qty</div>
-              <div className="col-span-3">Price (ex tax)</div>
+              <div className="col-span-3">Qty (kg)</div>
+              <div className="col-span-3">Price / kg (ex tax)</div>
               <div className="col-span-1" />
             </div>
             {lines.map((l, idx) => (
               <div
                 key={idx}
-                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-start"
+                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
               >
                 <div className="col-span-5">
                   <select
-                    className="w-full rounded-md border border-border bg-transparent px-2 py-1"
+                    className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                     value={l.productId}
                     onChange={(e) =>
                       setLines((prev) =>
@@ -1115,18 +1139,18 @@ export function SalesClient(props: {
                     disabled={deliveryOrderControlsItems}
                   >
                     <option value="" disabled>
-                      Select Product
+                      Select product
                     </option>
                     {products.map((g) => (
                       <option key={g.productId} value={String(g.productId)}>
-                        {g.productName} ({g.productCat.productCat})
+                        {g.productName}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="col-span-3">
                   <input
-                    className="w-full rounded-md border border-border bg-transparent px-2 py-1"
+                    className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm tabular-nums"
                     value={l.qtyKg}
                     inputMode="decimal"
                     onChange={(e) =>
@@ -1137,19 +1161,17 @@ export function SalesClient(props: {
                       )
                     }
                   />
-                  <p className="mt-1 text-[10px] opacity-70">Qty (kg)</p>
                 </div>
-                <div className="col-span-3 space-y-0.5 min-w-0 pt-0.5">
+                <div className="col-span-3 min-w-0">
                   <input
-                    className="w-full rounded-md border border-border bg-foreground/[0.06] px-2 py-1"
+                    className="w-full rounded-md border border-border bg-foreground/6 px-3 py-2 text-sm tabular-nums"
                     value={l.unitPricePerKg}
                     inputMode="decimal"
                     readOnly
                     title="Resolved from product pricing schedules"
                   />
-                  <p className="text-[10px] opacity-70">Price / kg (ex tax)</p>
                   {linePriceErrors[idx] ? (
-                    <p className="text-[10px] text-amber-800 dark:text-amber-200/90 leading-snug">
+                    <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-200/90 leading-snug">
                       {linePriceErrors[idx]}
                     </p>
                   ) : null}

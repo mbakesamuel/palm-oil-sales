@@ -32,7 +32,9 @@ export default async function PosPage() {
     session != null
       ? (await getPermissionsForSession(session))["ui:validate-documents"]
       : false;
-  const productWhere = productWhereForScope(scope, { form: { not: "BOTTLED" } });
+  const productWhere = productWhereForScope(scope, {
+    productCat: { isBottled: false },
+  });
   const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, grades, salesPoints] = await Promise.all([
@@ -56,7 +58,6 @@ export default async function PosPage() {
         select: {
           productId: true,
           productName: true,
-          productCat: { select: { productCat: true } },
         },
         take: 50,
       }),

@@ -27,8 +27,7 @@ export async function resolveUnitPriceExTax(
     where: { productId },
     select: {
       productName: true,
-      form: true,
-      productCat: { select: { isMain: true } },
+      productCat: { select: { isMain: true, isBottled: true } },
     },
   });
 
@@ -37,7 +36,7 @@ export async function resolveUnitPriceExTax(
   }
 
   const isMainCategory = product.productCat?.isMain === true;
-  const isBottled = product.form === "BOTTLED";
+  const isBottled = product.productCat?.isBottled === true;
 
   const row = await prisma.productUnitPriceSchedule.findFirst({
     where: {
@@ -89,10 +88,13 @@ export async function resolveBottledUnitPriceExTax(
 > {
   const product = await prisma.product.findUnique({
     where: { productId },
-    select: { productName: true, form: true },
+    select: {
+      productName: true,
+      productCat: { select: { isBottled: true } },
+    },
   });
   if (!product) return { ok: false, error: "Product not found." };
-  if (product.form !== "BOTTLED") {
+  if (product.productCat?.isBottled !== true) {
     return { ok: false, error: "Product is not a bottled SKU." };
   }
   const r = await resolveUnitPriceExTax(

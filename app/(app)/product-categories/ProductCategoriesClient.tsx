@@ -262,7 +262,6 @@ export function ProductCategoriesClient(props: {
                     type="checkbox"
                     name="isMain"
                     checked={isMain}
-                    disabled={anotherMainExists && !isMain}
                     onChange={(e) => setIsMain(e.target.checked)}
                     className="size-4"
                   />
@@ -273,12 +272,11 @@ export function ProductCategoriesClient(props: {
                   category are priced per customer type (Industry / Wholesale /
                   Retail / Worker); all other categories use one direct price
                   per product.
-                  {anotherMainExists && !isMain ? (
+                  {anotherMainExists && isMain ? (
                     <>
                       {" "}
-                      Currently &ldquo;{existingMain?.productCat}&rdquo; holds
-                      the Main flag &mdash; clear it on that row first if you
-                      want to move it here.
+                      Saving will transfer the Main flag from &ldquo;
+                      {existingMain?.productCat}&rdquo; to this category.
                     </>
                   ) : null}
                 </p>

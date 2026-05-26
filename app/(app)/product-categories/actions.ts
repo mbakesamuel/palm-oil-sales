@@ -21,22 +21,22 @@ function readIsMain(formData: FormData): boolean {
   return raw === "on" || raw === "true" || raw === "1";
 }
 
-async function assertNoOtherMain(
+/**
+ * Clears the Main flag from any other category before marking `targetId` as
+ * Main, so the partial unique index `ProductCat_isMain_unique` never sees two
+ * rows with `isMain = true` at once. Pass `targetId = null` for create flows.
+ */
+async function clearOtherMains(
   prisma: ReturnType<typeof getPrismaClient>,
-  exceptId: number | null,
+  targetId: number | null,
 ) {
-  const other = await prisma.productCat.findFirst({
+  await prisma.productCat.updateMany({
     where: {
       isMain: true,
-      ...(exceptId != null ? { NOT: { productCatId: exceptId } } : {}),
+      ...(targetId != null ? { NOT: { productCatId: targetId } } : {}),
     },
-    select: { productCatId: true, productCat: true },
+    data: { isMain: false },
   });
-  if (other) {
-    throw new Error(
-      `Another category (“${other.productCat}”) is already marked as Main. Clear that flag before marking a different category as Main.`,
-    );
-  }
 }
 
 export async function createProductCat(formData: FormData) {
@@ -49,10 +49,11 @@ export async function createProductCat(formData: FormData) {
   if (!productCat) throw new Error("Category name is required.");
   if (!productCode) throw new Error("Category code is required.");
 
-  if (isMain) await assertNoOtherMain(prisma, null);
-
-  await prisma.productCat.create({
-    data: { productCat, productCode, isMain },
+  await prisma.$transaction(async (tx) => {
+    if (isMain) await clearOtherMains(tx as typeof prisma, null);
+    await tx.productCat.create({
+      data: { productCat, productCode, isMain },
+    });
   });
 
   revalidateAll();
@@ -70,11 +71,12 @@ export async function updateProductCat(formData: FormData) {
   if (!productCat) throw new Error("Category name is required.");
   if (!productCode) throw new Error("Category code is required.");
 
-  if (isMain) await assertNoOtherMain(prisma, productCatId);
-
-  await prisma.productCat.update({
-    where: { productCatId },
-    data: { productCat, productCode, isMain },
+  await prisma.$transaction(async (tx) => {
+    if (isMain) await clearOtherMains(tx as typeof prisma, productCatId);
+    await tx.productCat.update({
+      where: { productCatId },
+      data: { productCat, productCode, isMain },
+    });
   });
 
   revalidateAll();

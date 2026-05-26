@@ -25,7 +25,6 @@ type Customer = { id: string; name: string; vatApplies: boolean };
 type Product = {
   productId: number;
   productName: string;
-  productCat: { productCat: string };
 };
 type SalesPointOpt = { id: number; name: string };
 
@@ -68,9 +67,7 @@ export function DeliveryOrdersClient(props: {
   loadDeliveryOrderByNo: (
     no: string,
   ) => Promise<LoadedDeliveryOrderView | null>;
-  saveDeliveryOrderHeader: (formData: FormData) => Promise<SaveHeaderResult>;
-  saveDeliveryOrderDetails: (formData: FormData) => Promise<SaveSectionResult>;
-  saveDeliveryOrderPayments: (formData: FormData) => Promise<SaveSectionResult>;
+  saveDeliveryOrder: (formData: FormData) => Promise<SaveHeaderResult>;
   deleteDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   canValidateDeliveryOrder: boolean;
@@ -93,9 +90,7 @@ export function DeliveryOrdersClient(props: {
     salesPoints,
     previewDeliveryOrderTaxesAction,
     loadDeliveryOrderByNo,
-    saveDeliveryOrderHeader,
-    saveDeliveryOrderDetails,
-    saveDeliveryOrderPayments,
+    saveDeliveryOrder,
     deleteDeliveryOrder,
     validateDeliveryOrder,
     canValidateDeliveryOrder: canValidateDeliveryOrderProp,
@@ -442,8 +437,8 @@ export function DeliveryOrdersClient(props: {
     }
   }
 
-  async function onSaveHeader() {
-    setBusy("header");
+  async function onSave() {
+    setBusy("save");
     setBanner(null);
     try {
       if (authStatus !== "ready" || !session?.userId) {
@@ -462,6 +457,10 @@ export function DeliveryOrdersClient(props: {
         setBanner({ type: "error", text: "Select a collection point." });
         return;
       }
+      if (lines.length === 0) {
+        setBanner({ type: "error", text: "Add at least one line item." });
+        return;
+      }
       const fd = new FormData();
       if (orderId != null) fd.set("id", String(orderId));
       fd.set("customerId", customerId);
@@ -474,17 +473,20 @@ export function DeliveryOrdersClient(props: {
       );
       fd.set("postingCalendarYear", String(wp.workingCalendarYear));
       fd.set("postingCalendarMonth", String(wp.workingCalendarMonth));
-      const r = await saveDeliveryOrderHeader(fd);
+      fd.set("lines", JSON.stringify(lines));
+      fd.set("payments", JSON.stringify(payments));
+      const r = await saveDeliveryOrder(fd);
       if (r.ok) {
+        const wasNew = orderId == null;
         setOrderId(r.id);
         setDeliveryOrderNo(r.deliveryOrderNo);
         setLookupNo(r.deliveryOrderNo);
         setDocStatus(ValidationStatus.PENDING);
         setBanner({
           type: "ok",
-          text: orderId
-            ? "Header updated. You can adjust lines and payments below."
-            : `Created ${r.deliveryOrderNo}. You can now add lines and payments.`,
+          text: wasNew
+            ? `Created ${r.deliveryOrderNo}.`
+            : "Delivery order updated.",
         });
         router.refresh();
       } else {
@@ -536,54 +538,6 @@ export function DeliveryOrdersClient(props: {
     }
   }
 
-  async function onSaveLines() {
-    if (orderId == null) return;
-    if (authStatus !== "ready" || !session?.userId) {
-      setBanner({ type: "error", text: "Login required." });
-      return;
-    }
-    setBusy("lines");
-    setBanner(null);
-    try {
-      const fd = new FormData();
-      fd.set("deliveryOrderId", String(orderId));
-      fd.set("lines", JSON.stringify(lines));
-      const r = await saveDeliveryOrderDetails(fd);
-      if (r.ok) {
-        setBanner({ type: "ok", text: "Line items and taxes saved." });
-        router.refresh();
-      } else {
-        setBanner({ type: "error", text: r.error });
-      }
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function onSavePayments() {
-    if (orderId == null) return;
-    if (authStatus !== "ready" || !session?.userId) {
-      setBanner({ type: "error", text: "Login required." });
-      return;
-    }
-    setBusy("payments");
-    setBanner(null);
-    try {
-      const fd = new FormData();
-      fd.set("deliveryOrderId", String(orderId));
-      fd.set("payments", JSON.stringify(payments));
-      const r = await saveDeliveryOrderPayments(fd);
-      if (r.ok) {
-        setBanner({ type: "ok", text: "Payments saved." });
-        router.refresh();
-      } else {
-        setBanner({ type: "error", text: r.error });
-      }
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const vatRateNum = taxPreview ? parseDec(taxPreview.vatRate) : 0;
   const otherRateNum = taxPreview ? parseDec(taxPreview.otherRate) : 0;
 
@@ -609,8 +563,6 @@ export function DeliveryOrdersClient(props: {
     { net: 0, vat: 0, other: 0, total: 0 },
   );
 
-  const section2Disabled = orderId == null;
-  const section3Disabled = orderId == null;
 
   const canDraftDO =
     authStatus === "ready" && session
@@ -620,10 +572,8 @@ export function DeliveryOrdersClient(props: {
     authStatus === "ready" && session && canValidateDeliveryOrderProp;
   const draftFormLocked =
     docStatus === ValidationStatus.VALIDATED || !canDraftDO;
-  const linesReadOnly =
-    section2Disabled || docStatus === ValidationStatus.VALIDATED || !canDraftDO;
-  const paymentsReadOnly =
-    section3Disabled || docStatus === ValidationStatus.VALIDATED || !canDraftDO;
+  const linesReadOnly = draftFormLocked;
+  const paymentsReadOnly = draftFormLocked;
 
   return (
     <div className="space-y-8">
@@ -1054,58 +1004,10 @@ export function DeliveryOrdersClient(props: {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={busy !== null || draftFormLocked}
-                onClick={() => void onSaveHeader()}
-                className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
-              >
-                {busy === "header"
-                  ? "Saving…"
-                  : orderId != null
-                    ? "Update header"
-                    : "Save header (create order)"}
-              </button>
-              {orderId != null &&
-              docStatus === ValidationStatus.PENDING &&
-              session &&
-              canValidateDO ? (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void onValidateOrder()}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
-                >
-                  {busy === "validate" ? "Validating…" : "Validate"}
-                </button>
-              ) : null}
-              {orderId != null &&
-              docStatus === ValidationStatus.PENDING &&
-              canDraftDO ? (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    setPendingDelete({
-                      id: orderId,
-                      deliveryOrderNo: deliveryOrderNo || `ID ${orderId}`,
-                    })
-                  }
-                  className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-600/10 disabled:opacity-50"
-                >
-                  Delete order
-                </button>
-              ) : null}
-            </div>
           </section>
 
           {/* Section 2 — DeliveryOrderDetails */}
-          <section
-            className={`rounded-lg border border-border p-4 sm:p-6 space-y-4 ${
-              section2Disabled ? "opacity-55 pointer-events-none" : ""
-            }`}
-          >
+          <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
             <div>
               <h2 className="text-lg font-semibold">
                 2 · Line items (Products) & taxes
@@ -1119,11 +1021,6 @@ export function DeliveryOrdersClient(props: {
                 date issued.
               </p>
             </div>
-            {section2Disabled ? (
-              <p className="text-sm text-amber-800 dark:text-amber-200/90">
-                Save the header in section 1 to enable line items.
-              </p>
-            ) : null}
 
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-base font-semibold">Lines</h3>
@@ -1184,7 +1081,7 @@ export function DeliveryOrdersClient(props: {
                       >
                         {products.map((g) => (
                           <option key={g.productId} value={String(g.productId)}>
-                            {g.productName} ({g.productCat.productCat})
+                            {g.productName}
                           </option>
                         ))}
                       </select>
@@ -1351,41 +1248,18 @@ export function DeliveryOrdersClient(props: {
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={
-                linesReadOnly ||
-                busy !== null ||
-                Boolean(taxPreviewError) ||
-                taxPreview == null
-              }
-              onClick={() => void onSaveLines()}
-              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              {busy === "lines" ? "Saving…" : "Save line items & taxes"}
-            </button>
           </section>
 
           {/* Section 3 — DeliveryOrderPaymentDetails */}
-          <section
-            className={`rounded-lg border border-border p-4 sm:p-6 space-y-4 ${
-              section3Disabled ? "opacity-55 pointer-events-none" : ""
-            }`}
-          >
+          <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
             <div>
               <h2 className="text-lg font-semibold">3 · Payments</h2>
               <p className="text-xs opacity-75 mt-1">
                 Stored in{" "}
                 <code className="text-[11px]">DeliveryOrderPaymentDetails</code>
-                . Optional; save whenever advance or instalment payments are
-                recorded.
+                . Optional; record advance or instalment payments here.
               </p>
             </div>
-            {section3Disabled ? (
-              <p className="text-sm text-amber-800 dark:text-amber-200/90">
-                Save the header in section 1 to record payments.
-              </p>
-            ) : null}
 
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-base font-semibold">Payment rows</h3>
@@ -1587,15 +1461,57 @@ export function DeliveryOrdersClient(props: {
               </div>
             )}
 
+          </section>
+
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={paymentsReadOnly || busy !== null}
-              onClick={() => void onSavePayments()}
+              disabled={
+                busy !== null ||
+                draftFormLocked ||
+                Boolean(taxPreviewError) ||
+                taxPreview == null
+              }
+              onClick={() => void onSave()}
               className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
-              {busy === "payments" ? "Saving…" : "Save payments"}
+              {busy === "save"
+                ? "Saving…"
+                : orderId != null
+                  ? "Update delivery order"
+                  : "Save delivery order"}
             </button>
-          </section>
+            {orderId != null &&
+            docStatus === ValidationStatus.PENDING &&
+            session &&
+            canValidateDO ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void onValidateOrder()}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
+              >
+                {busy === "validate" ? "Validating…" : "Validate"}
+              </button>
+            ) : null}
+            {orderId != null &&
+            docStatus === ValidationStatus.PENDING &&
+            canDraftDO ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() =>
+                  setPendingDelete({
+                    id: orderId,
+                    deliveryOrderNo: deliveryOrderNo || `ID ${orderId}`,
+                  })
+                }
+                className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-600/10 disabled:opacity-50"
+              >
+                Delete order
+              </button>
+            ) : null}
+          </div>
         </>
       )}
 

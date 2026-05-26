@@ -21,8 +21,7 @@ export default async function ProductPricingPage() {
             select: {
               productName: true,
               productCatId: true,
-              form: true,
-              productCat: { select: { isMain: true } },
+              productCat: { select: { isMain: true, isBottled: true } },
             },
           },
         },
@@ -30,13 +29,12 @@ export default async function ProductPricingPage() {
     ),
     prismaRetry(() =>
       prisma.product.findMany({
-        where: { form: { not: "SECONDARY" } },
         orderBy: { productName: "asc" },
         select: {
           productId: true,
           productName: true,
           productCatId: true,
-          productCat: { select: { isMain: true } },
+          productCat: { select: { productCat: true, isMain: true } },
         },
       }),
     ),
@@ -58,6 +56,7 @@ export default async function ProductPricingPage() {
     productId: p.productId,
     productName: p.productName,
     productCatId: p.productCatId,
+    productCatName: p.productCat?.productCat ?? "(Uncategorised)",
     isMainCategory: p.productCat?.isMain === true,
   }));
 

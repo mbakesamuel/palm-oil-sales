@@ -12,6 +12,7 @@ type ProductOpt = {
   productId: number;
   productName: string;
   productCatId: number;
+  productCatName: string;
   isMainCategory: boolean;
 };
 
@@ -48,7 +49,7 @@ const fieldLabelClass = [
 const fieldControlClass = "min-w-0 flex-1";
 
 function labelCustomerType(ct: string | null) {
-  if (!ct) return "—";
+  if (!ct) return "Direct price";
   switch (ct) {
     case CustomerType.INDUSTRY:
       return "Industry";
@@ -61,6 +62,57 @@ function labelCustomerType(ct: string | null) {
     default:
       return ct;
   }
+}
+
+/** Canonical order for customer-type sub-rows within a product group. */
+const CUSTOMER_TYPE_RANK: Record<string, number> = {
+  [CustomerType.INDUSTRY]: 0,
+  [CustomerType.WHOLE_SALE]: 1,
+  [CustomerType.RETAIL]: 2,
+  [CustomerType.WORKER]: 3,
+};
+
+function customerTypeRank(ct: string | null): number {
+  if (!ct) return -1;
+  return CUSTOMER_TYPE_RANK[ct] ?? 99;
+}
+
+type ScheduleGroup = {
+  productId: number;
+  productName: string;
+  /** Latest effective date across all rows of this product. */
+  effectiveFromIso: string;
+  rows: ScheduleRow[];
+};
+
+function groupSchedulesByProduct(rows: ScheduleRow[]): ScheduleGroup[] {
+  const byProduct = new Map<number, ScheduleGroup>();
+  for (const r of rows) {
+    const existing = byProduct.get(r.productId);
+    if (!existing) {
+      byProduct.set(r.productId, {
+        productId: r.productId,
+        productName: r.productName,
+        effectiveFromIso: r.effectiveFromIso,
+        rows: [r],
+      });
+      continue;
+    }
+    existing.rows.push(r);
+    if (r.effectiveFromIso > existing.effectiveFromIso) {
+      existing.effectiveFromIso = r.effectiveFromIso;
+    }
+  }
+  const groups = [...byProduct.values()];
+  for (const g of groups) {
+    g.rows.sort(
+      (a, b) => customerTypeRank(a.customerType) - customerTypeRank(b.customerType),
+    );
+  }
+  groups.sort((a, b) =>
+    a.productName.localeCompare(b.productName, undefined, { sensitivity: "base" }),
+  );
+  return groups;
 }
 
 export function ProductPricingClient(props: {
@@ -105,6 +157,58 @@ export function ProductPricingClient(props: {
   );
   const isMainProduct = selectedProduct?.isMainCategory === true;
 
+  const scheduleGroups = React.useMemo(
+    () => groupSchedulesByProduct(schedules),
+    [schedules],
+  );
+
+  /** Distinct categories present in the product list, sorted by name. */
+  const categoryOptions = React.useMemo(() => {
+    const byId = new Map<number, { id: number; name: string }>();
+    for (const p of products) {
+      if (!byId.has(p.productCatId)) {
+        byId.set(p.productCatId, { id: p.productCatId, name: p.productCatName });
+      }
+    }
+    return [...byId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+  }, [products]);
+
+  /** Empty set = "no filter, show all categories". */
+  const [selectedCatIds, setSelectedCatIds] = React.useState<Set<number>>(
+    () => new Set(),
+  );
+
+  const filteredProducts = React.useMemo(() => {
+    if (selectedCatIds.size === 0) return products;
+    return products.filter((p) => selectedCatIds.has(p.productCatId));
+  }, [products, selectedCatIds]);
+
+  /**
+   * If the currently-picked product drops out of the filtered list (e.g. user
+   * unticked its category), clear the selection so the user has to re-pick.
+   */
+  React.useEffect(() => {
+    if (!productId) return;
+    if (filteredProducts.some((p) => String(p.productId) === productId)) return;
+    setProductId("");
+    setCustomerType("");
+  }, [filteredProducts, productId]);
+
+  function toggleCategoryFilter(catId: number) {
+    setSelectedCatIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
+      return next;
+    });
+  }
+
+  function clearCategoryFilter() {
+    setSelectedCatIds(new Set());
+  }
+
   function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
     setProductId("");
@@ -132,6 +236,7 @@ export function ProductPricingClient(props: {
     setEffectiveFrom(row.effectiveFromIso);
     setUnitPriceExTax(row.unitPriceExTax);
     setBanner(null);
+    setSelectedCatIds(new Set());
     setIsFormOpen(true);
   }
 
@@ -266,6 +371,44 @@ export function ProductPricingClient(props: {
               onSubmit={(e) => void onSaveForm(e)}
               className="mt-3 space-y-1.5 max-h-[min(28rem,calc(100vh-6rem))] overflow-y-auto pr-1"
             >
+              {categoryOptions.length > 1 ? (
+                <div className={fieldRowClass}>
+                  <span className={fieldLabelClass}>Filter</span>
+                  <div className={fieldControlClass}>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {categoryOptions.map((c) => (
+                        <label
+                          key={c.id}
+                          className="inline-flex items-center gap-1.5 text-xs cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCatIds.has(c.id)}
+                            onChange={() => toggleCategoryFilter(c.id)}
+                            className="size-3.5"
+                          />
+                          {c.name}
+                        </label>
+                      ))}
+                      {selectedCatIds.size > 0 ? (
+                        <button
+                          type="button"
+                          onClick={clearCategoryFilter}
+                          className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100"
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className={hintClass}>
+                      {selectedCatIds.size === 0
+                        ? "Tick any category to narrow the product list below."
+                        : `Showing ${filteredProducts.length} of ${products.length} products.`}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className={fieldRowClass}>
                 <label className={fieldLabelClass} htmlFor="pp-product">
                   Product
@@ -287,11 +430,13 @@ export function ProductPricingClient(props: {
                     autoFocus
                   >
                     <option value="" disabled>
-                      Select product…
+                      {filteredProducts.length === 0
+                        ? "No products match the selected categories"
+                        : "Select product…"}
                     </option>
-                    {products.map((p) => (
+                    {filteredProducts.map((p) => (
                       <option key={p.productId} value={String(p.productId)}>
-                        {p.productName} (cat {p.productCatId})
+                        {p.productName}
                       </option>
                     ))}
                   </select>
@@ -388,8 +533,8 @@ export function ProductPricingClient(props: {
         </div>
       ) : null}
 
-      <section className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 print:hidden">
+      <section className="space-y-2 -mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 print:hidden">
           <h2 className="text-lg font-semibold">Scheduled prices</h2>
           {products.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -412,58 +557,74 @@ export function ProductPricingClient(props: {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="p-2 font-medium">Product</th>
                   <th className="p-2 font-medium">Customer type</th>
-                  <th className="p-2 font-medium">Effective from</th>
-                  <th className="p-2 font-medium">Ex-tax unit</th>
+                  <th className="p-2 font-medium text-right">Ex-tax unit</th>
                   <th className="p-2 font-medium w-36 text-right print:hidden">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {schedules.map((r) => (
-                  <tr
-                    key={r.id}
-                    className={[
-                      "border-b border-border align-top",
-                      editingId === r.id ? "bg-accent/15" : "",
-                    ].join(" ")}
-                  >
-                    <td className="p-2 font-medium">{r.productName}</td>
-                    <td className="p-2 opacity-90">{labelCustomerType(r.customerType)}</td>
-                    <td className="p-2 tabular-nums">{r.effectiveFromIso}</td>
-                    <td className="p-2 tabular-nums">{r.unitPriceExTax}</td>
-                    <td className="p-2 text-right print:hidden">
-                      <div className="flex justify-end gap-2 flex-wrap">
-                        {products.length > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => startEdit(r)}
-                            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPendingDelete({
-                              id: r.id,
-                              label: `${r.productName} · ${labelCustomerType(r.customerType)} · ${r.effectiveFromIso}`,
-                            })
-                          }
-                          className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                {scheduleGroups.map((g) => (
+                  <React.Fragment key={g.productId}>
+                    <tr className="bg-foreground/6 border-b border-border print:bg-black/4">
+                      <td colSpan={3} className="p-2 font-semibold">
+                        <span>{g.productName}</span>
+                        <span className="ml-2 text-xs font-normal opacity-70 tabular-nums">
+                          — Effective from {g.effectiveFromIso}
+                        </span>
+                      </td>
+                    </tr>
+                    {g.rows.map((r) => (
+                      <tr
+                        key={r.id}
+                        className={[
+                          "border-b border-border align-top",
+                          editingId === r.id ? "bg-accent/15" : "",
+                        ].join(" ")}
+                      >
+                        <td className="p-2 pl-6 opacity-90">
+                          {labelCustomerType(r.customerType)}
+                        </td>
+                        <td className="p-2 tabular-nums text-right">
+                          {r.unitPriceExTax}
+                        </td>
+                        <td className="p-2 text-right print:hidden">
+                          <div className="flex justify-end gap-2 flex-wrap">
+                            {products.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => startEdit(r)}
+                                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
+                              >
+                                Edit
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPendingDelete({
+                                  id: r.id,
+                                  label: `${r.productName} · ${labelCustomerType(r.customerType)} · ${r.effectiveFromIso}`,
+                                })
+                              }
+                              className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <div className="text-xs opacity-70">Showing {schedules.length} price row(s).</div>
+        <div className="text-xs opacity-70">
+          Showing {schedules.length} price row{schedules.length === 1 ? "" : "s"} across{" "}
+          {scheduleGroups.length} product
+          {scheduleGroups.length === 1 ? "" : "s"}.
+        </div>
       </section>
 
       {pendingDelete ? (

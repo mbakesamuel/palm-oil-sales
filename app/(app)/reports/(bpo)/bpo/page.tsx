@@ -37,7 +37,7 @@ export default async function BpoReportPage() {
     prismaRetry(() =>
       prisma.saleLine.findMany({
         where: {
-          product: { form: "BOTTLED" },
+          product: { productCat: { isBottled: true } },
           sale: {
             status: ValidationStatus.VALIDATED,
             ...(scoped && assignedSalesPointId != null ? { salesPointId: assignedSalesPointId } : {}),
