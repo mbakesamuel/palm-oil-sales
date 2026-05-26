@@ -5,8 +5,7 @@ import { canValidateBpoDocuments } from "@/lib/auth-roles";
 import { getServerSession } from "@/lib/auth-server";
 import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
 import { allocateInvoiceNo } from "@/lib/invoice";
-import { applyBpoStockDeduction, dQty, ensureBotaSalesPointId, money2, qty3 } from "@/lib/bpo";
-import { StockInsufficientError } from "@/lib/stock-ledger";
+import { dQty, ensureBotaSalesPointId, money2, qty3 } from "@/lib/bpo";
 import {
   assertPostingPeriod,
   assertTransactionDateInWorkingMonth,
@@ -20,13 +19,14 @@ import { resolveBottledUnitPriceExTax } from "@/lib/pricing/resolve";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
 import { taxRegimeWhereForCommercialLine } from "@/lib/service-scope";
+import { isInsufficientStockError } from "@/lib/stock/errors";
+import { applyMovement } from "@/lib/stock/post";
 import {
   BpoEmployeeCollectedProduct,
-  StockMovementStatus,
-  StockMovementType,
   CustomerType,
   PaymentMethod,
   Prisma,
+  StockMovementKind,
   UserRole,
   ValidationStatus,
 } from "@prisma/client";
@@ -87,15 +87,6 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
   return { session, actor };
 }
 
-async function nextVoucherNo(prisma: ReturnType<typeof getPrismaClient>) {
-  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const prefix = `BPO-OUT-${date}`;
-  const count = await prisma.stockMovement.count({
-    where: { voucherNo: { startsWith: prefix } },
-  });
-  return `${prefix}-${String(count + 1).padStart(4, "0")}`;
-}
-
 function parseLines(raw: string) {
   const parsed = JSON.parse(raw || "[]") as LineInput[];
   if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Add at least one line.");
@@ -109,17 +100,9 @@ function parseLines(raw: string) {
   });
 }
 
-function parseDate(raw: string): Date {
-  const s = String(raw ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00.000Z`);
-  return new Date();
-}
-
 function revalidateBpo() {
-  revalidatePath("/stock/bpo-outbound");
   revalidatePath("/bpo-sales");
   revalidatePath("/reports/bpo");
-  revalidatePath("/reports/bpo-stock-cross");
   revalidatePath("/reports/sales");
   revalidatePath("/pos");
 }
@@ -167,82 +150,6 @@ function saleDateFromForm(formData: FormData) {
   return noonUtcFromIsoDate(iso);
 }
 
-export async function createBpoOutboundMovement(formData: FormData): Promise<BpoOutboundResult> {
-  const prisma = getPrismaClient();
-  try {
-    await assertPermissionKey("route:/stock/bpo-outbound");
-    const { actor, session } = await requireActor(prisma);
-    if (!canValidateBpoDocuments(session.role as UserRole)) {
-      return { ok: false, error: "Only authorized supervisors/managers can post BPO outbound movements." };
-    }
-    const botaId = await ensureBotaSalesPointId(prisma);
-    const accessErr = salesPointErrorForResource(actor, botaId);
-    if (accessErr) return { ok: false, error: accessErr };
-    const lines = parseLines(String(formData.get("lines") ?? "[]"));
-    const productRows = await prisma.product.findMany({
-      where: { productId: { in: lines.map((l) => l.productId) }, form: "BOTTLED" },
-      select: { productId: true, productName: true },
-    });
-    const productById = new Map(productRows.map((p) => [p.productId, p]));
-    if (productRows.length !== new Set(lines.map((l) => l.productId)).size) {
-      return { ok: false, error: "One or more lines are not bottled products." };
-    }
-    const reason = String(formData.get("reason") ?? "").trim() || "Gift";
-    const note = String(formData.get("note") ?? "").trim() || null;
-    const voucherNo = await nextVoucherNo(prisma);
-    await prismaRetry(() =>
-      prisma.$transaction(
-        async (tx) => {
-          await applyBpoStockDeduction(
-            tx,
-            botaId,
-            lines.map((l) => {
-              const p = productById.get(l.productId)!;
-              return {
-                productId: l.productId,
-                qtyUnits: l.qtyUnits,
-                label: p.productName,
-              };
-            }),
-          );
-          await tx.stockMovement.create({
-            data: {
-              movementType:
-                reason.toLowerCase() === "gift"
-                  ? StockMovementType.ISSUE_GIFT
-                  : StockMovementType.ISSUE_OTHER,
-              status: StockMovementStatus.VALIDATED,
-              voucherNo,
-              sourceSalesPointId: botaId,
-              movementDate: parseDate(String(formData.get("movementDate") ?? "")),
-              reason,
-              note,
-              createdByUserId: actor.id,
-              receiverValidatedByUserId: actor.id,
-              receiverValidatedAt: new Date(),
-              postedAt: new Date(),
-              lines: {
-                create: lines.map((l) => ({
-                  productId: l.productId,
-                  voucherQty: l.qtyUnits,
-                  actualQty: l.qtyUnits,
-                  postedQty: l.qtyUnits,
-                })),
-              },
-            },
-          });
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      ),
-    );
-    revalidateBpo();
-    return { ok: true };
-  } catch (e) {
-    if (e instanceof StockInsufficientError) return { ok: false, error: e.message };
-    return { ok: false, error: e instanceof Error ? e.message : "Could not post outbound movement." };
-  }
-}
-
 export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutboundResult> {
   const prisma = getPrismaClient();
   try {
@@ -285,7 +192,6 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
 
     const lines = parseLines(String(formData.get("lines") ?? "[]"));
     const preparedLines: PreparedBpoSaleLine[] = [];
-    // BPO variant schedule amounts are tax-inclusive (see setup copy); do not add customer taxes again.
     let net = new Prisma.Decimal(0);
     for (const line of lines) {
       const priced = await resolveBottledUnitPriceExTax(prisma, line.productId, soldAt);
@@ -378,30 +284,8 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
                 },
               },
             },
-            include: {
-              lines: {
-                include: {
-                  product: { select: { productName: true } },
-                },
-              },
-            },
+            select: { id: true, invoiceNo: true },
           });
-
-          await applyBpoStockDeduction(
-            tx,
-            botaId,
-            sale.lines.map((line) => {
-              if (!line.qtyUnits) {
-                throw new Error("Bottled sale line is missing unit quantity.");
-              }
-              return {
-                saleLineId: line.id,
-                productId: line.productId,
-                qtyUnits: line.qtyUnits,
-                label: line.product.productName,
-              };
-            }),
-          );
 
           if (paymentMode === "CREDIT") {
             const employee = await tx.employee.upsert({
@@ -430,6 +314,19 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
             });
           }
 
+          for (const line of preparedLines) {
+            await applyMovement(tx, {
+              salesPointId: botaId,
+              productId: line.productId,
+              qty: line.qtyUnits,
+              kind: StockMovementKind.SALE,
+              occurredAt: soldAt,
+              userId: actor.id,
+              sourceKind: "SALE",
+              sourceId: sale.id,
+            });
+          }
+
           return { id: sale.id, invoiceNo: sale.invoiceNo };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -438,9 +335,12 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
 
     revalidateBpo();
     revalidatePath(`/sales/${created.id}`);
+    revalidatePath("/stock");
     return { ok: true, id: created.id, invoiceNo: created.invoiceNo };
   } catch (e) {
-    if (e instanceof StockInsufficientError) return { ok: false, error: e.message };
+    if (isInsufficientStockError(e)) {
+      return { ok: false, error: e.message };
+    }
     return { ok: false, error: e instanceof Error ? e.message : "Could not post BPO sale." };
   }
 }

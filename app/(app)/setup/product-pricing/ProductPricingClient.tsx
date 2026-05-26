@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PrintButton } from "@/components/PrintButton";
 import { ReportHeader } from "@/components/ReportHeader";
-import { MAIN_PRODUCT_CATEGORY_ID } from "@/lib/pricing/constants";
 import { CustomerType } from "@/lib/domain";
 
 type ProductOpt = {
   productId: number;
   productName: string;
   productCatId: number;
+  isMainCategory: boolean;
 };
 
 type ScheduleRow = {
@@ -20,6 +20,7 @@ type ScheduleRow = {
   productId: number;
   productName: string;
   productCatId: number;
+  isMainCategory: boolean;
   customerType: string | null;
   effectiveFromIso: string;
   unitPriceExTax: string;
@@ -99,8 +100,10 @@ export function ProductPricingClient(props: {
     label: string;
   } | null>(null);
 
-  const selectedCatId = products.find((p) => String(p.productId) === productId)?.productCatId;
-  const isMainProduct = selectedCatId === MAIN_PRODUCT_CATEGORY_ID;
+  const selectedProduct = products.find(
+    (p) => String(p.productId) === productId,
+  );
+  const isMainProduct = selectedProduct?.isMainCategory === true;
 
   function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
@@ -176,16 +179,17 @@ export function ProductPricingClient(props: {
         <div className="space-y-1 print:hidden">
           <h1 className="text-2xl font-semibold">Product pricing</h1>
           <p className="text-sm opacity-75">
-            Ex-tax unit prices by effective date.{" "}
-            <span className="font-medium">Main</span> category products (category id{" "}
-            {MAIN_PRODUCT_CATEGORY_ID}) are priced per customer type; other categories use one
-            direct price per product.
+            Ex-tax unit prices by effective date. Products in the{" "}
+            <span className="font-medium">Main</span> category are priced per
+            customer type; other categories use one direct price per product.
           </p>
         </div>
       ) : (
         <p className="text-sm opacity-75 print:hidden">
-          <span className="font-medium">Main</span> category (id {MAIN_PRODUCT_CATEGORY_ID}) uses
-          customer-type segments; other categories use one price per product.           Bottled SKUs use a single direct price per product (no customer-type column).
+          The <span className="font-medium">Main</span> category uses
+          customer-type segments; other categories use one price per product.
+          Bottled SKUs use a single direct price per product (no customer-type
+          column).
         </p>
       )}
       <p className="text-sm opacity-75 print:hidden">
@@ -273,10 +277,10 @@ export function ProductPricingClient(props: {
                     value={productId}
                     onChange={(e) => {
                       setProductId(e.target.value);
-                      const catId = products.find(
+                      const picked = products.find(
                         (p) => String(p.productId) === e.target.value,
-                      )?.productCatId;
-                      if (catId !== MAIN_PRODUCT_CATEGORY_ID) setCustomerType("");
+                      );
+                      if (!picked?.isMainCategory) setCustomerType("");
                     }}
                     className={selectClass}
                     required

@@ -1,7 +1,6 @@
 "use server";
 
 import { assertActorIsAdmin } from "@/lib/access-control";
-import { MAIN_PRODUCT_CATEGORY_ID } from "@/lib/pricing/constants";
 import { getPrismaClient } from "@/lib/prisma";
 import { CustomerType, Prisma } from "@prisma/client";
 import { revalidatePricingPaths } from "@/lib/pricing/revalidate";
@@ -49,11 +48,15 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
 
   const product = await prisma.product.findUnique({
     where: { productId },
-    select: { productCatId: true, productName: true, form: true },
+    select: {
+      productName: true,
+      form: true,
+      productCat: { select: { isMain: true } },
+    },
   });
   if (!product) throw new Error("Product not found.");
 
-  const isMain = product.productCatId === MAIN_PRODUCT_CATEGORY_ID;
+  const isMain = product.productCat?.isMain === true;
   const isBottled = product.form === "BOTTLED";
   let customerType: CustomerType | null = null;
   if (isBottled) {

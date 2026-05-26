@@ -10,16 +10,8 @@ export async function createSalesPoint(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
 
-  const sp = await prisma.salesPoint.create({ data: { name }, select: { id: true } });
-  await prisma.storageLocation.createMany({
-    data: [
-      { salesPointId: sp.id, name: "Production tank 1" },
-      { salesPointId: sp.id, name: "Production tank 2" },
-    ],
-  });
+  await prisma.salesPoint.create({ data: { name } });
   revalidatePath("/sales-points");
-  revalidatePath("/storage-locations");
-  revalidatePath("/stock/receive");
 }
 
 export async function updateSalesPoint(formData: FormData) {
@@ -54,9 +46,4 @@ export async function deleteSalesPoint(formData: FormData) {
 
   await prisma.salesPoint.delete({ where: { id } });
   revalidatePath("/sales-points");
-  revalidatePath("/storage-locations");
-  revalidatePath("/stock/receive");
-  revalidatePath("/reports/stock-on-hand");
-  revalidatePath("/reports/stock-vs-commitments");
 }
-

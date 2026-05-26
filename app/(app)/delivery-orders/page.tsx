@@ -10,8 +10,10 @@ import {
 import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
 import {
   deleteDeliveryOrder,
+  listPendingDeliveryOrders,
   loadDeliveryOrderByNo,
   previewDeliveryOrderTaxes,
+  previewStockOnHandForDeliveryOrder,
   saveDeliveryOrderDetails,
   saveDeliveryOrderHeader,
   saveDeliveryOrderPayments,
@@ -83,6 +85,8 @@ export default async function DeliveryOrdersPage() {
       deleteDeliveryOrder={deleteDeliveryOrder}
       validateDeliveryOrder={validateDeliveryOrder}
       previewProductUnitPriceAction={previewProductUnitPrice}
+      previewStockOnHandAction={previewStockOnHandForDeliveryOrder}
+      listPendingDeliveryOrdersAction={listPendingDeliveryOrders}
       canValidateDeliveryOrder={canValidateDeliveryOrder}
     />
   );

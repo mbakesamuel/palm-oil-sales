@@ -17,7 +17,14 @@ export default async function ProductPricingPage() {
       prisma.productUnitPriceSchedule.findMany({
         orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
         include: {
-          product: { select: { productName: true, productCatId: true, form: true } },
+          product: {
+            select: {
+              productName: true,
+              productCatId: true,
+              form: true,
+              productCat: { select: { isMain: true } },
+            },
+          },
         },
       }),
     ),
@@ -25,7 +32,12 @@ export default async function ProductPricingPage() {
       prisma.product.findMany({
         where: { form: { not: "SECONDARY" } },
         orderBy: { productName: "asc" },
-        select: { productId: true, productName: true, productCatId: true },
+        select: {
+          productId: true,
+          productName: true,
+          productCatId: true,
+          productCat: { select: { isMain: true } },
+        },
       }),
     ),
     getOrInitCompanySettings(),
@@ -36,9 +48,17 @@ export default async function ProductPricingPage() {
     productId: r.productId,
     productName: r.product.productName,
     productCatId: r.product.productCatId,
+    isMainCategory: r.product.productCat?.isMain === true,
     customerType: r.customerType,
     effectiveFromIso: r.effectiveFrom.toISOString().slice(0, 10),
     unitPriceExTax: r.unitPriceExTax.toString(),
+  }));
+
+  const productOpts = products.map((p) => ({
+    productId: p.productId,
+    productName: p.productName,
+    productCatId: p.productCatId,
+    isMainCategory: p.productCat?.isMain === true,
   }));
 
   return (
@@ -47,7 +67,7 @@ export default async function ProductPricingPage() {
         companyName={settings.companyName}
         department={settings.department ?? null}
         logoUrl={settings.logoUrl}
-        products={products}
+        products={productOpts}
         schedules={scheduleModels}
         saveScheduleAction={saveProductUnitPriceSchedule}
         deleteScheduleAction={deleteProductUnitPriceSchedule}

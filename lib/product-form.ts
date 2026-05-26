@@ -5,17 +5,17 @@ export const PRODUCT_FORM_OPTIONS: { value: ProductForm; label: string; hint: st
   {
     value: "LOOSE",
     label: "Loose (bulk kg)",
-    hint: "Tank/storage receipts, POS sales, kg stock.",
+    hint: "POS sales and delivery orders (kg).",
   },
   {
     value: "BOTTLED",
     label: "Bottled (units)",
-    hint: "Variants, hub transfers, BPO sales.",
+    hint: "Variants and BPO sales (units).",
   },
   {
     value: "SECONDARY",
     label: "Secondary",
-    hint: "Catalog only — no stock tracking.",
+    hint: "Catalog only.",
   },
 ];
 
@@ -54,18 +54,10 @@ export function isBottledForm(form: ProductForm): boolean {
   return form === "BOTTLED";
 }
 
-export function tracksStock(form: ProductForm): boolean {
-  return form === "LOOSE" || form === "BOTTLED";
-}
-
 export function productWhereBottled(): Prisma.ProductWhereInput {
   return { form: "BOTTLED" };
 }
 
 export function productWhereNotBottled(): Prisma.ProductWhereInput {
   return { form: { not: "BOTTLED" } };
-}
-
-export function productFormStockWhere(form: ProductForm): Prisma.ProductWhereInput {
-  return { form };
 }

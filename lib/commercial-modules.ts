@@ -13,11 +13,11 @@ export const COMMERCIAL_MODULE_KEYS = [
   "sales_points",
   "factories",
   "palm_operations",
-  "palm_stock",
   "palm_reports",
   "bpo",
   "rubber_operations",
   "rubber_reports",
+  "stock",
 ] as const;
 
 export type CommercialModuleKey = (typeof COMMERCIAL_MODULE_KEYS)[number];
@@ -31,11 +31,11 @@ export const COMMERCIAL_MODULE_LABELS: Record<CommercialModuleKey, string> = {
   sales_points: "Sales points",
   factories: "Factories",
   palm_operations: "Palm sales & delivery orders",
-  palm_stock: "Palm stock receive",
   palm_reports: "Palm reports",
-  bpo: "BPO sales & stock",
+  bpo: "Bottled Palm Oil sales",
   rubber_operations: "Rubber operations",
   rubber_reports: "Rubber reports",
+  stock: "Stock management",
 };
 
 export function defaultModulesForSiteKind(
@@ -53,9 +53,9 @@ export const PALM_OIL_MODULE_KEYS: CommercialModuleKey[] = [
   "catalog",
   "sales_points",
   "palm_operations",
-  "palm_stock",
   "palm_reports",
   "bpo",
+  "stock",
 ];
 
 /** Default modules for rubber / factory lines. */
@@ -68,6 +68,7 @@ export const RUBBER_MODULE_KEYS: CommercialModuleKey[] = [
   "factories",
   "rubber_operations",
   "rubber_reports",
+  "stock",
 ];
 
 const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> = {
@@ -85,7 +86,6 @@ const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> =
     "route:/tax-types",
     "route:/product-categories",
     "route:/products",
-    "route:/storage-locations",
   ],
   customers: ["route:/customers"],
   financial: ["route:/financial-years"],
@@ -97,12 +97,6 @@ const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> =
     "route:/consignment-notes",
     "route:/pos",
   ],
-  palm_stock: [
-    "route:/stock",
-    "route:/stock/receipts",
-    "route:/stock/movements",
-    "route:/stock/receive",
-  ],
   palm_reports: [
     "route:/reports",
     "route:/reports/sales",
@@ -111,28 +105,19 @@ const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> =
     "route:/reports/delivery-order-monitor",
     "route:/reports/customer-delivery-monitor",
     "route:/reports/do-commitment-crosstab",
-    "route:/reports/stock-on-hand",
-    "route:/reports/stock-vs-commitments",
     "route:/reports/sales-budget-monthly-crosstab",
     "route:/reports/sales-budget-weekly-crosstab",
     "route:/reports/pricing",
   ],
   bpo: [
     "route:/bpo-sales",
-    "route:/stock",
-    "route:/stock/receipts",
-    "route:/stock/movements",
-    "route:/stock/issues",
-    "route:/stock/bpo-receive",
-    "route:/stock/bpo-consignments",
-    "route:/stock/bpo-outbound",
     "route:/reports/bpo-pricing",
     "route:/reports/bpo",
     "route:/reports/bpo-sales-crosstab",
-    "route:/reports/bpo-stock-cross",
   ],
   rubber_operations: ["route:/rubber"],
   rubber_reports: ["route:/reports", "route:/reports/sales"],
+  stock: ["route:/stock"],
 };
 
 const ROUTE_TO_MODULE = new Map<string, CommercialModuleKey>();

@@ -40,15 +40,18 @@ import {
   commercialServiceErrorForResource,
   resolveServiceScope,
 } from "@/lib/service-scope";
-import {
-  applySaleStockDeduction,
-  releaseSaleStockAllocations,
-  saleStockIsFullyReserved,
-  StockInsufficientError,
-} from "@/lib/stock-ledger";
 import type { SalePrintModel } from "@/components/SalePrint";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
-import { PaymentMethod, Prisma, ValidationStatus, UserRole } from "@prisma/client";
+import { isInsufficientStockError } from "@/lib/stock/errors";
+import { applyMovement } from "@/lib/stock/post";
+import {
+  PaymentMethod,
+  Prisma,
+  ProductForm,
+  StockMovementKind,
+  ValidationStatus,
+  UserRole,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 type PosLineInput = {
@@ -472,7 +475,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   if (effectiveSalesPointId == null) {
     return {
       ok: false,
-      error: "Sales point is required to raise a loose palm oil invoice (stock is tracked per collection point).",
+      error: "Sales point is required to raise a sales invoice.",
     };
   }
 
@@ -520,53 +523,19 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
               })),
             },
           },
-          include: {
-            lines: {
-              include: {
-                product: {
-                  select: {
-                    productName: true,
-                    form: true,
-                  },
-                },
-              },
-            },
-          },
+          select: { id: true, invoiceNo: true, soldAt: true },
         });
-
-        const bulkLines = sale.lines
-          .filter((l) => l.product.form === "LOOSE")
-          .map((l) => ({
-            id: l.id,
-            productId: l.productId,
-            qtyKg: l.qtyKg,
-            product: { productName: l.product.productName },
-          }));
-        const unitLines = sale.lines
-          .filter((l) => l.product.form === "BOTTLED" && l.qtyUnits)
-          .map((l) => ({
-            id: l.id,
-            productId: l.productId,
-            qtyUnits: l.qtyUnits!,
-            product: { productName: l.product.productName },
-          }));
-        await applySaleStockDeduction(tx, effectiveSalesPointId, bulkLines, unitLines);
 
         return { id: sale.id, invoiceNo: sale.invoiceNo, soldAt: sale.soldAt };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   } catch (e) {
-    if (e instanceof StockInsufficientError) {
-      return { ok: false, error: e.message };
-    }
-    throw e;
+    return { ok: false, error: e instanceof Error ? e.message : "Could not create sale." };
   }
 
   revalidatePath("/pos");
   revalidatePath("/dashboard");
-  revalidatePath("/reports/stock-on-hand");
-  revalidatePath("/reports/stock-vs-commitments");
 
   return { ok: true, id: created.id, invoiceNo: created.invoiceNo, soldAtIso: created.soldAt.toISOString() };
 }
@@ -821,21 +790,13 @@ export async function deleteSale(formData: FormData): Promise<SaleMutationResult
   }
 
   try {
-    await prisma.$transaction(
-      async (tx) => {
-        await releaseSaleStockAllocations(tx, id);
-        await tx.sale.delete({ where: { id } });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    await prisma.sale.delete({ where: { id } });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not delete sale." };
   }
 
   revalidatePath("/pos");
   revalidatePath("/dashboard");
-  revalidatePath("/reports/stock-on-hand");
-  revalidatePath("/reports/stock-vs-commitments");
   return { ok: true };
 }
 
@@ -865,7 +826,20 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
 
   const existing = await prisma.sale.findUnique({
     where: { id },
-    select: { status: true, salesPointId: true, commercialServiceId: true },
+    select: {
+      status: true,
+      salesPointId: true,
+      commercialServiceId: true,
+      soldAt: true,
+      lines: {
+        select: {
+          productId: true,
+          qtyKg: true,
+          qtyUnits: true,
+          product: { select: { form: true } },
+        },
+      },
+    },
   });
   if (!existing) return { ok: false, error: "Sale not found." };
   const accessErr = salesPointErrorForResource(actor, existing.salesPointId ?? null);
@@ -873,45 +847,35 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
   if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
+  if (existing.salesPointId == null) {
+    return {
+      ok: false,
+      error: "This invoice has no sales point; cannot deduct stock on validation.",
+    };
+  }
+  const stockSalesPointId: number = existing.salesPointId;
 
   try {
     await prisma.$transaction(
       async (tx) => {
-        const sale = await tx.sale.findUnique({
-          where: { id },
-          include: {
-            lines: {
-              include: {
-                product: {
-                  select: {
-                    productName: true,
-                    form: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-        if (!sale) throw new Error("Sale not found.");
-        if (sale.status === ValidationStatus.VALIDATED) return;
-        if (sale.salesPointId == null) {
-          throw new StockInsufficientError(
-            "Cannot validate: this invoice has no sales point. Stock is tracked per collection point.",
-          );
+        for (const line of existing.lines) {
+          const qty =
+            line.product.form === ProductForm.LOOSE
+              ? line.qtyKg
+              : (line.qtyUnits ?? line.qtyKg);
+          if (new Prisma.Decimal(qty).lte(0)) continue;
+          await applyMovement(tx, {
+            salesPointId: stockSalesPointId,
+            productId: line.productId,
+            qty,
+            kind: StockMovementKind.SALE,
+            occurredAt: existing.soldAt,
+            userId: session.userId,
+            sourceKind: "SALE",
+            sourceId: id,
+          });
         }
-        const bulkLines = sale.lines.filter((l) => l.product.form === "LOOSE");
-        const unitLines = sale.lines
-          .filter((l) => l.product.form === "BOTTLED" && l.qtyUnits)
-          .map((l) => ({
-            id: l.id,
-            productId: l.productId,
-            qtyUnits: l.qtyUnits!,
-            product: { productName: l.product.productName },
-          }));
-        const reserved = await saleStockIsFullyReserved(tx, bulkLines, unitLines);
-        if (!reserved) {
-          await applySaleStockDeduction(tx, sale.salesPointId, bulkLines, unitLines);
-        }
+
         await tx.sale.update({
           where: { id },
           data: {
@@ -924,17 +888,16 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   } catch (e) {
-    if (e instanceof StockInsufficientError) {
+    if (isInsufficientStockError(e)) {
       return { ok: false, error: e.message };
     }
-    throw e;
+    return { ok: false, error: e instanceof Error ? e.message : "Could not validate sale." };
   }
 
   revalidatePath("/pos");
   revalidatePath(`/sales/${id}`);
   revalidatePath("/dashboard");
-  revalidatePath("/reports/stock-on-hand");
-  revalidatePath("/reports/stock-vs-commitments");
+  revalidatePath("/stock");
   return { ok: true };
 }
 

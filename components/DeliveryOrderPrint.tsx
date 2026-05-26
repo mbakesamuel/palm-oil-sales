@@ -62,19 +62,10 @@ export type DeliveryOrderPrintModel = {
 export function DeliveryOrderPrint(props: {
   companyName: string;
   department: string | null;
-  companyPhone: string | null;
-  companyAddress: string | null;
   logoSrc?: string | null;
   order: DeliveryOrderPrintModel;
 }) {
-  const {
-    companyName,
-    department,
-    companyPhone,
-    companyAddress,
-    logoSrc,
-    order,
-  } = props;
+  const { companyName, department, logoSrc, order } = props;
 
   return (
     <article className="delivery-order-print text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
@@ -85,12 +76,6 @@ export function DeliveryOrderPrint(props: {
           logoSrc={logoSrc}
           title="Delivery order"
         />
-        {companyAddress || companyPhone ? (
-          <div className="mt-2 text-center text-sm opacity-90 space-y-0.5">
-            {companyAddress ? <p>{companyAddress}</p> : null}
-            {companyPhone ? <p>Tel: {companyPhone}</p> : null}
-          </div>
-        ) : null}
       </header>
 
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">

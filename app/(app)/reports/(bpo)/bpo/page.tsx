@@ -6,12 +6,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { PrintButton } from "@/components/PrintButton";
 import { ReportSignatory } from "@/components/ReportSignatory";
-import {
-  StockMovementStatus,
-  StockMovementType,
-  Prisma,
-  ValidationStatus,
-} from "@prisma/client";
+import { Prisma, ValidationStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,45 +32,8 @@ export default async function BpoReportPage() {
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const prisma = getPrismaClient();
 
-  const [settings, stockRows, movements, saleLines] = await Promise.all([
+  const [settings, saleLines] = await Promise.all([
     getOrInitCompanySettings(),
-    prismaRetry(() =>
-      prisma.stockLot.findMany({
-        where: scoped && assignedSalesPointId != null ? { salesPointId: assignedSalesPointId } : {},
-        select: {
-          salesPoint: { select: { name: true } },
-          productId: true,
-          qtyRemaining: true,
-          product: { select: { productName: true } },
-        },
-      }),
-    ),
-    prismaRetry(() =>
-      prisma.stockMovement.findMany({
-        where:
-          scoped && assignedSalesPointId != null
-            ? {
-                OR: [
-                  { sourceSalesPointId: assignedSalesPointId },
-                  { destinationSalesPointId: assignedSalesPointId },
-                ],
-              }
-            : {},
-        orderBy: { createdAt: "desc" },
-        take: 100,
-        include: {
-          sourceSalesPoint: { select: { name: true } },
-          destinationSalesPoint: { select: { name: true } },
-          senderValidatedBy: { select: { name: true } },
-          receiverValidatedBy: { select: { name: true } },
-          lines: {
-            include: {
-              product: { select: { productName: true } },
-            },
-          },
-        },
-      }),
-    ),
     prismaRetry(() =>
       prisma.saleLine.findMany({
         where: {
@@ -102,18 +60,6 @@ export default async function BpoReportPage() {
     ),
   ]);
 
-  const stockByKey = new Map<string, { salesPoint: string; product: string; qty: Prisma.Decimal }>();
-  for (const row of stockRows) {
-    const product = row.product.productName;
-    const key = `${row.salesPoint.name}:${product}`;
-    const existing = stockByKey.get(key);
-    if (existing) existing.qty = existing.qty.add(row.qtyRemaining);
-    else stockByKey.set(key, { salesPoint: row.salesPoint.name, product, qty: row.qtyRemaining });
-  }
-  const stock = [...stockByKey.values()].sort((a, b) =>
-    `${a.salesPoint} ${a.product}`.localeCompare(`${b.salesPoint} ${b.product}`),
-  );
-
   const salesTotals = saleLines.reduce(
     (acc, l) => ({
       qty: acc.qty.add(l.qtyUnits ?? z),
@@ -139,80 +85,6 @@ export default async function BpoReportPage() {
           <PrintButton label="Print report" />
         </div>
       </div>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Stock on hand</h2>
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-3 py-2">Sales point</th>
-                <th className="text-left px-3 py-2">Product</th>
-                <th className="text-right px-3 py-2">Qty units</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stock.map((r) => (
-                <tr key={`${r.salesPoint}-${r.product}`} className="border-b border-border">
-                  <td className="px-3 py-2">{r.salesPoint}</td>
-                  <td className="px-3 py-2">{r.product}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmt(r.qty)}</td>
-                </tr>
-              ))}
-              {stock.length === 0 ? (
-                <tr><td className="px-3 py-3 opacity-70" colSpan={3}>No BPO stock on hand.</td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Consignment pipeline and movements</h2>
-        <div className="rounded-lg border border-border overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-3 py-2">Voucher</th>
-                <th className="text-left px-3 py-2">Type</th>
-                <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2">From</th>
-                <th className="text-left px-3 py-2">To</th>
-                <th className="text-left px-3 py-2">Qty detail</th>
-                <th className="text-left px-3 py-2">Validators</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movements.map((m) => (
-                <tr key={m.id} className="border-b border-border align-top">
-                  <td className="px-3 py-2 font-mono text-xs">{m.voucherNo}</td>
-                  <td className="px-3 py-2">{m.movementType === StockMovementType.TRANSFER ? "Consignment" : m.reason ?? m.movementType}</td>
-                  <td className="px-3 py-2">{m.status}</td>
-                  <td className="px-3 py-2">{m.sourceSalesPoint?.name ?? "—"}</td>
-                  <td className="px-3 py-2">{m.destinationSalesPoint?.name ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    {m.lines.map((l) => (
-                      <div key={l.id}>
-                        {l.product?.productName ?? "—"}
-                        : voucher {fmt(l.voucherQty)}
-                        {m.status === StockMovementStatus.VALIDATED ? `, actual ${fmt(l.actualQty ?? z)}` : ""}
-                      </div>
-                    ))}
-                    {m.discrepancyNote ? <div className="text-amber-800 dark:text-amber-300">Discrepancy: {m.discrepancyNote}</div> : null}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>Sender: {m.senderValidatedBy?.name ?? "—"}</div>
-                    <div>Receiver: {m.receiverValidatedBy?.name ?? "—"}</div>
-                  </td>
-                </tr>
-              ))}
-              {movements.length === 0 ? (
-                <tr><td className="px-3 py-3 opacity-70" colSpan={7}>No BPO movements yet.</td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Validated BPO sales</h2>

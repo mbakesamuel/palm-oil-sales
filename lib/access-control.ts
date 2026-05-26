@@ -27,16 +27,39 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/pos"] = true;
   base["route:/bpo-sales"] = true;
   base["route:/stock"] = true;
-  base["route:/stock/receipts"] = true;
-  base["route:/stock/movements"] = true;
-  base["route:/stock/issues"] = true;
-  base["route:/stock/receive"] = true;
-  base["route:/stock/bpo-receive"] = true;
-  base["route:/stock/bpo-consignments"] = true;
-  base["route:/stock/bpo-outbound"] = true;
-  // Legacy keys alias to unified stock module (redirects preserve old URLs).
-  // Operational: same users who receive stock need tank/location setup in the sidebar.
-  base["route:/storage-locations"] = true;
+
+  // Stock posting defaults: clerks DRAFT receipts/transfers and confirm receipts at the
+  // destination, but POSTING a receipt and DISPATCHING a transfer is the supervisor-level
+  // validation step (mirrors how sales invoices are drafted by clerks and validated by
+  // supervisors). Only the supervisor responsible for the sales point may post/dispatch
+  // for that point. Senior supervisors roam across sales points and therefore do NOT
+  // post/dispatch themselves — they would defer to the sales-point supervisor.
+  // "Clerk in charge of BPO" is treated as the supervisor of the Bota BPO sales point.
+  if (role === UserRole.CLERK) {
+    base["ui:receive-stock-transfer"] = true;
+  }
+  if (
+    role === UserRole.SUPERVISOR ||
+    role === UserRole.CLERK_IN_CHARGE_BPO
+  ) {
+    base["ui:post-stock-receipt"] = true;
+    base["ui:dispatch-stock-transfer"] = true;
+    base["ui:receive-stock-transfer"] = true;
+  }
+  if (role === UserRole.SENIOR_SUPERVISOR) {
+    // Senior supervisors still confirm receipt of inbound transfers when
+    // standing in at a destination point, but never post receipts or dispatch
+    // outbound transfers in place of the sales-point supervisor.
+    base["ui:receive-stock-transfer"] = true;
+  }
+  if (
+    role === UserRole.SUPERVISOR ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.MANAGER ||
+    role === UserRole.DIRECTOR
+  ) {
+    base["ui:post-stock-adjustment"] = true;
+  }
 
   // Vehicle consignment notes: clerks draft, supervisors validate (admin gets all keys below).
   if (role === UserRole.CLERK || role === UserRole.SUPERVISOR) {
@@ -44,10 +67,6 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   }
 
   if (role === UserRole.CLERK_IN_CHARGE_BPO) {
-    base["route:/stock"] = true;
-    base["route:/stock/bpo-receive"] = true;
-    base["route:/stock/bpo-consignments"] = true;
-    base["route:/stock/bpo-outbound"] = true;
     base["route:/bpo-sales"] = true;
     base["route:/reports"] = true;
     base["route:/reports/bpo"] = true;
@@ -65,20 +84,12 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/delivery-order-monitor"] = true;
   base["route:/reports/customer-delivery-monitor"] = true;
   base["route:/reports/do-commitment-crosstab"] = true;
-  base["route:/reports/stock-on-hand"] = true;
-  base["route:/reports/stock-vs-commitments"] = true;
   base["route:/reports/sales-budget-monthly-crosstab"] = true;
   base["route:/reports/sales-budget-weekly-crosstab"] = true;
   base["route:/reports/pricing"] = true;
   base["route:/reports/bpo-pricing"] = true;
   base["route:/reports/bpo"] = true;
   base["route:/reports/bpo-sales-crosstab"] =
-    role === UserRole.ADMIN ||
-    role === UserRole.DIRECTOR ||
-    role === UserRole.MANAGER ||
-    role === UserRole.SENIOR_SUPERVISOR ||
-    role === UserRole.CLERK_IN_CHARGE_BPO;
-  base["route:/reports/bpo-stock-cross"] =
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
     role === UserRole.MANAGER ||
@@ -116,15 +127,36 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
 
   const c = code.toLowerCase();
 
+  // Codes that should be treated as supervisor-equivalent for stock posting/dispatch
+  // (i.e. allowed to validate clerk drafts). Sales clerks (`clerk`, `factory_clerk`)
+  // intentionally do NOT match. Roles that include "senior" are also excluded:
+  // senior supervisors roam across multiple sales points and defer post/dispatch to
+  // the supervisor of each sales point itself.
+  const isSupervisorEquivalent =
+    !c.includes("senior") &&
+    (c.includes("supervisor") ||
+      c.includes("manager") ||
+      c.includes("director") ||
+      c.includes("in_charge") ||
+      c === "bpo_clerk");
+
   if (c.includes("factory")) {
     base["route:/factories"] = true;
     base["route:/rubber"] = true;
+    base["route:/stock"] = true;
+    base["ui:receive-stock-transfer"] = true;
+    if (isSupervisorEquivalent) {
+      base["ui:post-stock-receipt"] = true;
+      base["ui:dispatch-stock-transfer"] = true;
+    }
     base["route:/reports"] = true;
     base["route:/reports/sales"] = true;
     if (c.includes("manager")) {
       base["ui:validate-delivery-orders"] = true;
+      base["ui:post-stock-adjustment"] = true;
     } else if (c.includes("supervisor")) {
       base["ui:validate-documents"] = true;
+      base["ui:post-stock-adjustment"] = true;
     }
     return base;
   }
@@ -133,17 +165,20 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
   base["route:/delivery-orders"] = true;
   base["route:/pos"] = true;
   base["route:/stock"] = true;
-  base["route:/stock/receive"] = true;
-  base["route:/storage-locations"] = true;
+  base["ui:receive-stock-transfer"] = true;
+  if (isSupervisorEquivalent) {
+    base["ui:post-stock-receipt"] = true;
+    base["ui:dispatch-stock-transfer"] = true;
+  }
   base["route:/reports"] = true;
   base["route:/reports/sales"] = true;
   if (c.includes("bpo")) {
     base["route:/bpo-sales"] = true;
-    base["route:/stock/bpo-receive"] = true;
     base["route:/reports/bpo"] = true;
   }
   if (c.includes("supervisor") || c.includes("manager")) {
     base["route:/consignment-notes"] = true;
+    base["ui:post-stock-adjustment"] = true;
   }
   if (c.includes("senior") && c.includes("supervisor")) {
     // senior duties only — no sales invoice validation

@@ -3,7 +3,6 @@ import type { PermissionKey } from "@/lib/access-control-keys";
 export type ReportGroupId =
   | "sales"
   | "delivery"
-  | "stock"
   | "budget"
   | "pricing"
   | "bpo";
@@ -20,7 +19,6 @@ export type ReportDefinition = {
 export const REPORT_GROUP_ORDER: { id: ReportGroupId; label: string }[] = [
   { id: "sales", label: "Sales" },
   { id: "delivery", label: "Delivery orders" },
-  { id: "stock", label: "Stock" },
   { id: "budget", label: "Budget phasing" },
   { id: "pricing", label: "Pricing" },
   { id: "bpo", label: "Bottled Palm Oil" },
@@ -80,24 +78,6 @@ export const REPORTS: ReportDefinition[] = [
     permissionKey: "route:/reports/do-commitment-crosstab",
   },
   {
-    group: "stock",
-    groupLabel: "Stock",
-    href: "/reports/stock-on-hand",
-    label: "Stock on hand",
-    description:
-      "Remaining kg by storage location and product (crosstab); consolidated grade summary when applicable.",
-    permissionKey: "route:/reports/stock-on-hand",
-  },
-  {
-    group: "stock",
-    groupLabel: "Stock",
-    href: "/reports/stock-vs-commitments",
-    label: "Stock vs commitments",
-    description:
-      "By product: physical stock vs outstanding validated delivery order quantity (ordered minus invoiced) per collection point, with balance.",
-    permissionKey: "route:/reports/stock-vs-commitments",
-  },
-  {
     group: "budget",
     groupLabel: "Budget phasing",
     href: "/reports/sales-budget-monthly-crosstab",
@@ -136,8 +116,7 @@ export const REPORTS: ReportDefinition[] = [
     groupLabel: "Bottled Palm Oil",
     href: "/reports/bpo",
     label: "BPO monitor",
-    description:
-      "BPO stock, two-stage consignments, Bota sales, gift/out movements, and discrepancies.",
+    description: "Validated bottled palm oil sales at Bota and other sales points.",
     permissionKey: "route:/reports/bpo",
   },
   {
@@ -147,14 +126,6 @@ export const REPORTS: ReportDefinition[] = [
     label: "BPO sales crosstab",
     description: "BPO sales by variant and sales point (crosstab).",
     permissionKey: "route:/reports/bpo-sales-crosstab",
-  },
-  {
-    group: "bpo",
-    groupLabel: "Bottled Palm Oil",
-    href: "/reports/bpo-stock-cross",
-    label: "BPO stock cross",
-    description: "BPO stock positions across sales points (cross-tab).",
-    permissionKey: "route:/reports/bpo-stock-cross",
   },
 ];
 

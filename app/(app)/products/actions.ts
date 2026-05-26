@@ -123,7 +123,6 @@ export async function deleteProduct(formData: FormData) {
     select: {
       _count: {
         select: {
-          stockLots: true,
           saleLines: true,
           deliveryOrderDetails: true,
         },
@@ -132,13 +131,10 @@ export async function deleteProduct(formData: FormData) {
   });
   if (!counts) throw new Error("Product not found.");
 
-  const n =
-    counts._count.stockLots +
-    counts._count.saleLines +
-    counts._count.deliveryOrderDetails;
+  const n = counts._count.saleLines + counts._count.deliveryOrderDetails;
   if (n > 0) {
     throw new Error(
-      "Cannot delete this product while it is used on batches, sales, or delivery orders.",
+      "Cannot delete this product while it is used on sales or delivery orders.",
     );
   }
 

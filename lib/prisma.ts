@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 /** Bump when a migration changes the DB shape so dev hot-reload drops a stale Prisma singleton. */
-const PRISMA_CLIENT_CACHE_KEY = "20260523120000_remove_product_variants";
+const PRISMA_CLIENT_CACHE_KEY = "20260525060000_add_stock_management";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -72,14 +72,6 @@ function clientHasFinancialYearPeriod(client: PrismaClient): boolean {
   );
 }
 
-function clientHasStorageLocation(client: PrismaClient): boolean {
-  return (
-    "storageLocation" in client &&
-    typeof (client as unknown as { storageLocation?: { findMany?: unknown } })
-      .storageLocation?.findMany === "function"
-  );
-}
-
 function clientHasProductSalesBudgetMonthPhaseProfile(
   client: PrismaClient,
 ): boolean {
@@ -111,23 +103,6 @@ function clientHasProductUnitPriceSchedule(client: PrismaClient): boolean {
   );
 }
 
-function clientHasStockLot(client: PrismaClient): boolean {
-  return (
-    "stockLot" in client &&
-    typeof (client as unknown as { stockLot?: { findMany?: unknown } }).stockLot
-      ?.findMany === "function"
-  );
-}
-
-function clientHasStockMovement(client: PrismaClient): boolean {
-  return (
-    "stockMovement" in client &&
-    typeof (
-      client as unknown as { stockMovement?: { findMany?: unknown } }
-    ).stockMovement?.findMany === "function"
-  );
-}
-
 /** Product.form replaced isBottledPalmOil/stockTracking — stale clients still query dropped columns. */
 function clientMatchesCurrentProductModel(): boolean {
   const product = Prisma.dmmf.datamodel.models.find((m) => m.name === "Product");
@@ -153,12 +128,9 @@ export function getPrismaClient() {
       cacheKeyMatches &&
       clientMatchesCurrentProductModel() &&
       clientHasFinancialYearPeriod(globalForPrisma.prisma) &&
-      clientHasStorageLocation(globalForPrisma.prisma) &&
       clientHasProductSalesBudgetMonthPhaseProfile(globalForPrisma.prisma) &&
       clientHasProductSalesBudget(globalForPrisma.prisma) &&
-      clientHasProductUnitPriceSchedule(globalForPrisma.prisma) &&
-      clientHasStockLot(globalForPrisma.prisma) &&
-      clientHasStockMovement(globalForPrisma.prisma)
+      clientHasProductUnitPriceSchedule(globalForPrisma.prisma)
     ) {
       return globalForPrisma.prisma;
     }
@@ -177,11 +149,6 @@ export function getPrismaClient() {
       "Prisma Client is out of date (missing FinancialYearPeriod). Run: npx prisma generate",
     );
   }
-  if (!clientHasStorageLocation(client)) {
-    throw new Error(
-      "Prisma Client is out of date (missing StorageLocation). Run: npx prisma generate",
-    );
-  }
   if (!clientHasProductSalesBudgetMonthPhaseProfile(client)) {
     throw new Error(
       "Prisma Client is out of date (missing ProductSalesBudgetMonthPhaseProfile). Run: npx prisma generate",
@@ -195,16 +162,6 @@ export function getPrismaClient() {
   if (!clientHasProductUnitPriceSchedule(client)) {
     throw new Error(
       "Prisma Client is out of date (missing ProductUnitPriceSchedule). Run: npx prisma generate",
-    );
-  }
-  if (!clientHasStockLot(client)) {
-    throw new Error(
-      "Prisma Client is out of date (missing StockLot). Run: npx prisma generate",
-    );
-  }
-  if (!clientHasStockMovement(client)) {
-    throw new Error(
-      "Prisma Client is out of date (missing StockMovement). Run: npx prisma generate",
     );
   }
   if (process.env.NODE_ENV !== "production") {

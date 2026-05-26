@@ -31,6 +31,7 @@ import { validateCustomerForCommercialPosting } from "@/lib/customer-commercial"
 import {
   commercialServiceErrorForOperations,
   commercialServiceErrorForResource,
+  deliveryOrderWhereForScope,
   resolveServiceScope,
 } from "@/lib/service-scope";
 import type { DeliveryOrderPrintModel } from "@/components/DeliveryOrderPrint";
@@ -240,11 +241,59 @@ export async function previewDeliveryOrderTaxes(
   };
 }
 
+export type StockOnHandPreviewResult =
+  | { ok: true; onHand: string }
+  | { ok: false; error: string };
+
+/**
+ * Informational on-hand lookup for the delivery-order line editor.
+ *
+ * DOs are commitment documents, so we do NOT block save/validate on stock
+ * availability — the user gets a soft notice in the UI and is expected to
+ * follow up with the supervisor (e.g. raise a stock receipt or transfer) if
+ * the committed qty would overdraw the on-hand at the destination sales
+ * point. The actual stock decrement still happens later, when the matching
+ * Sale is validated at POS via `applyMovement(StockMovementKind.SALE, …)`.
+ */
+export async function previewStockOnHandForDeliveryOrder(
+  salesPointIdRaw: number | string,
+  productIdRaw: number | string,
+): Promise<StockOnHandPreviewResult> {
+  const prisma = getPrismaClient();
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const salesPointId = Number(salesPointIdRaw);
+  const productId = Number(productIdRaw);
+  if (!Number.isFinite(salesPointId) || salesPointId <= 0) {
+    return { ok: false, error: "Sales point is required to look up on-hand." };
+  }
+  if (!Number.isFinite(productId) || productId <= 0) {
+    return { ok: false, error: "Select a product to look up on-hand." };
+  }
+
+  // Match the same sales-point scope as the rest of the DO flow (clerks can
+  // only probe their own point's stock, supervisors with broader scope can
+  // probe anywhere they're allowed to write a DO for).
+  const accessErr = salesPointErrorForResource(actor, salesPointId);
+  if (accessErr) return { ok: false, error: accessErr };
+
+  const row = await prisma.stockBalance.findUnique({
+    where: { salesPointId_productId: { salesPointId, productId } },
+    select: { qty: true },
+  });
+  return { ok: true, onHand: (row?.qty ?? new Prisma.Decimal(0)).toString() };
+}
+
 function revalidateOrderPaths(id: number) {
   revalidatePath("/delivery-orders");
   revalidatePath(`/delivery-orders/${id}`);
   revalidatePath("/dashboard");
-  revalidatePath("/reports/stock-vs-commitments");
   revalidatePath("/reports/do-commitment-crosstab");
   revalidatePath("/reports/customer-delivery-monitor");
   revalidatePath("/reports/delivery-orders");
@@ -343,6 +392,71 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
     financialMonth: order.financialMonth,
     postingCalendarYear: order.postingCalendarYear,
   };
+}
+
+export type PendingDeliveryOrderRow = {
+  deliveryOrderNo: string;
+  dateIssued: string;
+  customerName: string;
+  totalLabel: string;
+};
+
+/**
+ * Lightweight listing of PENDING delivery orders for the manager's lookup
+ * combo (typed input + popover picker). Read-only, scope-aware, and gated on
+ * the same `ui:validate-delivery-orders` permission the page uses to decide
+ * whether to render the combo at all. Anyone without that permission gets
+ * an empty list silently.
+ */
+export async function listPendingDeliveryOrders(): Promise<PendingDeliveryOrderRow[]> {
+  const prisma = getPrismaClient();
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    await assertPermissionKey("ui:validate-delivery-orders");
+    ({ session } = await requireActor(prisma));
+  } catch {
+    return [];
+  }
+
+  const scope = resolveServiceScope(session);
+  if (commercialServiceErrorForOperations(scope)) return [];
+
+  const scopeWhere = deliveryOrderWhereForScope(scope) ?? {};
+
+  const rows = await prisma.deliveryOrder.findMany({
+    where: {
+      ...scopeWhere,
+      status: ValidationStatus.PENDING,
+    },
+    orderBy: [{ dateIssued: "desc" }, { deliveryOrderNo: "desc" }],
+    take: 200,
+    select: {
+      deliveryOrderNo: true,
+      dateIssued: true,
+      customer: { select: { name: true } },
+      details: { select: { amount: true } },
+    },
+  });
+
+  return rows.map((r) => {
+    const total = r.details.reduce(
+      (acc, d) => acc.add(d.amount ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    );
+    const fmt = total.gt(0)
+      ? `${money2Print(total).toNumber().toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} XAF`
+      : "";
+    return {
+      deliveryOrderNo: r.deliveryOrderNo,
+      dateIssued: r.dateIssued.toISOString().slice(0, 10),
+      customerName: r.customer.name,
+      totalLabel: fmt,
+    };
+  });
 }
 
 export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveHeaderResult> {
@@ -921,7 +1035,7 @@ export async function loadDeliveryOrderPrintById(
   const logoSrc =
     settings.logoUrl && settings.logoUrl.trim() !== ""
       ? settings.logoUrl.trim()
-      : "/cdc-logo-svg.svg";
+      : "/logo.svg";
 
   const deptParts = [settings.department?.trim(), order.commercialServiceNameSnapshot?.trim()].filter(
     (s): s is string => Boolean(s && s.length > 0),

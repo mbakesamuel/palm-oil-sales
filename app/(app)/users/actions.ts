@@ -1,5 +1,6 @@
 "use server";
 
+import bcrypt from "bcryptjs";
 import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import {
@@ -10,6 +11,10 @@ import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+
+// Must match the cost factor used by the Credentials provider in `auth.ts` so
+// that password verification stays consistent across the codebase.
+const PASSWORD_HASH_ROUNDS = 10;
 
 function normalizeUsername(raw: string) {
   return String(raw ?? "").trim().toLowerCase();
@@ -189,9 +194,19 @@ export async function saveUser(formData: FormData) {
     if (!password) {
       await prisma.user.update({ where: { id }, data });
     } else {
+      if (password !== confirmPassword) {
+        throw new Error("Password and confirmation do not match.");
+      }
+      // Write the bcrypt hash directly (the Credentials provider in `auth.ts`
+      // compares against `passwordHash` first and falls back to `passwordPlain`
+      // only when no hash exists). Forgetting to refresh `passwordHash` here
+      // would leave the previous password active because the stale hash still
+      // wins over `passwordPlain` at sign-in. We also clear `passwordPlain` so
+      // dev-seeded plaintext can't override the new password later.
+      const passwordHash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
       await prisma.user.update({
         where: { id },
-        data: { ...data, passwordPlain: password },
+        data: { ...data, passwordHash, passwordPlain: null },
       });
     }
   } else {
@@ -201,8 +216,9 @@ export async function saveUser(formData: FormData) {
     }
     const exists = await prisma.user.findUnique({ where: { username }, select: { id: true } });
     if (exists) throw new Error("That username is already taken.");
+    const passwordHash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
     await prisma.user.create({
-      data: { ...data, passwordPlain: password },
+      data: { ...data, passwordHash, passwordPlain: null },
     });
   }
 

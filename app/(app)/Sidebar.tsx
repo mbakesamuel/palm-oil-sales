@@ -280,7 +280,7 @@ export function Sidebar(props: {
       label: "Operations",
       items: filteredOpsNav,
       collapsedHref: "/delivery-orders",
-      collapsedTitle: "Operations — delivery orders, sales, stock",
+      collapsedTitle: "Operations — delivery orders and sales",
     }),
     [filteredOpsNav],
   );

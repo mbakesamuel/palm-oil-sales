@@ -4,7 +4,6 @@ import type { CustomerType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaDateToIso } from "@/lib/posting-calendar";
-import { MAIN_PRODUCT_CATEGORY_ID } from "@/lib/pricing/constants";
 
 export type PrismaForPricing = ReturnType<typeof getPrismaClient>;
 
@@ -26,14 +25,18 @@ export async function resolveUnitPriceExTax(
 
   const product = await prisma.product.findUnique({
     where: { productId },
-    select: { productName: true, productCatId: true, form: true },
+    select: {
+      productName: true,
+      form: true,
+      productCat: { select: { isMain: true } },
+    },
   });
 
   if (!product) {
     return { ok: false, error: `Product ${productId} was not found.` };
   }
 
-  const isMainCategory = product.productCatId === MAIN_PRODUCT_CATEGORY_ID;
+  const isMainCategory = product.productCat?.isMain === true;
   const isBottled = product.form === "BOTTLED";
 
   const row = await prisma.productUnitPriceSchedule.findFirst({

@@ -31,7 +31,6 @@ const setupNav = [
   { href: "/financial-years", label: "Financial years" },
   { href: "/sales-points", label: "Sales points" },
   { href: "/factories", label: "Factories" },
-  { href: "/storage-locations", label: "Storage locations" },
   { href: "/tax-regimes", label: "Tax regimes" },
   { href: "/tax-types", label: "Tax types" },
   { href: "/product-categories", label: "Product categories" },

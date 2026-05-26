@@ -6,23 +6,34 @@ import { isBottledForm } from "@/lib/product-form";
 export const BPO_PRODUCT_LABEL = "Bottled Palm Oil";
 export const BOTA_SALES_POINT_NAME = "Bota";
 
-export {
-  StockInsufficientError as BpoStockInsufficientError,
-  applyBpoStockDeduction,
-} from "@/lib/stock-ledger";
+export async function getBotaSalesPointId(
+  prisma: {
+    salesPoint: {
+      findFirst: (args: {
+        where: { name: { equals: string; mode: "insensitive" } };
+        select: { id: true };
+      }) => Promise<{ id: number } | null>;
+    };
+  },
+): Promise<number | null> {
+  const hub = await prisma.salesPoint.findFirst({
+    where: { name: { equals: BOTA_SALES_POINT_NAME, mode: "insensitive" } },
+    select: { id: true },
+  });
+  return hub?.id ?? null;
+}
 
-export {
-  getHubSalesPointId as getBotaSalesPointId,
-  ensureHubSalesPointId as ensureBotaSalesPointId,
-  HUB_SALES_POINT_NAME,
-} from "@/lib/stock-policy";
-
-export type BpoStockLine = {
-  productId: number;
-  qtyUnits: Prisma.Decimal;
-  label: string;
-  saleLineId?: string;
-};
+export async function ensureBotaSalesPointId(
+  prisma: Parameters<typeof getBotaSalesPointId>[0],
+): Promise<number> {
+  const id = await getBotaSalesPointId(prisma);
+  if (id == null) {
+    throw new Error(
+      `Create a sales point named "${BOTA_SALES_POINT_NAME}" before posting bottled palm oil sales.`,
+    );
+  }
+  return id;
+}
 
 export function dQty(raw: string | number | Prisma.Decimal): Prisma.Decimal {
   return new Prisma.Decimal(String(raw).trim().replace(",", "."));

@@ -49,7 +49,7 @@ export function canValidateDocuments(role: UserRole): boolean {
   );
 }
 
-/** BPO consignment sender validation and related stock/BPO actions. */
+/** BPO document validation (outbound sales, etc.). */
 export function canValidateBpoDocuments(role: UserRole): boolean {
   return (
     canValidateDocuments(role) ||

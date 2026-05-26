@@ -720,8 +720,8 @@ export function UsersClient(props: {
                         </span>
                       )}
                     </td>
-                    <td className="p-2 text-right">
-                      <div className="flex justify-end gap-2 flex-wrap">
+                    <td className="p-2 text-right whitespace-nowrap">
+                      <div className="flex justify-end items-center gap-2">
                         <button
                           type="button"
                           onClick={() => startEdit(u)}

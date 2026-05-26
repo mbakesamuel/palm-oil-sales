@@ -5,7 +5,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useWorkingPeriod, workingMonthDateBounds } from "@/contexts/WorkingPeriodContext";
+import {
+  useWorkingPeriod,
+  workingMonthDateBounds,
+} from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { canCreateOrEditDeliveryOrderDraft } from "@/lib/auth-roles";
@@ -13,6 +16,7 @@ import { ValidationStatus } from "@/lib/domain";
 import type {
   DeliveryOrderTaxPreview,
   LoadedDeliveryOrderView,
+  PendingDeliveryOrderRow,
   SaveHeaderResult,
   SaveSectionResult,
 } from "./actions";
@@ -58,7 +62,8 @@ export function DeliveryOrdersClient(props: {
     customerId: string,
     dateIssuedIso: string,
   ) => Promise<
-    { ok: true; preview: DeliveryOrderTaxPreview } | { ok: false; error: string }
+    | { ok: true; preview: DeliveryOrderTaxPreview }
+    | { ok: false; error: string }
   >;
   loadDeliveryOrderByNo: (
     no: string,
@@ -73,7 +78,14 @@ export function DeliveryOrdersClient(props: {
     customerId: string,
     productId: number,
     dateIso: string,
-  ) => Promise<{ ok: true; unitPriceExTax: string } | { ok: false; error: string }>;
+  ) => Promise<
+    { ok: true; unitPriceExTax: string } | { ok: false; error: string }
+  >;
+  previewStockOnHandAction: (
+    salesPointId: number,
+    productId: number,
+  ) => Promise<{ ok: true; onHand: string } | { ok: false; error: string }>;
+  listPendingDeliveryOrdersAction: () => Promise<PendingDeliveryOrderRow[]>;
 }) {
   const {
     customers,
@@ -88,16 +100,19 @@ export function DeliveryOrdersClient(props: {
     validateDeliveryOrder,
     canValidateDeliveryOrder: canValidateDeliveryOrderProp,
     previewProductUnitPriceAction,
+    previewStockOnHandAction,
+    listPendingDeliveryOrdersAction,
   } = props;
 
   const wp = useWorkingPeriod();
   const { status: authStatus, session } = useAuth();
   const router = useRouter();
 
-  const [taxPreview, setTaxPreview] = React.useState<DeliveryOrderTaxPreview | null>(
+  const [taxPreview, setTaxPreview] =
+    React.useState<DeliveryOrderTaxPreview | null>(null);
+  const [taxPreviewError, setTaxPreviewError] = React.useState<string | null>(
     null,
   );
-  const [taxPreviewError, setTaxPreviewError] = React.useState<string | null>(null);
 
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [deliveryOrderNo, setDeliveryOrderNo] = React.useState("");
@@ -106,7 +121,9 @@ export function DeliveryOrdersClient(props: {
   const [orderRef, setOrderRef] = React.useState("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [lookupNo, setLookupNo] = React.useState("");
-  const [docStatus, setDocStatus] = React.useState<ValidationStatus | null>(null);
+  const [docStatus, setDocStatus] = React.useState<ValidationStatus | null>(
+    null,
+  );
   const [validatedByName, setValidatedByName] = React.useState("");
   const [validatedAtIso, setValidatedAtIso] = React.useState("");
   const [payments, setPayments] = React.useState<Payment[]>([]);
@@ -115,7 +132,7 @@ export function DeliveryOrdersClient(props: {
       ? [
           {
             productId: String(products[0].productId),
-            orderQty: "1",
+            orderQty: "0",
             orderUnit: "kg",
             unitPrice: "",
           },
@@ -134,12 +151,34 @@ export function DeliveryOrdersClient(props: {
   } | null>(null);
   /** When false, line unit prices keep values from the server (loaded order) until the user edits customer, date, or product. */
   const [allowAutoUnitPrice, setAllowAutoUnitPrice] = React.useState(true);
-  const [linePriceErrors, setLinePriceErrors] = React.useState<Record<number, string>>({});
+  const [linePriceErrors, setLinePriceErrors] = React.useState<
+    Record<number, string>
+  >({});
+  /**
+   * Per-line on-hand snapshot at the DO's sales point, indexed by line row index.
+   * Informational only — used to nudge the user when their committed qty looks
+   * higher than what's currently sitting at the destination point. Stored as a
+   * number string so we can format it without import gymnastics.
+   */
+  const [lineOnHand, setLineOnHand] = React.useState<Record<number, string>>(
+    {},
+  );
+  /**
+   * Manager-only: pre-fetched list of PENDING delivery orders that this user is
+   * allowed to see. Powers the combo picker on the "Open existing order" card
+   * so the lookup input doubles as a "pick from awaiting-validation" combo.
+   * Empty for non-managers.
+   */
+  const [pendingDOs, setPendingDOs] = React.useState<PendingDeliveryOrderRow[]>(
+    [],
+  );
+  const [pendingPickerOpen, setPendingPickerOpen] = React.useState(false);
+  const pendingPickerRef = React.useRef<HTMLDivElement | null>(null);
 
   function emptyLine(): LineRow {
     return {
       productId: String(products[0]?.productId ?? ""),
-      orderQty: "1",
+      orderQty: "0",
       orderUnit: "kg",
       unitPrice: "",
     };
@@ -188,7 +227,11 @@ export function DeliveryOrdersClient(props: {
         lines.map(async (l, idx) => {
           const pid = Number.parseInt(l.productId, 10);
           if (!Number.isFinite(pid)) return;
-          const r = await previewProductUnitPriceAction(customerId, pid, dateIssued);
+          const r = await previewProductUnitPriceAction(
+            customerId,
+            pid,
+            dateIssued,
+          );
           if (!alive) return;
           if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
           else errs[idx] = r.error;
@@ -197,7 +240,9 @@ export function DeliveryOrdersClient(props: {
       if (!alive) return;
       setLinePriceErrors(errs);
       setLines((prev) =>
-        prev.map((row, i) => (priceByIdx[i] != null ? { ...row, unitPrice: priceByIdx[i]! } : row)),
+        prev.map((row, i) =>
+          priceByIdx[i] != null ? { ...row, unitPrice: priceByIdx[i]! } : row,
+        ),
       );
     })();
     return () => {
@@ -211,6 +256,80 @@ export function DeliveryOrdersClient(props: {
     authStatus,
     previewProductUnitPriceAction,
   ]);
+
+  // Manager combo: fetch the (scope-respecting) list of PENDING DOs once the
+  // session is ready and the user is allowed to validate. The server action
+  // returns [] for anyone who can't validate, so this also covers the
+  // not-a-manager case without an extra client-side guard.
+  React.useEffect(() => {
+    if (authStatus !== "ready" || !session || !canValidateDeliveryOrderProp) {
+      setPendingDOs([]);
+      return;
+    }
+    let alive = true;
+    void listPendingDeliveryOrdersAction().then((rows) => {
+      if (!alive) return;
+      setPendingDOs(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [
+    authStatus,
+    session,
+    canValidateDeliveryOrderProp,
+    listPendingDeliveryOrdersAction,
+  ]);
+
+  // Close the pending-DO picker on outside click or Escape.
+  React.useEffect(() => {
+    if (!pendingPickerOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!pendingPickerRef.current) return;
+      if (!pendingPickerRef.current.contains(event.target as Node)) {
+        setPendingPickerOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setPendingPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pendingPickerOpen]);
+
+  // Informational on-hand lookup per line. Re-runs whenever the sales point
+  // changes or any line swaps products. Failures are swallowed (we just clear
+  // the badge for that row) — this is a soft notice, never blocking.
+  React.useEffect(() => {
+    if (authStatus !== "ready") return;
+    const spid = Number.parseInt(salesPointId, 10);
+    if (!Number.isFinite(spid) || spid <= 0) {
+      setLineOnHand({});
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      const next: Record<number, string> = {};
+      await Promise.all(
+        lines.map(async (l, idx) => {
+          const pid = Number.parseInt(l.productId, 10);
+          if (!Number.isFinite(pid) || pid <= 0) return;
+          const r = await previewStockOnHandAction(spid, pid);
+          if (!alive) return;
+          if (r.ok) next[idx] = r.onHand;
+        }),
+      );
+      if (!alive) return;
+      setLineOnHand(next);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [authStatus, salesPointId, lineProductKey, previewStockOnHandAction]);
 
   React.useEffect(() => {
     if (wp.openFinancialYear == null) return;
@@ -298,7 +417,9 @@ export function DeliveryOrdersClient(props: {
     setBanner(null);
   }
 
-  async function onLoadByNo() {
+  async function onLoadByNo(explicit?: string) {
+    const no = String(explicit ?? lookupNo ?? "").trim();
+    if (!no) return;
     setBusy("load");
     setBanner(null);
     try {
@@ -306,7 +427,7 @@ export function DeliveryOrdersClient(props: {
         setBanner({ type: "error", text: "Login required." });
         return;
       }
-      const data = await loadDeliveryOrderByNo(lookupNo);
+      const data = await loadDeliveryOrderByNo(no);
       if (!data) {
         setBanner({
           type: "error",
@@ -404,6 +525,9 @@ export function DeliveryOrdersClient(props: {
         setDocStatus(ValidationStatus.VALIDATED);
         setBanner({ type: "ok", text: "Delivery order validated." });
         router.refresh();
+        if (canValidateDeliveryOrderProp) {
+          void listPendingDeliveryOrdersAction().then(setPendingDOs);
+        }
       } else {
         setBanner({ type: "error", text: r.error });
       }
@@ -503,19 +627,21 @@ export function DeliveryOrdersClient(props: {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-1">      
+      <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Delivery order</h1>
         <p className="text-sm opacity-75">
           {session?.salesPoint ? (
             <>
-              You can load and print <span className="font-medium">validated</span> delivery orders
-              at your collection point only. Pending drafts are prepared by senior supervisors and
-              validated by managers before they appear here.
+              You can load and print{" "}
+              <span className="font-medium">validated</span> delivery orders at
+              your collection point only. Pending drafts are prepared by senior
+              supervisors and validated by managers before they appear here.
             </>
           ) : (
             <>
-              Senior sales supervisors prepare drafts (header, lines, payments). Managers validate
-              pending orders. Open an order by number to view or print.
+              Senior sales supervisors prepare drafts (header, lines, payments).
+              Managers validate pending orders. Open an order by number to view
+              or print.
             </>
           )}
         </p>
@@ -538,18 +664,102 @@ export function DeliveryOrdersClient(props: {
         <p className="text-xs opacity-75">
           Enter the delivery order number (e.g. DO-2026-000001) to load the full
           document.
+          {canValidateDO ? (
+            <>
+              {" "}
+              You can also pick one from the list of orders awaiting validation.
+            </>
+          ) : null}
         </p>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
           <div className="grid gap-1 flex-1">
             <label className="text-xs font-medium opacity-70">
               Delivery order no.
             </label>
-            <input
-              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-              value={lookupNo}
-              onChange={(e) => setLookupNo(e.target.value)}
-              placeholder="DO-2026-000001"
-            />
+            <div className="relative" ref={pendingPickerRef}>
+              <div className="flex">
+                <input
+                  className={
+                    canValidateDO
+                      ? "flex-1 rounded-l-md border border-border border-r-0 bg-transparent px-3 py-2 text-sm focus:outline-none"
+                      : "w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  }
+                  value={lookupNo}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setLookupNo(next);
+                    if (
+                      canValidateDO &&
+                      pendingDOs.some((d) => d.deliveryOrderNo === next)
+                    ) {
+                      void onLoadByNo(next);
+                    }
+                  }}
+                  placeholder="DO-2026-000001"
+                />
+                {canValidateDO ? (
+                  <button
+                    type="button"
+                    aria-label="Pick from orders awaiting validation"
+                    aria-haspopup="listbox"
+                    aria-expanded={pendingPickerOpen}
+                    title={
+                      pendingDOs.length === 0
+                        ? "No orders awaiting validation"
+                        : `Pick from ${pendingDOs.length} pending order${pendingDOs.length === 1 ? "" : "s"}`
+                    }
+                    onClick={() => setPendingPickerOpen((v) => !v)}
+                    className="rounded-r-md border border-border bg-accent/10 px-3 py-2 text-sm hover:bg-accent/25 focus:outline-none"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <span className="opacity-70">
+                        {pendingDOs.length}
+                      </span>
+                      <span aria-hidden="true">{pendingPickerOpen ? "\u25b4" : "\u25be"}</span>
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              {canValidateDO && pendingPickerOpen ? (
+                <div
+                  role="listbox"
+                  className="absolute z-20 mt-1 max-h-72 w-full min-w-88 overflow-auto rounded-md border border-border bg-background shadow-lg"
+                >
+                  {pendingDOs.length === 0 ? (
+                    <div className="px-3 py-3 text-xs opacity-70">
+                      No delivery orders are currently awaiting validation.
+                    </div>
+                  ) : (
+                    <ul className="py-1">
+                      {pendingDOs.map((d) => (
+                        <li key={d.deliveryOrderNo}>
+                          <button
+                            type="button"
+                            role="option"
+                            className="block w-full text-left px-3 py-2 text-sm hover:bg-accent/25 focus:bg-accent/25 focus:outline-none"
+                            onClick={() => {
+                              setLookupNo(d.deliveryOrderNo);
+                              setPendingPickerOpen(false);
+                              void onLoadByNo(d.deliveryOrderNo);
+                            }}
+                          >
+                            <div className="font-medium tabular-nums">
+                              {d.deliveryOrderNo}
+                            </div>
+                            <div className="text-xs opacity-75">
+                              {d.customerName}
+                              {" \u00b7 "}
+                              {d.dateIssued}
+                              {d.totalLabel ? ` \u00b7 ${d.totalLabel}` : ""}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"
@@ -582,13 +792,17 @@ export function DeliveryOrdersClient(props: {
         </div>
         {orderId != null && deliveryOrderNo ? (
           <p className="text-xs opacity-75">
-            Order <span className="font-medium tabular-nums">{deliveryOrderNo}</span> is
-            open — use View / print for the printable document (new or loaded).
+            Order{" "}
+            <span className="font-medium tabular-nums">{deliveryOrderNo}</span>{" "}
+            is open — use View / print for the printable document (new or
+            loaded).
           </p>
         ) : null}
       </div>
 
-      {customers.length === 0 || products.length === 0 || salesPoints.length === 0 ? (
+      {customers.length === 0 ||
+      products.length === 0 ||
+      salesPoints.length === 0 ? (
         <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
@@ -644,15 +858,20 @@ export function DeliveryOrdersClient(props: {
 
             {wp.openFinancialYear != null ? (
               <p className="text-xs opacity-75">
-                <span className="font-medium">Posting period</span> (your working month):{" "}
+                <span className="font-medium">Posting period</span> (your
+                working month):{" "}
                 <span className="font-medium tabular-nums">
                   FY {wp.fyLabel} · {wp.workingMonthLabel}
                 </span>
-                . <span className="opacity-70">Date issued is the document date only.</span>
+                .{" "}
+                <span className="opacity-70">
+                  Date issued is the document date only.
+                </span>
               </p>
             ) : (
               <p className="text-xs text-amber-800 dark:text-amber-200/90">
-                No financial year is open — open one under Financial years before saving this order.
+                No financial year is open — open one under Financial years
+                before saving this order.
               </p>
             )}
 
@@ -663,11 +882,19 @@ export function DeliveryOrdersClient(props: {
                 {docStatus === ValidationStatus.VALIDATED ? (
                   <span className="opacity-70">
                     {" "}
-                    · Validated by <span className="font-medium">{validatedByName || "—"}</span>
+                    · Validated by{" "}
+                    <span className="font-medium">
+                      {validatedByName || "—"}
+                    </span>
                     {validatedAtIso ? (
                       <span className="opacity-70">
                         {" "}
-                        ({new Date(validatedAtIso).toISOString().slice(0, 16).replace("T", " ")})
+                        (
+                        {new Date(validatedAtIso)
+                          .toISOString()
+                          .slice(0, 16)
+                          .replace("T", " ")}
+                        )
                       </span>
                     ) : null}
                   </span>
@@ -746,7 +973,9 @@ export function DeliveryOrdersClient(props: {
                 ) : taxPreview ? (
                   <>
                     Taxes from regime (date issued): VAT{" "}
-                    <span className="font-medium">{taxPreview.vatPercentLabel}%</span>
+                    <span className="font-medium">
+                      {taxPreview.vatPercentLabel}%
+                    </span>
                     {parseDec(taxPreview.otherRate) > 0 ? (
                       <>
                         {" "}
@@ -756,7 +985,8 @@ export function DeliveryOrdersClient(props: {
                         </span>
                       </>
                     ) : null}
-                    . Optional per-line amount adds on top of statutory other taxes.
+                    . Optional per-line amount adds on top of statutory other
+                    taxes.
                   </>
                 ) : customerId ? (
                   "Loading tax rates…"
@@ -797,8 +1027,8 @@ export function DeliveryOrdersClient(props: {
                         readOnly
                       />
                       <p className="text-xs opacity-70">
-                        Tied to your login; you cannot post to another collection
-                        point.
+                        Tied to your login; you cannot post to another
+                        collection point.
                       </p>
                     </>
                   ) : (
@@ -877,7 +1107,9 @@ export function DeliveryOrdersClient(props: {
             }`}
           >
             <div>
-              <h2 className="text-lg font-semibold">2 · Line items (Products) & taxes</h2>
+              <h2 className="text-lg font-semibold">
+                2 · Line items (Products) & taxes
+              </h2>
               <p className="text-xs opacity-75 mt-1">
                 Stored in{" "}
                 <code className="text-[11px]">DeliveryOrderDetails</code>. Unit
@@ -909,7 +1141,10 @@ export function DeliveryOrdersClient(props: {
             </div>
             <p className="text-xs opacity-70">
               Unit price (ex VAT) comes from{" "}
-              <Link href="/setup/product-pricing" className="underline underline-offset-4">
+              <Link
+                href="/setup/product-pricing"
+                className="underline underline-offset-4"
+              >
                 Product pricing
               </Link>{" "}
               for the customer type and document date; it cannot be edited here.
@@ -929,7 +1164,9 @@ export function DeliveryOrdersClient(props: {
                     className="rounded-lg border border-border p-3 sm:p-4 space-y-3 min-w-0"
                   >
                     <div className="space-y-1 min-w-0">
-                      <div className="text-xs font-medium opacity-70">Product</div>
+                      <div className="text-xs font-medium opacity-70">
+                        Product
+                      </div>
                       <select
                         className="w-full min-w-0 max-w-full rounded-md border border-border bg-transparent px-2 py-2 text-sm"
                         value={l.productId}
@@ -938,7 +1175,9 @@ export function DeliveryOrdersClient(props: {
                           setAllowAutoUnitPrice(true);
                           setLines((prev) =>
                             prev.map((x, i) =>
-                              i === idx ? { ...x, productId: e.target.value } : x,
+                              i === idx
+                                ? { ...x, productId: e.target.value }
+                                : x,
                             ),
                           );
                         }}
@@ -953,7 +1192,9 @@ export function DeliveryOrdersClient(props: {
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-0">
                       <div className="space-y-1 min-w-0">
-                        <label className="text-xs font-medium opacity-70">Qty</label>
+                        <label className="text-xs font-medium opacity-70">
+                          Qty
+                        </label>
                         <input
                           className="w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-2 text-sm"
                           inputMode="numeric"
@@ -962,14 +1203,41 @@ export function DeliveryOrdersClient(props: {
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
-                                i === idx ? { ...x, orderQty: e.target.value } : x,
+                                i === idx
+                                  ? { ...x, orderQty: e.target.value }
+                                  : x,
                               ),
                             )
                           }
                         />
+                        {lineOnHand[idx] != null
+                          ? (() => {
+                              const onHand = parseDec(lineOnHand[idx]!);
+                              const qty = parseDec(l.orderQty);
+                              const over = qty > onHand;
+                              const fmt = onHand.toLocaleString(undefined, {
+                                maximumFractionDigits: 3,
+                              });
+                              return (
+                                <p
+                                  className={
+                                    over
+                                      ? "text-[10px] text-amber-800 dark:text-amber-200/90 leading-snug"
+                                      : "text-[10px] opacity-70 leading-snug"
+                                  }
+                                >
+                                  {over
+                                    ? `Above on-hand at this sales point (${fmt} ${l.orderUnit || ""}). Informational only — DO will still save.`
+                                    : `On-hand at this sales point: ${fmt} ${l.orderUnit || ""}`}
+                                </p>
+                              );
+                            })()
+                          : null}
                       </div>
                       <div className="space-y-1 min-w-0">
-                        <label className="text-xs font-medium opacity-70">Unit</label>
+                        <label className="text-xs font-medium opacity-70">
+                          Unit
+                        </label>
                         <input
                           className="w-full min-w-0 rounded-md border border-border bg-transparent px-2 py-2 text-sm"
                           value={l.orderUnit}
@@ -977,7 +1245,9 @@ export function DeliveryOrdersClient(props: {
                           onChange={(e) =>
                             setLines((prev) =>
                               prev.map((x, i) =>
-                                i === idx ? { ...x, orderUnit: e.target.value } : x,
+                                i === idx
+                                  ? { ...x, orderUnit: e.target.value }
+                                  : x,
                               ),
                             )
                           }
@@ -1002,15 +1272,22 @@ export function DeliveryOrdersClient(props: {
                           </p>
                         ) : null}
                       </div>
-                      <div className="space-y-1 min-w-0 col-span-2 sm:col-span-1 flex flex-col justify-end">
-                        <div className="text-xs font-medium opacity-70">Net (ex VAT)</div>
-                        <div className="tabular-nums text-sm font-medium py-2">
-                          {s.net.toFixed(2)}
-                        </div>
+                      <div className="space-y-1 min-w-0 col-span-2 sm:col-span-1">
+                        <label className="text-xs font-medium opacity-70">
+                          Net (ex VAT)
+                        </label>
+                        <input
+                          className="w-full min-w-0 rounded-md border border-border bg-foreground/[0.06] px-2 py-2 text-sm text-right tabular-nums font-medium"
+                          inputMode="decimal"
+                          value={s.net.toFixed(2)}
+                          readOnly
+                          disabled
+                          title="Calculated from quantity × unit price"
+                        />
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs border-t border-border pt-3">
+                    {/*  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs border-t border-border pt-3">
                       <span className="opacity-70 font-medium">Taxes</span>
                       <span className="tabular-nums">
                         <span className="opacity-70">VAT:</span>{" "}
@@ -1026,13 +1303,15 @@ export function DeliveryOrdersClient(props: {
                         <span className="opacity-70">Line total:</span>{" "}
                         <span className="font-semibold">{s.total.toFixed(2)} XAF</span>
                       </span>
-                    </div>
+                    </div> */}
 
                     <div className="flex justify-end">
                       <button
                         type="button"
                         className="text-xs underline underline-offset-4 opacity-80"
-                        onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
+                        onClick={() =>
+                          setLines((prev) => prev.filter((_, i) => i !== idx))
+                        }
                         disabled={linesReadOnly || lines.length === 1}
                       >
                         Remove line
@@ -1043,30 +1322,32 @@ export function DeliveryOrdersClient(props: {
               })}
             </div>
 
-            <div className="flex flex-wrap justify-end gap-x-8 gap-y-1 text-sm">
-              <div className="tabular-nums">
-                <span className="opacity-70">Net (ex VAT)</span>{" "}
-                <span className="font-medium">
-                  {totalsPreview.net.toFixed(2)} XAF
-                </span>
-              </div>
-              <div className="tabular-nums">
-                <span className="opacity-70">VAT</span>{" "}
-                <span className="font-medium">
-                  {totalsPreview.vat.toFixed(2)} XAF
-                </span>
-              </div>
-              <div className="tabular-nums">
-                <span className="opacity-70">Other taxes</span>{" "}
-                <span className="font-medium">
-                  {totalsPreview.other.toFixed(2)} XAF
-                </span>
-              </div>
-              <div className="tabular-nums">
-                <span className="opacity-70">Total</span>{" "}
-                <span className="font-semibold">
-                  {totalsPreview.total.toFixed(2)} XAF
-                </span>
+            <div className="flex justify-end text-sm">
+              <div className="min-w-[16rem] space-y-1">
+               {/*  <div className="flex justify-between gap-6 tabular-nums">
+                  <span className="opacity-70">Net (ex VAT)</span>
+                  <span className="font-medium text-right">
+                    {totalsPreview.net.toFixed(2)} XAF
+                  </span>
+                </div> */}
+                <div className="flex justify-between gap-6 tabular-nums">
+                  <span className="opacity-70">VAT</span>
+                  <span className="font-medium text-right">
+                    {totalsPreview.vat.toFixed(2)} XAF
+                  </span>
+                </div>
+                <div className="flex justify-between gap-6 tabular-nums">
+                  <span className="opacity-70">Sales tax</span>
+                  <span className="font-medium text-right">
+                    {totalsPreview.other.toFixed(2)} XAF
+                  </span>
+                </div>
+                <div className="flex justify-between gap-6 tabular-nums border-t border-border pt-1">
+                  <span className="opacity-70">Total</span>
+                  <span className="font-semibold text-right">
+                    {totalsPreview.total.toFixed(2)} XAF
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1139,11 +1420,13 @@ export function DeliveryOrdersClient(props: {
                 {payments.map((p, idx) => (
                   <div
                     key={idx}
-                    className="overflow-x-auto px-3 py-3 border-b border-border last:border-b-0"
+                    className="px-3 py-3 border-b border-border last:border-b-0"
                   >
-                    <div className="min-w-[1100px] flex items-end gap-3">
-                      <div className="grid gap-1 w-[260px] shrink-0">
-                        <label className="text-xs font-medium opacity-70">Method</label>
+                    <div className="flex flex-wrap items-end gap-3 min-w-0">
+                      <div className="grid gap-1 flex-1 basis-[200px] min-w-0">
+                        <label className="text-xs font-medium opacity-70">
+                          Method
+                        </label>
                         <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm">
                           <label className="inline-flex items-center gap-2">
                             <input
@@ -1195,17 +1478,21 @@ export function DeliveryOrdersClient(props: {
                         </div>
                       </div>
 
-                      <div className="grid gap-1 w-[170px] shrink-0">
-                        <label className="text-xs font-medium opacity-70">Date issued</label>
+                      <div className="grid gap-1 flex-1 basis-[150px] min-w-0">
+                        <label className="text-xs font-medium opacity-70">
+                          Date issued
+                        </label>
                         <input
                           type="date"
-                          className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
+                          className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                           value={p.paymentDate}
                           disabled={paymentsReadOnly}
                           onChange={(e) =>
                             setPayments((prev) =>
                               prev.map((x, i) =>
-                                i === idx ? { ...x, paymentDate: e.target.value } : x,
+                                i === idx
+                                  ? { ...x, paymentDate: e.target.value }
+                                  : x,
                               ),
                             )
                           }
@@ -1214,33 +1501,41 @@ export function DeliveryOrdersClient(props: {
 
                       {p.method === "CHEQUE" ? (
                         <>
-                          <div className="grid gap-1 w-[220px] shrink-0">
-                            <label className="text-xs font-medium opacity-70">Cheque no.</label>
+                          <div className="grid gap-1 flex-1 basis-[180px] min-w-0">
+                            <label className="text-xs font-medium opacity-70">
+                              Cheque no.
+                            </label>
                             <input
-                              className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
+                              className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                               placeholder="Cheque no."
                               value={p.chequeNo}
                               disabled={paymentsReadOnly}
                               onChange={(e) =>
                                 setPayments((prev) =>
                                   prev.map((x, i) =>
-                                    i === idx ? { ...x, chequeNo: e.target.value } : x,
+                                    i === idx
+                                      ? { ...x, chequeNo: e.target.value }
+                                      : x,
                                   ),
                                 )
                               }
                             />
                           </div>
-                          <div className="grid gap-1 w-[220px] shrink-0">
-                            <label className="text-xs font-medium opacity-70">Bank</label>
+                          <div className="grid gap-1 flex-1 basis-[180px] min-w-0">
+                            <label className="text-xs font-medium opacity-70">
+                              Bank
+                            </label>
                             <input
-                              className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
+                              className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                               placeholder="Bank"
                               value={p.bank}
                               disabled={paymentsReadOnly}
                               onChange={(e) =>
                                 setPayments((prev) =>
                                   prev.map((x, i) =>
-                                    i === idx ? { ...x, bank: e.target.value } : x,
+                                    i === idx
+                                      ? { ...x, bank: e.target.value }
+                                      : x,
                                   ),
                                 )
                               }
@@ -1249,17 +1544,21 @@ export function DeliveryOrdersClient(props: {
                         </>
                       ) : (
                         <>
-                          <div className="grid gap-1 w-[260px] shrink-0">
-                            <label className="text-xs font-medium opacity-70">CDC receipt no.</label>
+                          <div className="grid gap-1 flex-1 basis-[200px] min-w-0">
+                            <label className="text-xs font-medium opacity-70">
+                              CDC receipt no.
+                            </label>
                             <input
-                              className="rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
+                              className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
                               placeholder="CDC receipt no."
                               value={p.cashReceiptNo}
                               disabled={paymentsReadOnly}
                               onChange={(e) =>
                                 setPayments((prev) =>
                                   prev.map((x, i) =>
-                                    i === idx ? { ...x, cashReceiptNo: e.target.value } : x,
+                                    i === idx
+                                      ? { ...x, cashReceiptNo: e.target.value }
+                                      : x,
                                   ),
                                 )
                               }
@@ -1268,12 +1567,16 @@ export function DeliveryOrdersClient(props: {
                         </>
                       )}
 
-                      <div className="ml-auto flex justify-end">
+                      <div className="ml-auto flex justify-end shrink-0 pb-2">
                         <button
                           type="button"
                           className="text-xs underline underline-offset-4 disabled:opacity-40"
                           disabled={paymentsReadOnly}
-                          onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))}
+                          onClick={() =>
+                            setPayments((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
                         >
                           Remove
                         </button>
