@@ -1,23 +1,38 @@
 -- Storage locations per sales point; stock balances and movements track per location.
+-- Table may already exist from 20260503140000_storage_location (or recovery).
 
-CREATE TABLE "StorageLocation" (
+CREATE TABLE IF NOT EXISTS "StorageLocation" (
     "id" SERIAL NOT NULL,
     "salesPointId" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
-    "isDefault" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "StorageLocation_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "StorageLocation_salesPointId_name_key" ON "StorageLocation"("salesPointId", "name");
-CREATE INDEX "StorageLocation_salesPointId_idx" ON "StorageLocation"("salesPointId");
+ALTER TABLE "StorageLocation" ADD COLUMN IF NOT EXISTS "isDefault" BOOLEAN NOT NULL DEFAULT false;
 
-ALTER TABLE "StorageLocation" ADD CONSTRAINT "StorageLocation_salesPointId_fkey" FOREIGN KEY ("salesPointId") REFERENCES "SalesPoint"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "StorageLocation_salesPointId_name_key" ON "StorageLocation"("salesPointId", "name");
+CREATE INDEX IF NOT EXISTS "StorageLocation_salesPointId_idx" ON "StorageLocation"("salesPointId");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'StorageLocation_salesPointId_fkey'
+  ) THEN
+    ALTER TABLE "StorageLocation" ADD CONSTRAINT "StorageLocation_salesPointId_fkey"
+      FOREIGN KEY ("salesPointId") REFERENCES "SalesPoint"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
 INSERT INTO "StorageLocation" ("salesPointId", "name", "isDefault", "updatedAt")
-SELECT id, 'General', true, CURRENT_TIMESTAMP FROM "SalesPoint";
+SELECT sp."id", 'General', true, CURRENT_TIMESTAMP
+FROM "SalesPoint" sp
+WHERE NOT EXISTS (
+  SELECT 1 FROM "StorageLocation" sl
+  WHERE sl."salesPointId" = sp."id" AND sl."name" = 'General'
+);
 
 -- StockBalance: extend primary key with storageLocationId
 ALTER TABLE "StockBalance" ADD COLUMN "storageLocationId" INTEGER;
