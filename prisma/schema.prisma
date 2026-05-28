@@ -17,10 +17,17 @@ enum UserRole {
   ADMIN
   DIRECTOR
   MANAGER
+  OFFICER
   SENIOR_SUPERVISOR
   SUPERVISOR
   CLERK
   CLERK_IN_CHARGE_BPO
+}
+
+/// Where operational users post (collection point vs factory).
+enum CommercialSiteKind {
+  SALES_POINT
+  FACTORY
 }
 
 enum CustomerType {
@@ -46,19 +53,6 @@ enum ValidationStatus {
   REJECTED
 }
 
-enum BpoMovementType {
-  CONSIGNMENT_TRANSFER
-  GIFT
-  OTHER_OUT
-}
-
-enum BpoMovementStatus {
-  DRAFT
-  SENDER_VALIDATED
-  VALIDATED
-  REJECTED
-}
-
 enum BpoEmployeeCollectedProduct {
   LOOSE_PALM_OIL
   BOTTLED_PALM_OIL
@@ -76,6 +70,31 @@ enum TaxRateVariant {
   NO_TAXPAYER_ID
 }
 
+/// Kinds of stock-ledger entries. Sign of the balance change is implied by the kind.
+enum StockMovementKind {
+  RECEIPT // +qty (goods received from external supplier / factory)
+  TRANSFER_OUT // -qty (dispatched to another sales point)
+  TRANSFER_IN // +qty (received at destination sales point)
+  SALE // -qty (validated sales invoice)
+  SALE_REVERSAL // +qty (rejected/cancelled validated sale)
+  ADJUSTMENT // ±qty (manual correction; sign on the line delta)
+}
+
+/// Lifecycle for stock documents (receipts, transfers, adjustments).
+enum StockDocStatus {
+  DRAFT
+  POSTED // receipts and adjustments
+  DISPATCHED // transfers: source decremented, in transit
+  RECEIVED // transfers: destination credited, complete
+  CANCELLED
+}
+
+/// Quality/condition of stock within a storage location.
+enum StockCondition {
+  SELLABLE
+  UNSELLABLE
+}
+
 model RolePermission {
   id        String   @id @default(cuid())
   role      UserRole
@@ -88,6 +107,38 @@ model RolePermission {
   @@unique([role, key])
   @@index([key])
   @@map("RolePermission")
+}
+
+/// Org-wide roles (Admin, Director, custom roles). Permissions on `GlobalRolePermission`.
+model GlobalRoleDefinition {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  displayName String
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  /// When set, mirrors `User.role` for built-in enum values (ADMIN, DIRECTOR, …).
+  legacyRole  UserRole? @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  permissions GlobalRolePermission[]
+  users       User[]
+
+  @@map("GlobalRoleDefinition")
+}
+
+model GlobalRolePermission {
+  id                     String               @id @default(cuid())
+  globalRoleDefinitionId String
+  globalRoleDefinition   GlobalRoleDefinition @relation(fields: [globalRoleDefinitionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  key                    String
+  allowed                Boolean              @default(true)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@unique([globalRoleDefinitionId, key])
+  @@index([key])
+  @@map("GlobalRolePermission")
 }
 
 /// One row per financial year label. Inclusive calendar bounds define posting; only one row may be OPEN at a time (application code).
@@ -109,23 +160,23 @@ model FinancialYearPeriod {
 
 /// Monthly percentage weights (fiscal months 1–12) per product and financial year; must sum to 100.
 model ProductSalesBudgetMonthPhaseProfile {
-  id              String   @id @default(cuid())
-  financialYear   Int
-  productId       Int
-  pctM01          Decimal  @db.Decimal(10, 6)
-  pctM02          Decimal  @db.Decimal(10, 6)
-  pctM03          Decimal  @db.Decimal(10, 6)
-  pctM04          Decimal  @db.Decimal(10, 6)
-  pctM05          Decimal  @db.Decimal(10, 6)
-  pctM06          Decimal  @db.Decimal(10, 6)
-  pctM07          Decimal  @db.Decimal(10, 6)
-  pctM08          Decimal  @db.Decimal(10, 6)
-  pctM09          Decimal  @db.Decimal(10, 6)
-  pctM10          Decimal  @db.Decimal(10, 6)
-  pctM11          Decimal  @db.Decimal(10, 6)
-  pctM12          Decimal  @db.Decimal(10, 6)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(cuid())
+  financialYear Int
+  productId     Int
+  pctM01        Decimal  @db.Decimal(10, 6)
+  pctM02        Decimal  @db.Decimal(10, 6)
+  pctM03        Decimal  @db.Decimal(10, 6)
+  pctM04        Decimal  @db.Decimal(10, 6)
+  pctM05        Decimal  @db.Decimal(10, 6)
+  pctM06        Decimal  @db.Decimal(10, 6)
+  pctM07        Decimal  @db.Decimal(10, 6)
+  pctM08        Decimal  @db.Decimal(10, 6)
+  pctM09        Decimal  @db.Decimal(10, 6)
+  pctM10        Decimal  @db.Decimal(10, 6)
+  pctM11        Decimal  @db.Decimal(10, 6)
+  pctM12        Decimal  @db.Decimal(10, 6)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   product Product @relation(fields: [productId], references: [productId], onDelete: Cascade, onUpdate: Cascade)
 
@@ -159,31 +210,88 @@ enum UiThemePreset {
 
 /// Line of business under the commercial department (invoice prefix, letterhead phone/address).
 model CommercialService {
-  id             String    @id @default(cuid())
+  id             String             @id @default(cuid())
   /// Stable key (e.g. `default`, `rubber`).
-  code           String    @unique
+  code           String             @unique
   name           String
-  invoicePrefix  String    @unique
+  invoicePrefix  String             @unique
   phone          String?
   address        String?
-  isActive       Boolean   @default(true)
-  sortOrder      Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isActive       Boolean            @default(true)
+  sortOrder      Int                @default(0)
+  siteKind       CommercialSiteKind @default(SALES_POINT)
+  /// JSON array of module keys from `lib/commercial-modules.ts`.
+  enabledModules Json               @default("[]")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  users                       User[]
-  sales                       Sale[]
-  deliveryOrders              DeliveryOrder[]
-  commercialInvoiceSequences  CommercialInvoiceSequence[]
+  users                      User[]
+  products                   Product[]
+  sales                      Sale[]
+  deliveryOrders             DeliveryOrder[]
+  commercialInvoiceSequences CommercialInvoiceSequence[]
+  serviceRoles               CommercialServiceRole[]
+  factories                  Factory[]
+  customers                  Customer[]
+  taxRegimes                 TaxRegime[]
 
   @@map("CommercialService")
 }
 
+model CommercialServiceRole {
+  id                  String            @id @default(cuid())
+  commercialServiceId String
+  commercialService   CommercialService @relation(fields: [commercialServiceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code                String
+  name                String
+  sortOrder           Int               @default(0)
+  isActive            Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  users       User[]
+  permissions CommercialServiceRolePermission[]
+
+  @@unique([commercialServiceId, code])
+  @@index([commercialServiceId, isActive])
+  @@map("CommercialServiceRole")
+}
+
+model CommercialServiceRolePermission {
+  id                      String                @id @default(cuid())
+  commercialServiceRoleId String
+  commercialServiceRole   CommercialServiceRole @relation(fields: [commercialServiceRoleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  key                     String
+  allowed                 Boolean               @default(true)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  @@unique([commercialServiceRoleId, key])
+  @@index([key])
+  @@map("CommercialServiceRolePermission")
+}
+
+model Factory {
+  id                  String            @id @default(cuid())
+  name                String
+  commercialServiceId String
+  commercialService   CommercialService @relation(fields: [commercialServiceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  isActive            Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  users User[]
+
+  @@unique([commercialServiceId, name])
+  @@index([commercialServiceId, isActive])
+  @@map("Factory")
+}
+
 model CommercialInvoiceSequence {
   commercialServiceId String
-  calendarYear       Int
-  nextNumber         Int      @default(1)
-  updatedAt          DateTime @updatedAt
+  calendarYear        Int
+  nextNumber          Int      @default(1)
+  updatedAt           DateTime @updatedAt
 
   commercialService CommercialService @relation(fields: [commercialServiceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
@@ -192,18 +300,18 @@ model CommercialInvoiceSequence {
 }
 
 model CompanySettings {
-  id                   String         @id @default("default")
+  id                   String        @id @default("default")
   companyName          String
   /// Public path (e.g. `/logo.png`) or absolute image URL for branding.
   logoUrl              String?
   department           String?
   /// Mirrors the headline VAT decimal for Setup display; postings use TaxRateSchedule by date.
-  vatRate              Decimal @db.Decimal(5, 4) // 0.1925 for 19.25%
+  vatRate              Decimal       @db.Decimal(5, 4) // 0.1925 for 19.25%
   /// 1 = January. Financial month 1 begins in this calendar month.
-  fiscalYearStartMonth Int            @default(1)
-  uiThemePreset        UiThemePreset  @default(default)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  fiscalYearStartMonth Int           @default(1)
+  uiThemePreset        UiThemePreset @default(default)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 }
 
 model DeliveryOrderSequence {
@@ -219,39 +327,55 @@ model VehicleConsignmentNoteSequence {
 }
 
 model User {
-  id            String      @id @default(cuid())
+  id                      String                 @id @default(cuid())
   /// Login id (unique, stored lowercased in app logic).
-  username      String      @unique
+  username                String                 @unique
   /// Shown on invoices/reports (e.g. full name).
-  name          String
+  name                    String
   /// DEV / dummy only — replace with a proper password hash before production.
-  passwordPlain String?
-  passwordHash  String?
-  role          UserRole    @default(CLERK)
+  passwordPlain           String?
+  passwordHash            String?
+  role                    UserRole               @default(CLERK)
+  globalRoleDefinitionId  String?
+  globalRoleDefinition    GlobalRoleDefinition?  @relation(fields: [globalRoleDefinitionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Required for roles tied to a single sales point (e.g. clerk, sales supervisor).
-  salesPointId  Int?
-  salesPoint    SalesPoint? @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  commercialServiceId String?
-  commercialService   CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  salesPointId            Int?
+  salesPoint              SalesPoint?            @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  commercialServiceId     String?
+  commercialService       CommercialService?     @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  commercialServiceRoleId String?
+  commercialServiceRole   CommercialServiceRole? @relation(fields: [commercialServiceRoleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  factoryId               String?
+  factory                 Factory?               @relation(fields: [factoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Optional free-text service label (legacy); prefer CommercialService where set.
-  service       String?
-  isActive      Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  service                 String?
+  isActive                Boolean                @default(true)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
 
-  sales                       Sale[]                   @relation("SalesCreatedBy")
-  validatedSales              Sale[]                   @relation("SalesValidatedBy")
-  deliveryOrdersCreated       DeliveryOrder[]          @relation("DeliveryOrdersCreatedBy")
-  deliveryOrdersValidated     DeliveryOrder[]          @relation("DeliveryOrdersValidatedBy")
-  consignmentNotesCreated     VehicleConsignmentNote[] @relation("ConsignmentNotesCreatedBy")
-  consignmentNotesValidated   VehicleConsignmentNote[] @relation("ConsignmentNotesValidatedBy")
-  bpoMovementsCreated         BpoStockMovement[]       @relation("BpoStockMovementsCreatedBy")
-  bpoMovementsSenderValidated BpoStockMovement[]       @relation("BpoStockMovementsSenderValidatedBy")
-  bpoMovementsBotaValidated   BpoStockMovement[]       @relation("BpoStockMovementsBotaValidatedBy")
+  sales                     Sale[]                   @relation("SalesCreatedBy")
+  validatedSales            Sale[]                   @relation("SalesValidatedBy")
+  deliveryOrdersCreated     DeliveryOrder[]          @relation("DeliveryOrdersCreatedBy")
+  deliveryOrdersValidated   DeliveryOrder[]          @relation("DeliveryOrdersValidatedBy")
+  deliveryOrdersReviewed    DeliveryOrder[]          @relation("DeliveryOrdersReviewedBy")
+  deliveryOrdersCancelled   DeliveryOrder[]          @relation("DeliveryOrdersCancelledBy")
+  consignmentNotesCreated   VehicleConsignmentNote[] @relation("ConsignmentNotesCreatedBy")
+  consignmentNotesValidated VehicleConsignmentNote[] @relation("ConsignmentNotesValidatedBy")
+
+  stockMovements           StockMovement[]
+  stockReceiptsCreated     StockReceipt[]    @relation("StockReceiptsCreatedBy")
+  stockReceiptsPosted      StockReceipt[]    @relation("StockReceiptsPostedBy")
+  stockTransfersCreated    StockTransfer[]   @relation("StockTransfersCreatedBy")
+  stockTransfersDispatched StockTransfer[]   @relation("StockTransfersDispatchedBy")
+  stockTransfersReceived   StockTransfer[]   @relation("StockTransfersReceivedBy")
+  stockAdjustmentsCreated  StockAdjustment[] @relation("StockAdjustmentsCreatedBy")
+  stockAdjustmentsPosted   StockAdjustment[] @relation("StockAdjustmentsPostedBy")
 
   sessions AuthSession[]
 
   @@index([commercialServiceId])
+  @@index([commercialServiceRoleId])
+  @@index([factoryId])
 }
 
 model AuthSession {
@@ -270,25 +394,28 @@ model AuthSession {
 }
 
 model Customer {
-  id            String            @id @default(cuid())
-  name          String
-  phone         String?
-  email         String?
-  address       String?
-  customerType  CustomerType      @default(INDUSTRY)
-  residency     CustomerResidency @default(LOCAL)
-  taxRegimeId   String
-  hasTaxpayerId Boolean           @default(false)
-  taxpayerId    String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                  String            @id @default(cuid())
+  commercialServiceId String
+  commercialService   CommercialService @relation(fields: [commercialServiceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name                String
+  phone               String?
+  email               String?
+  address             String?
+  customerType        CustomerType      @default(INDUSTRY)
+  residency           CustomerResidency @default(LOCAL)
+  taxRegimeId         String?
+  hasTaxpayerId       Boolean           @default(false)
+  taxpayerId          String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
-  taxRegime      TaxRegime       @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
+  taxRegime      TaxRegime?      @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
   sales          Sale[]
   deliveryOrders DeliveryOrder[]
 
   @@index([name])
   @@index([taxRegimeId])
+  @@index([commercialServiceId])
 }
 
 model Employee {
@@ -348,16 +475,22 @@ model TaxRegimeTax {
 }
 
 model TaxRegime {
-  id         String        @id @default(cuid())
-  name       String        @unique
-  kind       TaxRegimeKind @default(SIMPLIFIED)
-  vatApplies Boolean       @default(true)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  id                  String             @id @default(cuid())
+  /// Null = shared across all commercial lines; set to scope a regime to one line.
+  commercialServiceId String?
+  commercialService   CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  name                String
+  kind                TaxRegimeKind      @default(SIMPLIFIED)
+  vatApplies          Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   taxTypeLinks TaxRegimeTax[]
   customers    Customer[]
   sales        Sale[]
+
+  @@unique([commercialServiceId, name])
+  @@index([commercialServiceId])
 }
 
 /// Taxes applied on an invoice at posting time (audit snapshot).
@@ -392,68 +525,63 @@ model ProductUnitPriceSchedule {
   @@map("ProductUnitPriceSchedule")
 }
 
-model Product {
-  productId        Int     @id @default(autoincrement())
-  productName      String
-  productCode      String? // nullable
-  productCatId     Int
-  isBottledPalmOil Boolean @default(false)
+model Mill {
+  id          Int          @id @default(autoincrement())
+  name        String
+  salesPoints SalesPoint[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  productCat           ProductCat                 @relation(fields: [productCatId], references: [productCatId])
-  batches              Batch[]
-  saleLines            SaleLine[]
-  deliveryOrderDetails DeliveryOrderDetails[]
-  salesBudgets                ProductSalesBudget[]
-  salesBudgetPhaseProfiles    ProductSalesBudgetMonthPhaseProfile[]
-  unitPriceSchedules          ProductUnitPriceSchedule[]
-  variants             ProductVariant[]
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  @@map("Mill")
+}
+
+model Product {
+  productId           Int         @id @default(autoincrement())
+  productName         String
+  productCode         String? // nullable
+  productCatId        Int
+  /// Unit of measure for catalog/print purposes. Auto-derived from
+  /// `productCat.isBottled` at create/update time (BPO -> "Unit",
+  /// everything else -> "Kg").
+  uom                 String  @default("Kg")
+  /// When set, product appears only for that commercial line (null = shared catalog).
+  commercialServiceId String?
+
+  productCat               ProductCat                            @relation(fields: [productCatId], references: [productCatId])
+  commercialService        CommercialService?                    @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  saleLines                SaleLine[]
+  deliveryOrderDetails     DeliveryOrderDetails[]
+  salesBudgets             ProductSalesBudget[]
+  salesBudgetPhaseProfiles ProductSalesBudgetMonthPhaseProfile[]
+  unitPriceSchedules       ProductUnitPriceSchedule[]
+  bpoEmployeeCreditSales   BpoEmployeeCreditSale[]
+  stockBalances            StockBalance[]
+  stockMovements           StockMovement[]
+  stockReceiptLines        StockReceiptLine[]
+  stockTransferLines       StockTransferLine[]
+  stockAdjustmentLines     StockAdjustmentLine[]
+  createdAt                DateTime                              @default(now())
+  updatedAt                DateTime                              @updatedAt
 
   @@map("Product") // maps to Derby table name
 }
 
-model ProductVariant {
-  id           String   @id @default(cuid())
-  productId    Int
-  product      Product  @relation(fields: [productId], references: [productId], onDelete: Restrict, onUpdate: Cascade)
-  name         String
-  unitLabel    String   @default("Bottle")
-  unitQuantity Decimal? @db.Decimal(14, 3)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  priceSchedules   ProductVariantPriceSchedule[]
-  bpoBatches       BpoStockBatch[]
-  bpoMovementLines BpoStockMovementLine[]
-  saleLines        SaleLine[]
-  bpoAllocations   BpoSaleLineBatchAllocation[]
-  bpoEmployeeCreditSales BpoEmployeeCreditSale[]
-
-  @@unique([productId, name])
-  @@index([productId, isActive])
-  @@map("ProductVariant")
-}
-
-model ProductVariantPriceSchedule {
-  id               String         @id @default(cuid())
-  productVariantId String
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  unitPriceExTax   Decimal        @db.Decimal(14, 2)
-  effectiveFrom    DateTime       @db.Date
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@unique([productVariantId, effectiveFrom])
-  @@index([productVariantId, effectiveFrom])
-  @@map("ProductVariantPriceSchedule")
-}
-
 model ProductCat {
-  productCatId Int    @id @default(autoincrement())
+  productCatId Int     @id @default(autoincrement())
   productCat   String
   productCode  String
+  /// When true, products in this category use customer-type-segmented price
+  /// rows (Industry / Wholesale / Retail / Worker). Exactly one row in the
+  /// table is expected to carry this flag (enforced by a partial unique
+  /// index on the DB side). Other categories use a single direct price per
+  /// product (customerType null on schedule).
+  isMain       Boolean @default(false)
+  /// When true, products in this category are bottled SKUs sold per unit;
+  /// they are excluded from POS / Delivery Orders and flow through BPO
+  /// outbound instead. Exactly one row is expected to carry this flag
+  /// (enforced by a partial unique index on the DB side). Drives the
+  /// product UoM ("Unit" if bottled, "Kg" otherwise).
+  isBottled    Boolean @default(false)
 
   products  Product[]
   createdAt DateTime  @default(now())
@@ -462,102 +590,50 @@ model ProductCat {
   @@map("ProductCat")
 }
 
-model Batch {
-  id                String          @id @default(cuid())
-  salesPointId      Int
-  salesPoint        SalesPoint      @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  storageLocationId Int
-  storageLocation   StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  productId         Int
-  receivedAt        DateTime        @default(now())
-  qtyReceivedKg     Decimal         @db.Decimal(14, 3)
-  qtyRemainingKg    Decimal         @db.Decimal(14, 3)
-  note              String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  product             Product                   @relation(fields: [productId], references: [productId], onDelete: Restrict)
-  saleLineAllocations SaleLineBatchAllocation[]
-
-  @@index([salesPointId, storageLocationId, productId, receivedAt])
-  @@index([salesPointId, productId, receivedAt])
-  @@index([productId, receivedAt])
-}
-
-/// Physical storage at a collection point (e.g. production tanks).
-model StorageLocation {
-  id           Int        @id @default(autoincrement())
-  salesPointId Int
-  salesPoint   SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  name         String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  batches      Batch[]
-
-  @@unique([salesPointId, name])
-  @@index([salesPointId])
-  @@map("StorageLocation")
-}
-
-/// Audit trail: which batch quantities were consumed when a sale line was validated.
-model SaleLineBatchAllocation {
-  id         String  @id @default(cuid())
-  saleLineId String
-  batchId    String
-  qtyKg      Decimal @db.Decimal(14, 3)
-
-  saleLine SaleLine @relation(fields: [saleLineId], references: [id], onDelete: Cascade)
-  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
-
-  @@unique([saleLineId, batchId])
-  @@index([batchId])
-  @@map("SaleLineBatchAllocation")
-}
-
 model Sale {
-  id                   String           @id @default(cuid())
-  invoiceNo            String           @unique
-  soldAt               DateTime         @default(now())
-  referenceNumber      String?
-  salesPointId         Int?
-  salesPoint           SalesPoint?      @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  customerId           String
-  vehicleNumber        String
-  dateIssued           DateTime
-  deliveryOrderNo      String?
-  createdByUserId      String
-  status               ValidationStatus @default(PENDING)
-  validatedAt          DateTime?
-  validatedByUserId    String?
-  customerNameSnapshot String
-  taxRegimeId          String
-  vatRateSnapshot      Decimal          @db.Decimal(5, 4)
-  netAmount            Decimal          @db.Decimal(14, 2)
-  vatAmount            Decimal          @db.Decimal(14, 2)
-  grossAmount          Decimal          @db.Decimal(14, 2)
+  id                            String             @id @default(cuid())
+  invoiceNo                     String             @unique
+  soldAt                        DateTime           @default(now())
+  referenceNumber               String?
+  salesPointId                  Int?
+  salesPoint                    SalesPoint?        @relation(fields: [salesPointId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  customerId                    String
+  vehicleNumber                 String
+  dateIssued                    DateTime
+  deliveryOrderNo               String?
+  createdByUserId               String
+  status                        ValidationStatus   @default(PENDING)
+  validatedAt                   DateTime?
+  validatedByUserId             String?
+  customerNameSnapshot          String
+  taxRegimeId                   String?
+  vatRateSnapshot               Decimal            @db.Decimal(5, 4)
+  netAmount                     Decimal            @db.Decimal(14, 2)
+  vatAmount                     Decimal            @db.Decimal(14, 2)
+  grossAmount                   Decimal            @db.Decimal(14, 2)
   /// Financial year label (FinancialYearPeriod.financialYear)
-  financialYear        Int?
+  financialYear                 Int?
   /// Calendar month 1–12 of the working posting period
-  financialMonth       Int?
+  financialMonth                Int?
   /// Calendar year of the working posting period (with financialMonth)
-  postingCalendarYear  Int?
-  commercialServiceId  String?
-  commercialService    CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  postingCalendarYear           Int?
+  commercialServiceId           String?
+  commercialService             CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// Letterhead snapshots at invoice time (reprints remain correct).
-  issuerPhoneSnapshot            String?
-  issuerAddressSnapshot          String?
-  commercialServiceNameSnapshot  String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  issuerPhoneSnapshot           String?
+  issuerAddressSnapshot         String?
+  commercialServiceNameSnapshot String?
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
 
-  customer        Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  createdBy       User                    @relation("SalesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  validatedBy     User?                   @relation("SalesValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
-  taxRegime       TaxRegime               @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
-  lines           SaleLine[]
-  payments        Payment[]
-  appliedTaxes    SaleAppliedTax[]
-  consignmentNote VehicleConsignmentNote?
+  customer              Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy             User                    @relation("SalesCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  validatedBy           User?                   @relation("SalesValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+  taxRegime             TaxRegime?              @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
+  lines                 SaleLine[]
+  payments              Payment[]
+  appliedTaxes          SaleAppliedTax[]
+  consignmentNote       VehicleConsignmentNote?
   bpoEmployeeCreditSale BpoEmployeeCreditSale?
 
   @@index([soldAt])
@@ -574,7 +650,7 @@ model SaleLine {
   id               String   @id @default(cuid())
   saleId           String
   productId        Int
-  productVariantId String?
+  storageLocationId Int?
   qtyKg            Decimal  @db.Decimal(14, 3)
   qtyUnits         Decimal? @db.Decimal(14, 3)
   unitPricePerKg   Decimal  @db.Decimal(14, 2)
@@ -583,31 +659,29 @@ model SaleLine {
   lineVat          Decimal  @db.Decimal(14, 2)
   lineGross        Decimal  @db.Decimal(14, 2)
 
-  sale                Sale                         @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product             Product                      @relation(fields: [productId], references: [productId], onDelete: Restrict)
-  productVariant      ProductVariant?              @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
-  batchAllocations    SaleLineBatchAllocation[]
-  bpoBatchAllocations BpoSaleLineBatchAllocation[]
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  storageLocation StorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([saleId])
   @@index([productId])
-  @@index([productVariantId])
+  @@index([storageLocationId])
 }
 
 model Payment {
-  id        String        @id @default(cuid())
-  saleId    String
-  method    PaymentMethod
-  amount    Decimal       @db.Decimal(14, 2)
-  chequeNo  String?
+  id               String        @id @default(cuid())
+  saleId           String
+  method           PaymentMethod
+  amount           Decimal       @db.Decimal(14, 2)
+  chequeNo         String?
   /// Drawee bank (cheque or traite); optional, mainly for reporting
-  bank      String?
+  bank             String?
   /// Bank traite / bill reference when method is TRAITE
   traiteNo         String?
-  traiteIssuedOn   DateTime? @db.Date
-  traiteMaturityOn DateTime? @db.Date
-  paidAt    DateTime      @default(now())
-  createdAt DateTime      @default(now())
+  traiteIssuedOn   DateTime?     @db.Date
+  traiteMaturityOn DateTime?     @db.Date
+  paidAt           DateTime      @default(now())
+  createdAt        DateTime      @default(now())
 
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
@@ -620,7 +694,7 @@ model BpoEmployeeCreditSale {
   saleId                          String                      @unique
   employeeId                      String
   collectedProduct                BpoEmployeeCollectedProduct
-  productVariantId                String?
+  productId                       Int?
   rationPeriodYear                Int?
   rationPeriodMonth               Int?
   rationLimitUnitsSnapshot        Decimal?                    @db.Decimal(14, 3)
@@ -629,147 +703,97 @@ model BpoEmployeeCreditSale {
   createdAt                       DateTime                    @default(now())
   updatedAt                       DateTime                    @updatedAt
 
-  sale           Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  product  Product? @relation(fields: [productId], references: [productId], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([employeeId, rationPeriodYear, rationPeriodMonth, collectedProduct])
-  @@index([productVariantId])
+  @@index([productId])
 }
 
 model SalesPoint {
-  id   Int    @id @default(autoincrement())
-  name String
+  id     Int    @id @default(autoincrement())
+  name   String
+  millId Int?
+  mill   Mill?  @relation(fields: [millId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  users            User[]
-  deliveryOrders   DeliveryOrder[]
-  sales            Sale[]
-  batches          Batch[]
-  bpoBatches       BpoStockBatch[]
-  bpoMovementsFrom BpoStockMovement[] @relation("BpoStockMovementSource")
-  bpoMovementsTo   BpoStockMovement[] @relation("BpoStockMovementDestination")
-  storageLocations StorageLocation[]
+  users          User[]
+  deliveryOrders DeliveryOrder[]
+  sales          Sale[]
 
+  storageLocations   StorageLocation[]
+  stockBalances      StockBalance[]
+  stockMovements     StockMovement[]
+  stockReceipts      StockReceipt[]
+  stockTransfersFrom StockTransfer[]   @relation("StockTransfersFromSalesPoint")
+  stockTransfersTo   StockTransfer[]   @relation("StockTransfersToSalesPoint")
+  stockAdjustments   StockAdjustment[]
+
+  @@index([millId])
   @@map("SalesPoint") // maps to the actual Derby table name
 }
 
-model BpoStockBatch {
-  id                   String                @id @default(cuid())
-  salesPointId         Int
-  salesPoint           SalesPoint            @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  productVariantId     String
-  productVariant       ProductVariant        @relation(fields: [productVariantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  receivedAt           DateTime              @default(now())
-  qtyReceivedUnits     Decimal               @db.Decimal(14, 3)
-  qtyRemainingUnits    Decimal               @db.Decimal(14, 3)
-  sourceMovementLineId String?
-  sourceMovementLine   BpoStockMovementLine? @relation(fields: [sourceMovementLineId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  note                 String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+/// Named storage bin/tank within a sales point (e.g. production tank, floor).
+model StorageLocation {
+  id           Int      @id @default(autoincrement())
+  salesPointId Int
+  name         String
+  /// One default per sales point — used for outbound sales deductions when no bin is specified.
+  isDefault    Boolean  @default(false)
+  /// Whether stock stored here may be sold (e.g., quarantine/damaged bins are unsellable).
+  isSellable   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  saleLineAllocations BpoSaleLineBatchAllocation[]
+  salesPoint SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  @@index([salesPointId, productVariantId, receivedAt])
-  @@index([productVariantId, receivedAt])
-  @@map("BpoStockBatch")
-}
+  stockBalances          StockBalance[]
+  stockMovements         StockMovement[]
+  stockReceiptLines      StockReceiptLine[]
+  stockAdjustmentLines   StockAdjustmentLine[]
+  stockTransferLinesFrom StockTransferLine[] @relation("TransferLineFromLocation")
+  stockTransferLinesTo   StockTransferLine[] @relation("TransferLineToLocation")
+  saleLines              SaleLine[]
 
-model BpoSaleLineBatchAllocation {
-  id               String  @id @default(cuid())
-  saleLineId       String
-  batchId          String
-  productVariantId String
-  qtyUnits         Decimal @db.Decimal(14, 3)
-
-  saleLine       SaleLine       @relation(fields: [saleLineId], references: [id], onDelete: Cascade)
-  batch          BpoStockBatch  @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
-
-  @@unique([saleLineId, batchId])
-  @@index([batchId])
-  @@index([productVariantId])
-  @@map("BpoSaleLineBatchAllocation")
-}
-
-model BpoStockMovement {
-  id                      String            @id @default(cuid())
-  movementType            BpoMovementType
-  status                  BpoMovementStatus @default(DRAFT)
-  voucherNo               String            @unique
-  sourceSalesPointId      Int?
-  sourceSalesPoint        SalesPoint?       @relation("BpoStockMovementSource", fields: [sourceSalesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  destinationSalesPointId Int?
-  destinationSalesPoint   SalesPoint?       @relation("BpoStockMovementDestination", fields: [destinationSalesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  movementDate            DateTime          @db.Date
-  reason                  String?
-  note                    String?
-  discrepancyNote         String?
-  createdByUserId         String
-  senderValidatedByUserId String?
-  senderValidatedAt       DateTime?
-  botaValidatedByUserId   String?
-  botaValidatedAt         DateTime?
-  rejectedAt              DateTime?
-  rejectedReason          String?
-  postedAt                DateTime?
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
-
-  createdBy         User                   @relation("BpoStockMovementsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  senderValidatedBy User?                  @relation("BpoStockMovementsSenderValidatedBy", fields: [senderValidatedByUserId], references: [id], onDelete: SetNull)
-  botaValidatedBy   User?                  @relation("BpoStockMovementsBotaValidatedBy", fields: [botaValidatedByUserId], references: [id], onDelete: SetNull)
-  lines             BpoStockMovementLine[]
-
-  @@index([movementType, status, movementDate])
-  @@index([sourceSalesPointId, status])
-  @@index([destinationSalesPointId, status])
-  @@map("BpoStockMovement")
-}
-
-model BpoStockMovementLine {
-  id               String   @id @default(cuid())
-  movementId       String
-  productVariantId String
-  voucherQtyUnits  Decimal  @db.Decimal(14, 3)
-  actualQtyUnits   Decimal? @db.Decimal(14, 3)
-  postedQtyUnits   Decimal? @db.Decimal(14, 3)
-  note             String?
-
-  movement       BpoStockMovement @relation(fields: [movementId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  productVariant ProductVariant   @relation(fields: [productVariantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  createdBatches BpoStockBatch[]
-
-  @@index([movementId])
-  @@index([productVariantId])
-  @@map("BpoStockMovementLine")
+  @@unique([salesPointId, name])
+  @@index([salesPointId])
+  @@map("StorageLocation")
 }
 
 model DeliveryOrder {
-  id                  Int              @id @default(autoincrement())
-  deliveryOrderNo     String           @unique
-  dateIssued          DateTime
-  customerId          String
-  orderRef            String?
-  salesPointId        Int
-  salesPoint          SalesPoint       @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  financialYear       Int?
+  id                            Int                @id @default(autoincrement())
+  deliveryOrderNo               String             @unique
+  dateIssued                    DateTime
+  customerId                    String
+  orderRef                      String?
+  salesPointId                  Int
+  salesPoint                    SalesPoint         @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  financialYear                 Int?
   /// Calendar month 1–12 of the working posting period
-  financialMonth      Int?
-  postingCalendarYear Int?
-  createdByUserId     String?
-  status              ValidationStatus @default(PENDING)
-  validatedAt         DateTime?
-  validatedByUserId   String?
-  commercialServiceId String?
-  commercialService    CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  issuerPhoneSnapshot            String?
-  issuerAddressSnapshot          String?
-  commercialServiceNameSnapshot  String?
+  financialMonth                Int?
+  postingCalendarYear           Int?
+  createdByUserId               String?
+  status                        ValidationStatus   @default(PENDING)
+  /// Manager review checkpoint before bulk validation.
+  reviewedAt                    DateTime?
+  reviewedByUserId              String?
+  validatedAt                   DateTime?
+  validatedByUserId             String?
+  /// Cancellation of a previously validated DO (correction workflow).
+  cancelledAt                   DateTime?
+  cancelledByUserId             String?
+  cancelReason                  String?
+  commercialServiceId           String?
+  commercialService             CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  issuerPhoneSnapshot           String?
+  issuerAddressSnapshot         String?
+  commercialServiceNameSnapshot String?
 
   customer    Customer                      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy   User?                         @relation("DeliveryOrdersCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewedBy  User?                         @relation("DeliveryOrdersReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   validatedBy User?                         @relation("DeliveryOrdersValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+  cancelledBy User?                         @relation("DeliveryOrdersCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   details     DeliveryOrderDetails[]
   payments    DeliveryOrderPaymentDetails[]
 
@@ -777,6 +801,8 @@ model DeliveryOrder {
   @@index([salesPointId])
   @@index([financialYear, postingCalendarYear, financialMonth])
   @@index([status, dateIssued])
+  @@index([status, reviewedAt])
+  @@index([status, cancelledAt])
   @@index([commercialServiceId])
   @@map("DeliveryOrder")
 }
@@ -851,4 +877,221 @@ model VehicleConsignmentNote {
   @@index([consignmentNoteNo])
   @@index([status])
   @@map("VehicleConsignmentNote")
+}
+
+/// Yearly sequence for stock receipt document numbers (e.g. SR-2026-000123).
+model StockReceiptSequence {
+  calendarYear Int      @id
+  nextNumber   Int      @default(1)
+  updatedAt    DateTime @updatedAt
+
+  @@map("StockReceiptSequence")
+}
+
+/// Yearly sequence for stock transfer document numbers (e.g. ST-2026-000123).
+model StockTransferSequence {
+  calendarYear Int      @id
+  nextNumber   Int      @default(1)
+  updatedAt    DateTime @updatedAt
+
+  @@map("StockTransferSequence")
+}
+
+/// Yearly sequence for stock adjustment document numbers (e.g. SA-2026-000123).
+model StockAdjustmentSequence {
+  calendarYear Int      @id
+  nextNumber   Int      @default(1)
+  updatedAt    DateTime @updatedAt
+
+  @@map("StockAdjustmentSequence")
+}
+
+/// Denormalized current on-hand quantity per (sales point, product, storage location). Maintained by the stock posting layer only.
+model StockBalance {
+  salesPointId      Int
+  productId         Int
+  storageLocationId Int
+  condition         StockCondition @default(SELLABLE)
+  /// Native UOM per product (Kg for loose, Units for bottled). Always >= 0 when posting succeeds.
+  qty               Decimal  @db.Decimal(14, 3)
+  updatedAt         DateTime @updatedAt
+
+  salesPoint      SalesPoint      @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  product         Product         @relation(fields: [productId], references: [productId], onDelete: Cascade, onUpdate: Cascade)
+  storageLocation StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([salesPointId, productId, storageLocationId, condition])
+  @@index([productId])
+  @@index([storageLocationId])
+  @@map("StockBalance")
+}
+
+/// Immutable ledger: one row per line per posting event. Sign of the balance change is implied by `kind`.
+model StockMovement {
+  id                String            @id @default(cuid())
+  salesPointId      Int
+  productId         Int
+  storageLocationId Int
+  kind              StockMovementKind
+  condition         StockCondition    @default(SELLABLE)
+  /// Always positive; the `kind` decides whether balance went up or down.
+  qty               Decimal           @db.Decimal(14, 3)
+  /// Business date of the movement (matches sale date / receipt date / dispatch date / receive date).
+  occurredAt        DateTime
+  /// User who actioned the posting (validator for sales, poster for receipts/adjustments, dispatcher/receiver for transfers).
+  userId            String
+  /// One of 'RECEIPT' | 'TRANSFER' | 'SALE' | 'ADJUSTMENT' (free text but kept stable in code).
+  sourceKind        String
+  /// Document id of the source (StockReceipt.id, StockTransfer.id, Sale.id, StockAdjustment.id).
+  sourceId          String
+  notes             String?
+  createdAt         DateTime          @default(now())
+
+  salesPoint      SalesPoint      @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product         Product         @relation(fields: [productId], references: [productId], onDelete: Restrict, onUpdate: Cascade)
+  storageLocation StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([salesPointId, productId, occurredAt])
+  @@index([storageLocationId, productId])
+  @@index([sourceKind, sourceId])
+  @@index([occurredAt])
+  @@index([userId, occurredAt])
+  @@map("StockMovement")
+}
+
+/// Header for goods received at a sales point from an external supplier or factory.
+model StockReceipt {
+  id              String         @id @default(cuid())
+  receiptNo       String         @unique
+  salesPointId    Int
+  receivedAt      DateTime       @db.Date
+  /// Free-text source label (e.g. "Mill A", "External supplier - XYZ").
+  supplierLabel   String
+  status          StockDocStatus @default(DRAFT)
+  notes           String?
+  createdByUserId String
+  postedByUserId  String?
+  postedAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  salesPoint SalesPoint         @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy  User               @relation("StockReceiptsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  postedBy   User?              @relation("StockReceiptsPostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
+  lines      StockReceiptLine[]
+
+  @@index([salesPointId, receivedAt])
+  @@index([status, receivedAt])
+  @@map("StockReceipt")
+}
+
+model StockReceiptLine {
+  id                String  @id @default(cuid())
+  receiptId         String
+  productId         Int
+  storageLocationId Int
+  qty               Decimal @db.Decimal(14, 3)
+
+  receipt         StockReceipt      @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product         Product           @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  storageLocation StorageLocation   @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([receiptId])
+  @@index([productId])
+  @@index([storageLocationId])
+  @@map("StockReceiptLine")
+}
+
+/// Header for inter-sales-point transfers. DRAFT -> DISPATCHED (source -qty) -> RECEIVED (dest +qty).
+model StockTransfer {
+  id                 String         @id @default(cuid())
+  transferNo         String         @unique
+  fromSalesPointId   Int
+  toSalesPointId     Int
+  dispatchedAt       DateTime?      @db.Date
+  receivedAt         DateTime?      @db.Date
+  status             StockDocStatus @default(DRAFT)
+  notes              String?
+  createdByUserId    String
+  dispatchedByUserId String?
+  receivedByUserId   String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  fromSalesPoint SalesPoint          @relation("StockTransfersFromSalesPoint", fields: [fromSalesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  toSalesPoint   SalesPoint          @relation("StockTransfersToSalesPoint", fields: [toSalesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy      User                @relation("StockTransfersCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  dispatchedBy   User?               @relation("StockTransfersDispatchedBy", fields: [dispatchedByUserId], references: [id], onDelete: SetNull)
+  receivedBy     User?               @relation("StockTransfersReceivedBy", fields: [receivedByUserId], references: [id], onDelete: SetNull)
+  lines          StockTransferLine[]
+
+  @@index([fromSalesPointId, status])
+  @@index([toSalesPointId, status])
+  @@index([status, dispatchedAt])
+  @@map("StockTransfer")
+}
+
+model StockTransferLine {
+  id                    String  @id @default(cuid())
+  transferId            String
+  productId             Int
+  fromStorageLocationId Int
+  /// Set by the receiver when confirming receipt at the destination sales point.
+  toStorageLocationId   Int?
+  qty                   Decimal @db.Decimal(14, 3)
+
+  transfer            StockTransfer     @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product             Product           @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  fromStorageLocation StorageLocation   @relation("TransferLineFromLocation", fields: [fromStorageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  toStorageLocation   StorageLocation?  @relation("TransferLineToLocation", fields: [toStorageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([transferId])
+  @@index([productId])
+  @@map("StockTransferLine")
+}
+
+/// Header for a manual stock correction at a single sales point (gain or loss). Lines carry signed deltas.
+model StockAdjustment {
+  id              String         @id @default(cuid())
+  adjustmentNo    String         @unique
+  salesPointId    Int
+  occurredAt      DateTime       @db.Date
+  reason          String
+  status          StockDocStatus @default(DRAFT)
+  createdByUserId String
+  postedByUserId  String?
+  postedAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  salesPoint SalesPoint            @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdBy  User                  @relation("StockAdjustmentsCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  postedBy   User?                 @relation("StockAdjustmentsPostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
+  lines      StockAdjustmentLine[]
+
+  @@index([salesPointId, occurredAt])
+  @@index([status, occurredAt])
+  @@map("StockAdjustment")
+}
+
+model StockAdjustmentLine {
+  id                String  @id @default(cuid())
+  adjustmentId      String
+  productId         Int
+  storageLocationId Int
+  /// Signed delta (+ for gain, - for loss). Posting layer guards against driving balance negative.
+  deltaQty          Decimal @db.Decimal(14, 3)
+  /// Optional: when set, this line is a reclassification between conditions at the same location.
+  fromCondition     StockCondition?
+  toCondition       StockCondition?
+
+  adjustment      StockAdjustment   @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product         Product           @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  storageLocation StorageLocation   @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([adjustmentId])
+  @@index([productId])
+  @@index([storageLocationId])
+  @@map("StockAdjustmentLine")
 }

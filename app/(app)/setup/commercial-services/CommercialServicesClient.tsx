@@ -3,6 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  COMMERCIAL_MODULE_KEYS,
+  COMMERCIAL_MODULE_LABELS,
+  type CommercialModuleKey,
+  defaultModulesForSiteKind,
+} from "@/lib/commercial-modules";
 
 export type CommercialServiceRow = {
   id: string;
@@ -13,6 +19,8 @@ export type CommercialServiceRow = {
   address: string | null;
   sortOrder: number;
   isActive: boolean;
+  siteKind: "SALES_POINT" | "FACTORY";
+  enabledModules: CommercialModuleKey[];
 };
 
 const inputClass =
@@ -50,6 +58,10 @@ export function CommercialServicesClient(props: {
   const [address, setAddress] = React.useState("");
   const [sortOrder, setSortOrder] = React.useState("10");
   const [isActive, setIsActive] = React.useState(true);
+  const [siteKind, setSiteKind] = React.useState<"SALES_POINT" | "FACTORY">("SALES_POINT");
+  const [enabledModules, setEnabledModules] = React.useState<Set<CommercialModuleKey>>(
+    () => new Set(defaultModulesForSiteKind("SALES_POINT")),
+  );
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
     text: string;
@@ -69,6 +81,8 @@ export function CommercialServicesClient(props: {
     setAddress("");
     setSortOrder("10");
     setIsActive(true);
+    setSiteKind("SALES_POINT");
+    setEnabledModules(new Set(defaultModulesForSiteKind("SALES_POINT")));
     if (opts?.clearBanner !== false) setBanner(null);
   }
 
@@ -92,6 +106,8 @@ export function CommercialServicesClient(props: {
     setAddress(row.address ?? "");
     setSortOrder(String(row.sortOrder));
     setIsActive(row.isActive);
+    setSiteKind(row.siteKind);
+    setEnabledModules(new Set(row.enabledModules));
     setBanner(null);
     setIsFormOpen(true);
   }
@@ -295,6 +311,66 @@ export function CommercialServicesClient(props: {
               </div>
 
               <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="cs-site-kind">
+                  Site type
+                </label>
+                <div className={fieldControlClass}>
+                  <select
+                    id="cs-site-kind"
+                    name="siteKind"
+                    className={inputClass}
+                    value={siteKind}
+                    onChange={(e) => {
+                      const next = e.target.value as "SALES_POINT" | "FACTORY";
+                      setSiteKind(next);
+                      setEnabledModules(new Set(defaultModulesForSiteKind(next)));
+                    }}
+                  >
+                    <option value="SALES_POINT">Sales points (palm / collection)</option>
+                    <option value="FACTORY">Factories (rubber)</option>
+                  </select>
+                  <p className={hintClass}>
+                    Operational users post to a sales point or a factory depending on this setting.
+                  </p>
+                </div>
+              </div>
+
+              <div className={fieldRowStretchClass}>
+                <span className={fieldLabelStretchClass}>Modules</span>
+                <div className={`${fieldControlClass} space-y-2 py-1`}>
+                  {COMMERCIAL_MODULE_KEYS.map((mod) => {
+                    const checked = enabledModules.has(mod);
+                    return (
+                      <label key={mod} className="flex items-start gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          name="enabledModule"
+                          value={mod}
+                          checked={checked}
+                          onChange={(e) => {
+                            setEnabledModules((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(mod);
+                              else next.delete(mod);
+                              return next;
+                            });
+                          }}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="font-medium">{COMMERCIAL_MODULE_LABELS[mod]}</span>
+                          <span className="opacity-60 font-mono ml-1">({mod})</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                  <p className={hintClass}>
+                    Sidebar and route access for this line are limited to enabled modules.
+                  </p>
+                </div>
+              </div>
+
+              <div className={fieldRowClass}>
                 <span className={fieldLabelClass}>Active</span>
                 <label className={`${fieldControlClass} flex h-8 items-center gap-2 text-xs`}>
                   <input type="hidden" name="isActive" value="0" />
@@ -350,6 +426,8 @@ export function CommercialServicesClient(props: {
                   <th className="p-2 font-medium">Line</th>
                   <th className="p-2 font-medium">Display name</th>
                   <th className="p-2 font-medium">Invoice prefix</th>
+                  <th className="p-2 font-medium">Site</th>
+                  <th className="p-2 font-medium">Modules</th>
                   <th className="p-2 font-medium">Phone</th>
                   <th className="p-2 font-medium min-w-40">Address</th>
                   <th className="p-2 font-medium w-16">Sort</th>
@@ -386,6 +464,15 @@ export function CommercialServicesClient(props: {
                       <div className="text-xs opacity-60 mt-0.5">
                         · {s.invoicePrefix}-YYYY-000001
                       </div>
+                    </td>
+                    <td className="p-2 text-xs opacity-90">
+                      {s.siteKind === "FACTORY" ? "Factory" : "Sales point"}
+                    </td>
+                    <td
+                      className="p-2 text-xs opacity-80 max-w-[10rem] truncate"
+                      title={s.enabledModules.join(", ")}
+                    >
+                      {s.enabledModules.length} enabled
                     </td>
                     <td className="p-2 text-xs opacity-90">
                       {s.phone?.trim() ? s.phone : "—"}

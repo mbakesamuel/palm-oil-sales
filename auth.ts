@@ -3,10 +3,9 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import authConfig from "@/auth.config";
 import { getPrismaClient } from "@/lib/prisma";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
-import type { UserRole } from "@/lib/domain";
 import {
   loadAuthSessionByUserId,
+  loadAuthSessionByUsername,
   mapAuthSessionToToken,
 } from "@/lib/load-auth-session";
 
@@ -22,13 +21,15 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         session,
       });
 
-      if (trigger === "update") {
-        const userId = next.userId as string | undefined;
-        if (!userId) return next;
-        const fresh = await loadAuthSessionByUserId(userId);
-        if (!fresh) return next;
-        return { ...next, ...mapAuthSessionToToken(fresh) };
-      }
+      const userId = next.userId as string | undefined;
+      if (!userId) return next;
+
+      // Initial sign-in: `user` already carries fresh DB fields from authorize().
+      if (user) return next;
+
+      // Subsequent requests: reload role/line assignment (JWT can hold stale globalRole ids).
+      const fresh = await loadAuthSessionByUserId(userId);
+      if (fresh) return { ...next, ...mapAuthSessionToToken(fresh) };
 
       return next;
     },
@@ -47,11 +48,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         const prisma = getPrismaClient();
         const user = await prisma.user.findUnique({
           where: { username },
-          include: {
-            salesPoint: { select: { id: true, name: true } },
-            commercialService: {
-              select: { id: true, name: true, invoicePrefix: true, isActive: true },
-            },
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            passwordHash: true,
+            passwordPlain: true,
+            isActive: true,
           },
         });
         if (!user || !user.isActive) return null;
@@ -70,40 +73,14 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         }
         if (!valid) return null;
 
-        if (roleRequiresSalesPoint(user.role)) {
-          if (!user.salesPoint) return null;
-        }
-
-        const displayName = user.name;
-        const salesPoint =
-          user.salesPoint != null
-            ? { id: user.salesPoint.id, name: user.salesPoint.name }
-            : null;
-
-        const service =
-          typeof user.service === "string" && user.service.trim() !== ""
-            ? user.service.trim()
-            : null;
-
-        const commercialService =
-          user.commercialService?.isActive === true
-            ? {
-                id: user.commercialService.id,
-                name: user.commercialService.name,
-                invoicePrefix: user.commercialService.invoicePrefix,
-              }
-            : null;
+        const authSession = await loadAuthSessionByUsername(username);
+        if (!authSession) return null;
 
         return {
-          id: user.id,
-          name: displayName,
-          email: `${user.username}@users.pos.local`,
-          role: user.role as UserRole,
-          username: user.username,
-          displayName,
-          salesPoint,
-          service,
-          commercialService,
+          id: authSession.userId,
+          name: authSession.displayName,
+          email: `${authSession.username}@users.pos.local`,
+          ...mapAuthSessionToToken(authSession),
         };
       },
     }),

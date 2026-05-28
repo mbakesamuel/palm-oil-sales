@@ -1,13 +1,21 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { getServerSession } from "@/lib/auth-server";
+import { getPermissionsForSession } from "@/lib/access-control";
+import {
+  customerWhereForScope,
+  productWhereForScope,
+  resolveServiceScope,
+} from "@/lib/service-scope";
 import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
 import {
   deleteDeliveryOrder,
+  listPendingDeliveryOrders,
+  cancelValidatedDeliveryOrder,
   loadDeliveryOrderByNo,
   previewDeliveryOrderTaxes,
-  saveDeliveryOrderDetails,
-  saveDeliveryOrderHeader,
-  saveDeliveryOrderPayments,
+  previewStockOnHandForDeliveryOrder,
+  saveDeliveryOrder,
   validateDeliveryOrder,
 } from "./actions";
 import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
@@ -15,12 +23,28 @@ import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function DeliveryOrdersPage() {
+export default async function DeliveryOrdersPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
+  const canValidateDeliveryOrder =
+    session != null
+      ? (await getPermissionsForSession(session))["ui:validate-delivery-orders"]
+      : false;
+  const sp = (await props.searchParams) ?? {};
+  const lookupNoRaw = Array.isArray(sp.no) ? sp.no[0] : sp.no;
+  const initialLookupNo = typeof lookupNoRaw === "string" ? lookupNoRaw : "";
+  const productWhere = productWhereForScope(scope, {
+    productCat: { isBottled: false },
+  });
+  const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, products, salesPoints] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
+        where: customerWhere,
         orderBy: { name: "asc" },
         select: {
           id: true,
@@ -32,12 +56,11 @@ export default async function DeliveryOrdersPage() {
     ),
     prismaRetry(() =>
       prisma.product.findMany({
-        where: { isBottledPalmOil: false },
+        where: productWhere,
         orderBy: [{ productName: "asc" }],
         select: {
           productId: true,
           productName: true,
-          productCat: { select: { productCat: true } },
         },
         take: 200,
       }),
@@ -52,21 +75,24 @@ export default async function DeliveryOrdersPage() {
 
   return (
     <DeliveryOrdersClient
+      initialLookupNo={initialLookupNo}
       customers={customers.map((c) => ({
         id: c.id,
         name: c.name,
-        vatApplies: c.taxRegime.vatApplies,
+        vatApplies: c.taxRegime?.vatApplies ?? false,
       }))}
       products={products}
       salesPoints={salesPoints}
       previewDeliveryOrderTaxesAction={previewDeliveryOrderTaxes}
       loadDeliveryOrderByNo={loadDeliveryOrderByNo}
-      saveDeliveryOrderHeader={saveDeliveryOrderHeader}
-      saveDeliveryOrderDetails={saveDeliveryOrderDetails}
-      saveDeliveryOrderPayments={saveDeliveryOrderPayments}
+      saveDeliveryOrder={saveDeliveryOrder}
       deleteDeliveryOrder={deleteDeliveryOrder}
       validateDeliveryOrder={validateDeliveryOrder}
+      cancelValidatedDeliveryOrder={cancelValidatedDeliveryOrder}
       previewProductUnitPriceAction={previewProductUnitPrice}
+      previewStockOnHandAction={previewStockOnHandForDeliveryOrder}
+      listPendingDeliveryOrdersAction={listPendingDeliveryOrders}
+      canValidateDeliveryOrder={canValidateDeliveryOrder}
     />
   );
 }

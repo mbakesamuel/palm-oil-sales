@@ -38,6 +38,11 @@ async function mergedTaxTypeIdsForRegime(
   return { merged, vatApplies: vatAppliesCheckbox };
 }
 
+function commercialServiceIdFromForm(formData: FormData): string | null {
+  const raw = String(formData.get("commercialServiceId") ?? "").trim();
+  return raw.length ? raw : null;
+}
+
 export async function createTaxRegime(formData: FormData) {
   await assertPermissionKey("route:/tax-regimes");
   const prisma = getPrismaClient();
@@ -56,7 +61,12 @@ export async function createTaxRegime(formData: FormData) {
   );
 
   const regime = await prisma.taxRegime.create({
-    data: { name, kind, vatApplies },
+    data: {
+      name,
+      kind,
+      vatApplies,
+      commercialServiceId: commercialServiceIdFromForm(formData),
+    },
   });
 
   if (merged.length > 0) {
@@ -91,7 +101,12 @@ export async function updateTaxRegime(formData: FormData) {
 
   await prisma.taxRegime.update({
     where: { id },
-    data: { name, kind, vatApplies },
+    data: {
+      name,
+      kind,
+      vatApplies,
+      commercialServiceId: commercialServiceIdFromForm(formData),
+    },
   });
 
   await prisma.taxRegimeTax.deleteMany({ where: { taxRegimeId: id } });

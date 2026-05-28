@@ -24,9 +24,13 @@ async function resolveSalesAndVatForCustomerLikeApp(
     },
   });
   if (!customer) return { ok: false as const, error: "Customer not found." };
+  if (!customer.taxRegimeId || !customer.taxRegime) {
+    return { ok: false as const, error: "Customer has no tax regime." };
+  }
 
   const day = iso(soldAt);
   const asOfStartUtc = new Date(`${day}T00:00:00.000Z`);
+  const taxRegimeKind = customer.taxRegime.kind;
 
   const links = await prisma.taxRegimeTax.findMany({
     where: { taxRegimeId: customer.taxRegimeId },
@@ -63,7 +67,7 @@ async function resolveSalesAndVatForCustomerLikeApp(
 
       const variant = !customer.hasTaxpayerId
         ? TaxRateVariant.NO_TAXPAYER_ID
-        : customer.taxRegime.kind === TaxRegimeKind.REAL
+        : taxRegimeKind === TaxRegimeKind.REAL
           ? TaxRateVariant.REAL
           : TaxRateVariant.SIMPLIFIED;
 
@@ -127,7 +131,8 @@ async function main() {
       },
     });
     console.log("Customer:", customer);
-    const linked = customer?.taxRegime.taxTypeLinks.map((l) => l.taxType.code) ?? [];
+    const linked =
+      customer?.taxRegime?.taxTypeLinks.map((l) => l.taxType.code) ?? [];
     console.log("Linked tax codes:", linked);
 
     const salesTax = await prisma.taxType.findUnique({

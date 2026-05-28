@@ -2,24 +2,49 @@
 
 import { getPrismaClient } from "@/lib/prisma";
 import { assertPermissionKey } from "@/lib/access-control";
+import { getServerSession } from "@/lib/auth-server";
+import {
+  assertCustomerAccessible,
+  assertTaxRegimeForCommercialLine,
+  resolveCustomerCommercialServiceId,
+} from "@/lib/customer-commercial";
+import { parseCustomerTaxFieldsFromForm } from "@/lib/customers/parse-tax-fields";
+import { resolveServiceScope } from "@/lib/service-scope";
 import { CustomerResidency, CustomerType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomer(formData: FormData) {
   await assertPermissionKey("route:/customers");
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  const scope = resolveServiceScope(session);
+
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const email = String(formData.get("email") ?? "").trim() || null;
   const address = String(formData.get("address") ?? "").trim() || null;
-  const hasTaxpayerId = String(formData.get("hasTaxpayerId") ?? "") === "on";
-  const taxpayerIdRaw = String(formData.get("taxpayerId") ?? "").trim() || null;
-  const taxRegimeId = String(formData.get("taxRegime") ?? "").trim();
   const customerTypeRaw = String(formData.get("customerType") ?? "INDUSTRY");
   const residencyRaw = String(formData.get("residency") ?? "LOCAL");
 
   if (!name) throw new Error("Customer name is required.");
-  if (!taxRegimeId) throw new Error("Tax regime is required.");
+
+  const commercialServiceId = resolveCustomerCommercialServiceId(
+    scope,
+    String(formData.get("commercialServiceId") ?? ""),
+  );
+
+  const cs = await prisma.commercialService.findUnique({
+    where: { id: commercialServiceId },
+    select: { id: true, isActive: true },
+  });
+  if (!cs) throw new Error("Commercial line not found.");
+  if (!cs.isActive) throw new Error("Selected commercial line is inactive.");
+
+  const tax = parseCustomerTaxFieldsFromForm(formData);
+  if (tax.taxRegimeId) {
+    await assertTaxRegimeForCommercialLine(prisma, tax.taxRegimeId, commercialServiceId);
+  }
 
   const customerType =
     customerTypeRaw in CustomerType
@@ -31,44 +56,52 @@ export async function createCustomer(formData: FormData) {
       ? (residencyRaw as CustomerResidency)
       : CustomerResidency.LOCAL;
 
-  const taxpayerId = hasTaxpayerId ? taxpayerIdRaw : null;
-  const hasTaxpayerIdFinal = Boolean(taxpayerId);
-
   await prisma.customer.create({
     data: {
+      commercialServiceId,
       name,
       phone,
       email,
       address,
       residency,
-      hasTaxpayerId: hasTaxpayerIdFinal,
-      taxpayerId,
-      taxRegimeId,
+      hasTaxpayerId: tax.hasTaxpayerId,
+      taxpayerId: tax.taxpayerId,
+      taxRegimeId: tax.taxRegimeId,
       customerType,
     },
   });
 
   revalidatePath("/customers");
   revalidatePath("/dashboard");
+  revalidatePath("/pos");
+  revalidatePath("/delivery-orders");
 }
 
 export async function updateCustomer(formData: FormData) {
   await assertPermissionKey("route:/customers");
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  const scope = resolveServiceScope(session);
+
   const id = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const email = String(formData.get("email") ?? "").trim() || null;
   const address = String(formData.get("address") ?? "").trim() || null;
-  const hasTaxpayerId = String(formData.get("hasTaxpayerId") ?? "") === "on";
-  const taxpayerIdRaw = String(formData.get("taxpayerId") ?? "").trim() || null;
-  const taxRegimeId = String(formData.get("taxRegimeId") ?? "").trim();
   const customerTypeRaw = String(formData.get("customerType") ?? "INDUSTRY");
   const residencyRaw = String(formData.get("residency") ?? "LOCAL");
 
   if (!id) throw new Error("Missing customer id.");
   if (!name) throw new Error("Customer name is required.");
-  if (!taxRegimeId) throw new Error("Tax regime is required.");
+
+  const existing = await assertCustomerAccessible(prisma, session, scope, id);
+  const commercialServiceId = existing.commercialServiceId;
+
+  const tax = parseCustomerTaxFieldsFromForm(formData);
+  if (tax.taxRegimeId) {
+    await assertTaxRegimeForCommercialLine(prisma, tax.taxRegimeId, commercialServiceId);
+  }
 
   const customerType =
     customerTypeRaw in CustomerType
@@ -79,9 +112,6 @@ export async function updateCustomer(formData: FormData) {
     residencyRaw in CustomerResidency
       ? (residencyRaw as CustomerResidency)
       : CustomerResidency.LOCAL;
-
-  const taxpayerId = hasTaxpayerId ? taxpayerIdRaw : null;
-  const hasTaxpayerIdFinal = Boolean(taxpayerId);
 
   await prisma.customer.update({
     where: { id },
@@ -91,15 +121,17 @@ export async function updateCustomer(formData: FormData) {
       email,
       address,
       residency,
-      hasTaxpayerId: hasTaxpayerIdFinal,
-      taxpayerId,
-      taxRegimeId,
+      hasTaxpayerId: tax.hasTaxpayerId,
+      taxpayerId: tax.taxpayerId,
+      taxRegimeId: tax.taxRegimeId,
       customerType,
     },
   });
 
   revalidatePath("/customers");
   revalidatePath("/dashboard");
+  revalidatePath("/pos");
+  revalidatePath("/delivery-orders");
 }
 
 export async function saveCustomer(formData: FormData) {
@@ -112,12 +144,19 @@ export async function saveCustomer(formData: FormData) {
 export async function deleteCustomer(formData: FormData) {
   await assertPermissionKey("route:/customers");
   const prisma = getPrismaClient();
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  const scope = resolveServiceScope(session);
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) throw new Error("Missing customer id.");
+
+  await assertCustomerAccessible(prisma, session, scope, id);
 
   await prisma.customer.delete({ where: { id } });
 
   revalidatePath("/customers");
   revalidatePath("/dashboard");
+  revalidatePath("/pos");
+  revalidatePath("/delivery-orders");
 }
-

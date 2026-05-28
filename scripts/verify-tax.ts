@@ -29,9 +29,13 @@ async function resolveTaxesForCustomerLikeApp(
     },
   });
   if (!customer) return { ok: false as const, error: "Customer not found." };
+  if (!customer.taxRegimeId || !customer.taxRegime) {
+    return { ok: false as const, error: "Customer has no tax regime." };
+  }
 
   const day = isoDate(soldAt);
   const asOfStartUtc = new Date(`${day}T00:00:00.000Z`);
+  const taxRegimeKind = customer.taxRegime.kind;
 
   const links = await prisma.taxRegimeTax.findMany({
     where: { taxRegimeId: customer.taxRegimeId },
@@ -67,7 +71,7 @@ async function resolveTaxesForCustomerLikeApp(
 
       const variant = !customer.hasTaxpayerId
         ? TaxRateVariant.NO_TAXPAYER_ID
-        : customer.taxRegime.kind === TaxRegimeKind.REAL
+        : taxRegimeKind === TaxRegimeKind.REAL
           ? TaxRateVariant.REAL
           : TaxRateVariant.SIMPLIFIED;
 
@@ -182,17 +186,35 @@ async function main() {
       },
     });
 
-    // Ensure regimes exist (by unique name)
-    const simplifiedRegime = await prisma.taxRegime.upsert({
-      where: { name: "__tax_verify__SIMPLIFIED" },
-      update: { kind: TaxRegimeKind.SIMPLIFIED, vatApplies: true },
-      create: { name: "__tax_verify__SIMPLIFIED", kind: TaxRegimeKind.SIMPLIFIED, vatApplies: true },
+    const defaultLine = await prisma.commercialService.findFirst({
+      where: { code: "default" },
+      select: { id: true },
     });
-    const realRegime = await prisma.taxRegime.upsert({
-      where: { name: "__tax_verify__REAL" },
-      update: { kind: TaxRegimeKind.REAL, vatApplies: true },
-      create: { name: "__tax_verify__REAL", kind: TaxRegimeKind.REAL, vatApplies: true },
-    });
+    if (!defaultLine) {
+      throw new Error('No commercial service with code "default". Run app setup first.');
+    }
+
+    async function ensureVerifyRegime(name: string, kind: TaxRegimeKind) {
+      const existing = await prisma.taxRegime.findFirst({
+        where: { name, commercialServiceId: null },
+        select: { id: true },
+      });
+      if (existing) {
+        return prisma.taxRegime.update({
+          where: { id: existing.id },
+          data: { kind, vatApplies: true },
+        });
+      }
+      return prisma.taxRegime.create({
+        data: { name, kind, vatApplies: true, commercialServiceId: null },
+      });
+    }
+
+    const simplifiedRegime = await ensureVerifyRegime(
+      "__tax_verify__SIMPLIFIED",
+      TaxRegimeKind.SIMPLIFIED,
+    );
+    const realRegime = await ensureVerifyRegime("__tax_verify__REAL", TaxRegimeKind.REAL);
 
     // Link both taxes to regimes (idempotent upsert on composite PK)
     for (const regime of [simplifiedRegime, realRegime]) {
@@ -211,6 +233,7 @@ async function main() {
     // Create customers to validate resolver outcomes
     const c1 = await prisma.customer.create({
       data: {
+        commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_Simplified_WithTPN",
         customerType: "RETAIL",
         residency: "LOCAL",
@@ -224,6 +247,7 @@ async function main() {
 
     const c2 = await prisma.customer.create({
       data: {
+        commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_Real_NoTPN",
         customerType: "RETAIL",
         residency: "LOCAL",
@@ -237,6 +261,7 @@ async function main() {
 
     const c3 = await prisma.customer.create({
       data: {
+        commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_Industry",
         customerType: "INDUSTRY",
         residency: "LOCAL",

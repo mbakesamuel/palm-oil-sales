@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getPrismaClient } from "@/lib/prisma";
 import { saveCommercialService } from "@/app/(app)/setup/commercial-services/actions";
 import { DEFAULT_COMMERCIAL_SERVICE_CODE } from "@/lib/commercial-service";
+import { parseEnabledModulesJson } from "@/lib/commercial-modules";
 import {
   CommercialServicesClient,
   type CommercialServiceRow,
@@ -26,20 +27,18 @@ export default async function CommercialServicesSetupPage() {
     address: s.address,
     sortOrder: s.sortOrder,
     isActive: s.isActive,
+    siteKind: s.siteKind,
+    enabledModules: parseEnabledModulesJson(s.enabledModules),
   }));
 
   return (
     <div className="space-y-8">
       <div className="space-y-1">
-        <p className="text-sm opacity-75">
-          <Link href="/setup" className="underline underline-offset-4">
-            ← Company Parameters
-          </Link>
-        </p>
-        <h1 className="text-2xl font-semibold">Services</h1>
+              <h1 className="text-2xl font-semibold">Sales Services</h1>
         <p className="text-sm opacity-75 max-w-2xl">
-          Each line (e.g. Palm Oil Sales, Rubber Sales) has its own invoice prefix, letterhead phone and
-          address, and independent invoice numbering per calendar year. Assign users to a line under{" "}
+          Each line (Palm Oil Sales, Rubber Sales) has its own invoice
+          prefix, letterhead phone and address, and independent invoice
+          numbering per calendar year. All users except those with Global roles must belong to a service line. Go to {" "}
           <Link href="/users" className="underline underline-offset-4">
             Users
           </Link>

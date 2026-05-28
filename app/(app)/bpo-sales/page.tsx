@@ -4,7 +4,7 @@ import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { getBotaSalesPointId } from "@/lib/bpo";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
-import { createBpoOutboundSale } from "@/app/(app)/stock/bpo-outbound/actions";
+import { createBpoOutboundSale } from "@/app/(app)/bpo-sales/actions";
 import { BpoSalesClient } from "./BpoSalesClient";
 
 export const dynamic = "force-dynamic";
@@ -18,19 +18,19 @@ export default async function BpoSalesPage() {
   const scoped = roleRequiresSalesPoint(session.role);
   const canPost = botaSalesPointId != null && (!scoped || session.salesPoint?.id === botaSalesPointId);
 
-  const [variants, sales] = await Promise.all([
+  const [products, sales] = await Promise.all([
     prismaRetry(() =>
-      prisma.productVariant.findMany({
-        where: { isActive: true, product: { isBottledPalmOil: true } },
-        orderBy: [{ product: { productName: "asc" } }, { name: "asc" }],
-        select: { id: true, name: true, product: { select: { productName: true } } },
+      prisma.product.findMany({
+        where: { productCat: { isBottled: true } },
+        orderBy: { productName: "asc" },
+        select: { productId: true, productName: true },
       }),
     ),
     prismaRetry(() =>
       prisma.sale.findMany({
         where: {
           ...(botaSalesPointId != null ? { salesPointId: botaSalesPointId } : {}),
-          lines: { some: { product: { isBottledPalmOil: true } } },
+          lines: { some: { product: { productCat: { isBottled: true } } } },
         },
         orderBy: { createdAt: "desc" },
         take: 50,
@@ -42,11 +42,9 @@ export default async function BpoSalesPage() {
             },
           },
           lines: {
-            where: { product: { isBottledPalmOil: true } },
+            where: { product: { productCat: { isBottled: true } } },
             include: {
-              productVariant: {
-                select: { name: true, product: { select: { productName: true } } },
-              },
+              product: { select: { productName: true } },
             },
           },
         },
@@ -56,9 +54,9 @@ export default async function BpoSalesPage() {
 
   return (
     <BpoSalesClient
-      variants={variants.map((v) => ({
-        id: v.id,
-        label: `${v.product.productName} - ${v.name}`,
+      products={products.map((p) => ({
+        productId: p.productId,
+        label: p.productName,
       }))}
       sales={sales.map((s) => ({
         id: s.id,
@@ -71,9 +69,7 @@ export default async function BpoSalesPage() {
           ? `${s.bpoEmployeeCreditSale.employee.matricule} · ${s.bpoEmployeeCreditSale.employee.name} · ${s.bpoEmployeeCreditSale.employee.estate}`
           : null,
         lines: s.lines.map((l) => ({
-          variantLabel: l.productVariant
-            ? `${l.productVariant.product.productName} - ${l.productVariant.name}`
-            : "Bottled Palm Oil",
+          productLabel: l.product.productName,
           qtyUnits: l.qtyUnits?.toString() ?? "0",
           lineGross: l.lineGross.toString(),
         })),

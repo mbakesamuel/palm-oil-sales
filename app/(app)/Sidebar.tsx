@@ -5,21 +5,24 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { UserRole } from "@prisma/client";
 import { UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleLabel } from "@/lib/auth-display";
+import { sessionRoleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
-import { getRolePermissionsAction } from "@/app/(app)/setup/permissions/actions";
+import { getPermissionsForSessionAction } from "@/app/(app)/setup/permissions/actions";
 import { navIconForGroup, navIconForHref } from "@/lib/nav-icons";
 import { SignOutButton } from "../forbidden/SignOutButton";
 
 type NavItem = { href: string; label: string };
 
+type NavSection = { sectionLabel: string; items: NavItem[] };
+
 type NavGroupConfig = {
   id: string;
   label: string;
   items: NavItem[];
+  /** When set (e.g. Reports), render labeled sub-sections instead of one flat list. */
+  sections?: NavSection[];
   collapsedHref: string;
   collapsedTitle: string;
   overview?: { href: string; label: string };
@@ -53,13 +56,14 @@ function NavGroup(props: {
   const {
     label,
     items,
+    sections,
     collapsedHref,
     collapsedTitle,
     overview,
     id,
   } = config;
 
-  const GroupIcon = navIconForGroup(id);
+  const groupIcon = navIconForGroup(id);
   const groupActive = groupContainsPath(pathname, items, overview?.href);
 
   return (
@@ -70,7 +74,10 @@ function NavGroup(props: {
         title={collapsedTitle}
         aria-label={collapsedTitle}
       >
-        <GroupIcon className="size-5 shrink-0" aria-hidden />
+        {React.createElement(groupIcon, {
+          className: "size-5 shrink-0",
+          "aria-hidden": true,
+        })}
       </Link>
 
       <div className="hidden lg:block w-full">
@@ -81,7 +88,10 @@ function NavGroup(props: {
             title={collapsedTitle}
             aria-label={collapsedTitle}
           >
-            <GroupIcon className="size-5 shrink-0" aria-hidden />
+            {React.createElement(groupIcon, {
+              className: "size-5 shrink-0",
+              "aria-hidden": true,
+            })}
           </Link>
         ) : (
           <div className="rounded-md border border-border">
@@ -109,24 +119,53 @@ function NavGroup(props: {
                     {overview.label}
                   </Link>
                 ) : null}
-                {items.map((item) => {
-                  const ItemIcon = navIconForHref(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={[
-                        "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
-                        pathMatchesItem(pathname, item.href)
-                          ? "bg-brand/15 font-medium"
-                          : "",
-                      ].join(" ")}
-                    >
-                      <ItemIcon className="size-4 shrink-0 opacity-80" aria-hidden />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
+                {sections && sections.length > 0
+                  ? sections.map((section) => (
+                      <div key={section.sectionLabel} className="pt-1 first:pt-0">
+                        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide opacity-60">
+                          {section.sectionLabel}
+                        </div>
+                        {section.items.map((item) => {
+                          const ItemIcon = navIconForHref(item.href);
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              className={[
+                                "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
+                                pathMatchesItem(pathname, item.href)
+                                  ? "bg-brand/15 font-medium"
+                                  : "",
+                              ].join(" ")}
+                            >
+                              <ItemIcon
+                                className="size-4 shrink-0 opacity-80"
+                                aria-hidden
+                              />
+                              <span>{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ))
+                  : items.map((item) => {
+                      const ItemIcon = navIconForHref(item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={[
+                            "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
+                            pathMatchesItem(pathname, item.href)
+                              ? "bg-brand/15 font-medium"
+                              : "",
+                          ].join(" ")}
+                        >
+                          <ItemIcon className="size-4 shrink-0 opacity-80" aria-hidden />
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
               </div>
             ) : null}
           </div>
@@ -145,6 +184,7 @@ export function Sidebar(props: {
   setupNav: NavItem[];
   operationsNav: NavItem[];
   reportNav?: NavItem[];
+  reportNavSections?: NavSection[];
 }) {
   const {
     brand,
@@ -155,6 +195,7 @@ export function Sidebar(props: {
     setupNav,
     operationsNav,
     reportNav = [],
+    reportNavSections,
   } = props;
   const pathname = usePathname();
   const { status, session } = useAuth();
@@ -163,17 +204,28 @@ export function Sidebar(props: {
 
   React.useEffect(() => {
     if (status !== "ready") return;
-    if (!session?.role) return;
+    if (!session?.userId) return;
     let alive = true;
     setPerm(null);
-    void getRolePermissionsAction(session.role as UserRole).then((m) => {
-      if (!alive) return;
-      setPerm(m as unknown as Record<string, boolean>);
-    });
+    void getPermissionsForSessionAction()
+      .then((m) => {
+        if (!alive) return;
+        setPerm(m as unknown as Record<string, boolean>);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPerm(null);
+      });
     return () => {
       alive = false;
     };
-  }, [status, session?.role]);
+  }, [
+    status,
+    session?.userId,
+    session?.role,
+    session?.commercialServiceRole?.id,
+    session?.commercialService?.id,
+  ]);
 
   function canRoute(href: string): boolean {
     if (!perm) return true;
@@ -199,6 +251,17 @@ export function Sidebar(props: {
     [reportNav, perm],
   );
 
+  const filteredReportNavSections = React.useMemo(() => {
+    if (!reportNavSections?.length) return undefined;
+    return reportNavSections
+      .map((section) => ({
+        sectionLabel: section.sectionLabel,
+        items: section.items.filter((i) => canRoute(i.href)),
+      }))
+      .filter((s) => s.items.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportNavSections, perm]);
+
   const setupGroup: NavGroupConfig = React.useMemo(
     () => ({
       id: "setup",
@@ -217,7 +280,7 @@ export function Sidebar(props: {
       label: "Operations",
       items: filteredOpsNav,
       collapsedHref: "/delivery-orders",
-      collapsedTitle: "Operations — delivery orders, sales, stock",
+      collapsedTitle: "Operations — delivery orders and sales",
     }),
     [filteredOpsNav],
   );
@@ -228,11 +291,12 @@ export function Sidebar(props: {
       id: "reports",
       label: "Reports",
       items: filteredReportNav,
+      sections: filteredReportNavSections,
       collapsedHref: "/reports",
       collapsedTitle: "Reports — printable lists",
       overview: { href: "/reports", label: "Overview" },
     };
-  }, [filteredReportNav]);
+  }, [filteredReportNav, filteredReportNavSections]);
 
   const navGroups = React.useMemo(
     () =>
@@ -411,7 +475,7 @@ export function Sidebar(props: {
           <>
             <div
               className="flex flex-row gap-1 items-center shrink-0 lg:hidden"
-              title={`${session.displayName} · ${roleLabel(session.role)}`}
+              title={`${session.displayName} · ${sessionRoleLabel(session)}`}
             >
               <div className={[RAIL_LINK, "border border-transparent"].join(" ")} aria-hidden>
                 <UserRound className="size-5 shrink-0 opacity-90" />
@@ -450,9 +514,9 @@ export function Sidebar(props: {
               </div>
               <div
                 className="opacity-70 truncate"
-                title={roleLabel(session.role)}
+                title={sessionRoleLabel(session)}
               >
-                {roleLabel(session.role)}
+                {sessionRoleLabel(session)}
               </div>
               {session.salesPoint ? (
                 <div

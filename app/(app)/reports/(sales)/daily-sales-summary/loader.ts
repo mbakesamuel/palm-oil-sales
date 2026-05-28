@@ -1,0 +1,380 @@
+import { CustomerType, Prisma, ValidationStatus } from "@prisma/client";
+import type { AuthSession } from "@/lib/auth-session";
+import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { getPrismaClient } from "@/lib/prisma";
+import { prismaRetry } from "@/lib/prisma-retry";
+import {
+  firstDayOfCalendarMonth,
+  lastDayOfCalendarMonth,
+  normalizeIsoDateInput,
+  utcIsoDateToday,
+} from "@/lib/posting-calendar";
+import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
+
+const z = new Prisma.Decimal(0);
+
+export type DailySaleRow = {
+  id: string;
+  invoiceNo: string;
+  soldAt: Date;
+  dateIssued: Date;
+  vehicleNumber: string;
+  deliveryOrderNo: string | null;
+  customerNameSnapshot: string;
+  customer: { customerType: CustomerType; name: string } | null;
+  qtyKg: Prisma.Decimal;
+  customerType: CustomerType;
+};
+
+export type DailySummaryReportData = {
+  scopedToSalesPoint: boolean;
+  assignedSalesPointId: number | null;
+  assignedSalesPointName: string | null;
+  monthFilter: Awaited<
+    ReturnType<typeof resolveReportWorkingMonthFilter>
+  >["monthFilter"];
+  /** Inclusive calendar bounds for the working month (UTC ISO dates). */
+  monthFirstIso: string | null;
+  monthLastIso: string | null;
+  hasOpenFy: boolean;
+  /** @deprecated Use `dateFromIso` / `dateToIso`; kept when from === to. */
+  selectedIso: string | null;
+  dateFromIso: string | null;
+  dateToIso: string | null;
+  dateInvalid: boolean;
+  rangeInvalid: boolean;
+  rows: DailySaleRow[];
+  totalsByType: Map<CustomerType, Prisma.Decimal>;
+  grandQty: Prisma.Decimal;
+  doMetaByNo: Map<string, { dateIssued: Date; balanceKg: Prisma.Decimal }>;
+};
+
+export type DailySalesSummaryDateParams = {
+  date?: string | null;
+  from?: string | null;
+  to?: string | null;
+};
+
+function utcInclusiveRange(fromIso: string, toIso: string): { gte: Date; lt: Date } {
+  const gte = new Date(`${fromIso}T00:00:00.000Z`);
+  const lt = new Date(`${toIso}T00:00:00.000Z`);
+  lt.setUTCDate(lt.getUTCDate() + 1);
+  return { gte, lt };
+}
+
+function isoInMonth(iso: string, monthFirst: string, monthLast: string): boolean {
+  return iso >= monthFirst && iso <= monthLast;
+}
+
+function resolveDailySalesDateRange(
+  raw: DailySalesSummaryDateParams,
+  monthFilter: DailySummaryReportData["monthFilter"],
+): {
+  dateFromIso: string | null;
+  dateToIso: string | null;
+  dateInvalid: boolean;
+  rangeInvalid: boolean;
+} {
+  const legacy = normalizeIsoDateInput(String(raw.date ?? ""));
+  const fromRaw = normalizeIsoDateInput(String(raw.from ?? legacy ?? ""));
+  const toRaw = normalizeIsoDateInput(String(raw.to ?? raw.from ?? legacy ?? ""));
+
+  if (!monthFilter) {
+    return {
+      dateFromIso: null,
+      dateToIso: null,
+      dateInvalid: Boolean(fromRaw || toRaw || legacy),
+      rangeInvalid: false,
+    };
+  }
+
+  const monthFirst = firstDayOfCalendarMonth(
+    monthFilter.postingCalendarYear,
+    monthFilter.financialMonth,
+  );
+  const monthLast = lastDayOfCalendarMonth(
+    monthFilter.postingCalendarYear,
+    monthFilter.financialMonth,
+  );
+
+  let dateInvalid = false;
+  let rangeInvalid = false;
+
+  let dateFromIso: string | null = null;
+  let dateToIso: string | null = null;
+
+  if (fromRaw || toRaw) {
+    const fromCandidate = fromRaw || toRaw;
+    const toCandidate = toRaw || fromRaw;
+    if (
+      !fromCandidate ||
+      !toCandidate ||
+      !isoInMonth(fromCandidate, monthFirst, monthLast) ||
+      !isoInMonth(toCandidate, monthFirst, monthLast)
+    ) {
+      dateInvalid = true;
+    } else if (fromCandidate > toCandidate) {
+      rangeInvalid = true;
+    } else {
+      dateFromIso = fromCandidate;
+      dateToIso = toCandidate;
+    }
+  } else {
+    const today = utcIsoDateToday();
+    const endDefault = today >= monthFirst && today <= monthLast ? today : monthLast;
+    dateFromIso = monthFirst;
+    dateToIso = endDefault;
+  }
+
+  return { dateFromIso, dateToIso, dateInvalid, rangeInvalid };
+}
+
+export function formatDailySalesDateRangeLabel(
+  fromIso: string | null,
+  toIso: string | null,
+): string | null {
+  if (!fromIso || !toIso) return null;
+  if (fromIso === toIso) return fromIso;
+  return `${fromIso} – ${toIso}`;
+}
+
+function invoicedKgByProductFromSales(
+  validatedSales: Array<{
+    lines: Array<{ productId: number; qtyKg: Prisma.Decimal }>;
+  }>,
+): Map<number, Prisma.Decimal> {
+  const map = new Map<number, Prisma.Decimal>();
+  for (const s of validatedSales) {
+    for (const l of s.lines) {
+      map.set(l.productId, (map.get(l.productId) ?? z).add(l.qtyKg));
+    }
+  }
+  return map;
+}
+
+function doBalanceKgTotal(
+  details: Array<{ productId: number; orderQty: number }>,
+  invoicedKgByProduct: Map<number, Prisma.Decimal>,
+): Prisma.Decimal {
+  let acc = z;
+  for (const d of details) {
+    const inv = invoicedKgByProduct.get(d.productId) ?? z;
+    acc = acc.add(new Prisma.Decimal(d.orderQty).sub(inv));
+  }
+  return acc;
+}
+
+/** Load the daily-sales-summary report dataset for the active session. */
+export async function loadDailySalesSummary(
+  session: AuthSession,
+  rawParams?: DailySalesSummaryDateParams | string | null,
+): Promise<DailySummaryReportData> {
+  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const assignedSalesPointId = session.salesPoint?.id ?? null;
+  const assignedSalesPointName = session.salesPoint?.name ?? null;
+
+  const params: DailySalesSummaryDateParams =
+    typeof rawParams === "string"
+      ? { date: rawParams }
+      : (rawParams ?? {});
+
+  const [{ monthFilter, hasOpenFy }, prisma] = await Promise.all([
+    resolveReportWorkingMonthFilter(),
+    getPrismaClient(),
+  ]);
+
+  const monthFirstIso = monthFilter
+    ? firstDayOfCalendarMonth(
+        monthFilter.postingCalendarYear,
+        monthFilter.financialMonth,
+      )
+    : null;
+  const monthLastIso = monthFilter
+    ? lastDayOfCalendarMonth(
+        monthFilter.postingCalendarYear,
+        monthFilter.financialMonth,
+      )
+    : null;
+
+  const { dateFromIso, dateToIso, dateInvalid, rangeInvalid } =
+    resolveDailySalesDateRange(params, monthFilter);
+
+  const selectedIso =
+    dateFromIso && dateToIso && dateFromIso === dateToIso ? dateFromIso : null;
+
+  const saleScope: Prisma.SaleWhereInput =
+    scopedToSalesPoint && assignedSalesPointId != null
+      ? {
+          salesPointId: assignedSalesPointId,
+          vehicleNumber: { not: "BPO-OUTBOUND" },
+        }
+      : { vehicleNumber: { not: "BPO-OUTBOUND" } };
+
+  const monthWhere: Prisma.SaleWhereInput = monthFilter
+    ? {
+        financialYear: monthFilter.financialYear,
+        postingCalendarYear: monthFilter.postingCalendarYear,
+        financialMonth: monthFilter.financialMonth,
+      }
+    : {};
+
+  let sales: Array<{
+    id: string;
+    invoiceNo: string;
+    soldAt: Date;
+    dateIssued: Date;
+    vehicleNumber: string;
+    deliveryOrderNo: string | null;
+    customerNameSnapshot: string;
+    customer: { customerType: CustomerType; name: string } | null;
+    lines: Array<{ qtyKg: Prisma.Decimal }>;
+  }> = [];
+
+  let doMetaByNo = new Map<
+    string,
+    { dateIssued: Date; balanceKg: Prisma.Decimal }
+  >();
+
+  if (dateFromIso && dateToIso && !dateInvalid && !rangeInvalid) {
+    const { gte, lt } = utcInclusiveRange(dateFromIso, dateToIso);
+    sales = await prismaRetry(() =>
+      prisma.sale.findMany({
+        where: {
+          ...saleScope,
+          ...monthWhere,
+          status: ValidationStatus.VALIDATED,
+          soldAt: { gte, lt },
+        },
+        orderBy: [{ soldAt: "asc" }, { invoiceNo: "asc" }],
+        select: {
+          id: true,
+          invoiceNo: true,
+          soldAt: true,
+          dateIssued: true,
+          vehicleNumber: true,
+          deliveryOrderNo: true,
+          customerNameSnapshot: true,
+          customer: { select: { customerType: true, name: true } },
+          lines: { select: { qtyKg: true } },
+        },
+      }),
+    );
+
+    const doNos = [
+      ...new Set(
+        sales
+          .map((s) => s.deliveryOrderNo)
+          .filter((n): n is string => Boolean(n)),
+      ),
+    ];
+
+    if (doNos.length > 0) {
+      const [orders, validatedSalesForDos] = await Promise.all([
+        prismaRetry(() =>
+          prisma.deliveryOrder.findMany({
+            where: { deliveryOrderNo: { in: doNos } },
+            select: {
+              deliveryOrderNo: true,
+              dateIssued: true,
+              details: { select: { productId: true, orderQty: true } },
+            },
+          }),
+        ),
+        prismaRetry(() =>
+          prisma.sale.findMany({
+            where: {
+              deliveryOrderNo: { in: doNos },
+              status: ValidationStatus.VALIDATED,
+              ...saleScope,
+            },
+            select: {
+              deliveryOrderNo: true,
+              lines: { select: { productId: true, qtyKg: true } },
+            },
+          }),
+        ),
+      ]);
+
+      const validatedByDo = new Map<string, typeof validatedSalesForDos>();
+      for (const s of validatedSalesForDos) {
+        const k = s.deliveryOrderNo ?? "";
+        if (!k) continue;
+        const arr = validatedByDo.get(k) ?? [];
+        arr.push(s);
+        validatedByDo.set(k, arr);
+      }
+
+      doMetaByNo = new Map();
+      for (const o of orders) {
+        const invMap = invoicedKgByProductFromSales(
+          validatedByDo.get(o.deliveryOrderNo) ?? [],
+        );
+        const balanceKg = doBalanceKgTotal(o.details, invMap);
+        doMetaByNo.set(o.deliveryOrderNo, {
+          dateIssued: o.dateIssued,
+          balanceKg,
+        });
+      }
+    }
+  }
+
+  const rows: DailySaleRow[] = sales.map((s) => ({
+    ...s,
+    qtyKg: s.lines.reduce((a, l) => a.add(l.qtyKg), z),
+    customerType: s.customer?.customerType ?? CustomerType.INDUSTRY,
+  }));
+
+  const totalsByType = new Map<CustomerType, Prisma.Decimal>();
+  for (const r of rows) {
+    totalsByType.set(
+      r.customerType,
+      (totalsByType.get(r.customerType) ?? z).add(r.qtyKg),
+    );
+  }
+  const grandQty = rows.reduce((a, r) => a.add(r.qtyKg), z);
+
+  return {
+    scopedToSalesPoint,
+    assignedSalesPointId,
+    assignedSalesPointName,
+    monthFilter,
+    monthFirstIso,
+    monthLastIso,
+    hasOpenFy,
+    selectedIso,
+    dateFromIso,
+    dateToIso,
+    dateInvalid,
+    rangeInvalid,
+    rows,
+    totalsByType,
+    grandQty,
+    doMetaByNo,
+  };
+}
+
+export const DAILY_SALES_CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
+  [CustomerType.INDUSTRY]: "Industry",
+  [CustomerType.WHOLE_SALE]: "Whole sale",
+  [CustomerType.RETAIL]: "Retail",
+  [CustomerType.WORKER]: "Worker",
+};
+
+export const DAILY_SALES_TYPE_ORDER: CustomerType[] = [
+  CustomerType.INDUSTRY,
+  CustomerType.WHOLE_SALE,
+  CustomerType.RETAIL,
+  CustomerType.WORKER,
+];
+
+export function fmtKg(d: Prisma.Decimal): string {
+  const n = Number(d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP));
+  return new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 3,
+    minimumFractionDigits: 0,
+  }).format(n);
+}
+
+export function fmtDate(d: Date): string {
+  return d.toLocaleString("en-GB", { dateStyle: "medium" });
+}

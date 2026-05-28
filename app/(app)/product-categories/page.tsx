@@ -9,7 +9,12 @@ export default async function ProductCategoriesPage() {
   const prisma = getPrismaClient();
   const categories = await prisma.productCat.findMany({
     orderBy: { productCat: "asc" },
-    select: { productCatId: true, productCat: true, productCode: true },
+    select: {
+      productCatId: true,
+      productCat: true,
+      productCode: true,
+      isMain: true,
+    },
   });
 
   return (

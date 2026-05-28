@@ -81,27 +81,18 @@ export default {
     },
     async jwt({ token, user }) {
       if (user) {
-        const u = user as {
-          id: string;
-          role: UserRole;
-          username: string;
-          displayName: string;
-          salesPoint: { id: number; name: string } | null;
-          service?: string | null;
-          commercialService?: {
-            id: string;
-            name: string;
-            invoicePrefix: string;
-          } | null;
-        };
-        token.sub = u.id;
-        token.userId = u.id;
-        token.role = u.role;
-        token.username = u.username;
-        token.displayName = u.displayName;
-        token.salesPoint = u.salesPoint;
+        const u = user as Record<string, unknown>;
+        token.sub = u.userId as string;
+        token.userId = u.userId as string;
+        token.role = u.role as UserRole;
+        token.username = u.username as string;
+        token.displayName = u.displayName as string;
+        token.salesPoint = u.salesPoint ?? null;
+        token.factory = u.factory ?? null;
         token.service = u.service ?? null;
         token.commercialService = u.commercialService ?? null;
+        token.commercialServiceRole = u.commercialServiceRole ?? null;
+        token.globalRole = u.globalRole ?? null;
       }
       return token;
     },
@@ -110,27 +101,20 @@ export default {
       session.username = token.username as string;
       session.displayName = (token.displayName as string) ?? "";
       session.role = token.role as UserRole;
+      session.globalRole =
+        (token.globalRole as { id: string; code: string; displayName: string } | null) ?? null;
       session.salesPoint =
         (token.salesPoint as { id: number; name: string } | null | undefined) ?? null;
+      session.factory =
+        (token.factory as { id: string; name: string } | null | undefined) ?? null;
       session.service =
         typeof token.service === "string" && token.service.trim() !== ""
           ? token.service.trim()
           : null;
-      const csRaw = token.commercialService as
-        | { id: string; name: string; invoicePrefix: string }
-        | null
-        | undefined;
       session.commercialService =
-        csRaw &&
-        typeof csRaw.id === "string" &&
-        typeof csRaw.name === "string" &&
-        typeof csRaw.invoicePrefix === "string"
-          ? {
-              id: csRaw.id,
-              name: csRaw.name,
-              invoicePrefix: csRaw.invoicePrefix,
-            }
-          : null;
+        (token.commercialService as typeof session.commercialService) ?? null;
+      session.commercialServiceRole =
+        (token.commercialServiceRole as typeof session.commercialServiceRole) ?? null;
       if (session.user) {
         session.user.id = token.userId as string;
         session.user.name = session.displayName;

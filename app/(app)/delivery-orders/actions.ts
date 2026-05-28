@@ -1,6 +1,6 @@
 "use server";
 
-import { assertPermissionKey } from "@/lib/access-control";
+import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
 import {
@@ -19,7 +19,6 @@ import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
   canCreateOrEditDeliveryOrderDraft,
-  canValidateDeliveryOrder,
   roleSeesOnlyValidatedDeliveryOrders,
 } from "@/lib/auth-roles";
 import type { UserRole as AppUserRole } from "@/lib/domain";
@@ -28,6 +27,13 @@ import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
+import { validateCustomerForCommercialPosting } from "@/lib/customer-commercial";
+import {
+  commercialServiceErrorForOperations,
+  commercialServiceErrorForResource,
+  deliveryOrderWhereForScope,
+  resolveServiceScope,
+} from "@/lib/service-scope";
 import type { DeliveryOrderPrintModel } from "@/components/DeliveryOrderPrint";
 import { PaymentMethod, Prisma, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -180,9 +186,10 @@ export async function previewDeliveryOrderTaxes(
   { ok: true; preview: DeliveryOrderTaxPreview } | { ok: false; error: string }
 > {
   const prisma = getPrismaClient();
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/delivery-orders");
-    await requireActor(prisma);
+    ({ session } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
@@ -194,6 +201,19 @@ export async function previewDeliveryOrderTaxes(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     return { ok: false, error: "Date issued must be YYYY-MM-DD." };
   }
+
+  const scope = resolveServiceScope(session);
+  const csOpErr = commercialServiceErrorForOperations(scope);
+  if (csOpErr) return { ok: false, error: csOpErr };
+
+  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
+  const custCheck = await validateCustomerForCommercialPosting(
+    prisma,
+    scope,
+    cid,
+    commercialService.id,
+  );
+  if (!custCheck.ok) return custCheck;
 
   const soldAt = new Date(`${iso}T12:00:00.000Z`);
   const customer = await prisma.customer.findUnique({
@@ -221,11 +241,63 @@ export async function previewDeliveryOrderTaxes(
   };
 }
 
+export type StockOnHandPreviewResult =
+  | { ok: true; onHand: string }
+  | { ok: false; error: string };
+
+/**
+ * Informational on-hand lookup for the delivery-order line editor.
+ *
+ * DOs are commitment documents, so we do NOT block save/validate on stock
+ * availability — the user gets a soft notice in the UI and is expected to
+ * follow up with the supervisor (e.g. raise a stock receipt or transfer) if
+ * the committed qty would overdraw the on-hand at the destination sales
+ * point. The actual stock decrement still happens later, when the matching
+ * Sale is validated at POS via `applyMovement(StockMovementKind.SALE, …)`.
+ */
+export async function previewStockOnHandForDeliveryOrder(
+  salesPointIdRaw: number | string,
+  productIdRaw: number | string,
+): Promise<StockOnHandPreviewResult> {
+  const prisma = getPrismaClient();
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const salesPointId = Number(salesPointIdRaw);
+  const productId = Number(productIdRaw);
+  if (!Number.isFinite(salesPointId) || salesPointId <= 0) {
+    return { ok: false, error: "Sales point is required to look up on-hand." };
+  }
+  if (!Number.isFinite(productId) || productId <= 0) {
+    return { ok: false, error: "Select a product to look up on-hand." };
+  }
+
+  // Match the same sales-point scope as the rest of the DO flow (clerks can
+  // only probe their own point's stock, supervisors with broader scope can
+  // probe anywhere they're allowed to write a DO for).
+  const accessErr = salesPointErrorForResource(actor, salesPointId);
+  if (accessErr) return { ok: false, error: accessErr };
+
+  const rows = await prisma.stockBalance.findMany({
+    where: { salesPointId, productId },
+    select: { qty: true },
+  });
+  const total = rows.reduce(
+    (acc, row) => acc.add(row.qty),
+    new Prisma.Decimal(0),
+  );
+  return { ok: true, onHand: total.toString() };
+}
+
 function revalidateOrderPaths(id: number) {
   revalidatePath("/delivery-orders");
   revalidatePath(`/delivery-orders/${id}`);
   revalidatePath("/dashboard");
-  revalidatePath("/reports/stock-vs-commitments");
   revalidatePath("/reports/do-commitment-crosstab");
   revalidatePath("/reports/customer-delivery-monitor");
   revalidatePath("/reports/delivery-orders");
@@ -238,12 +310,15 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
 
   const prisma = getPrismaClient();
   let actor;
+  let session;
   try {
     await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
+    ({ session, actor } = await requireActor(prisma));
   } catch {
     return null;
   }
+
+  const scope = resolveServiceScope(session);
 
   const order = await prisma.deliveryOrder.findUnique({
     where: { deliveryOrderNo },
@@ -271,6 +346,8 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
 
   const accessErr = salesPointErrorForResource(actor, order.salesPointId);
   if (accessErr) return null;
+  const csErr = commercialServiceErrorForResource(scope, order.commercialServiceId);
+  if (csErr) return null;
 
   if (
     roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
@@ -284,7 +361,7 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
     deliveryOrderNo: order.deliveryOrderNo,
     customerId: order.customerId,
     customerName: order.customer.name,
-    vatApplies: order.customer.taxRegime.vatApplies,
+    vatApplies: order.customer.taxRegime?.vatApplies ?? false,
     dateIssued: order.dateIssued.toISOString().slice(0, 10),
     orderRef: order.orderRef,
     salesPointId: order.salesPointId,
@@ -321,7 +398,72 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
   };
 }
 
-export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveHeaderResult> {
+export type PendingDeliveryOrderRow = {
+  deliveryOrderNo: string;
+  dateIssued: string;
+  customerName: string;
+  totalLabel: string;
+};
+
+/**
+ * Lightweight listing of PENDING delivery orders for the manager's lookup
+ * combo (typed input + popover picker). Read-only, scope-aware, and gated on
+ * the same `ui:validate-delivery-orders` permission the page uses to decide
+ * whether to render the combo at all. Anyone without that permission gets
+ * an empty list silently.
+ */
+export async function listPendingDeliveryOrders(): Promise<PendingDeliveryOrderRow[]> {
+  const prisma = getPrismaClient();
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    await assertPermissionKey("ui:validate-delivery-orders");
+    ({ session } = await requireActor(prisma));
+  } catch {
+    return [];
+  }
+
+  const scope = resolveServiceScope(session);
+  if (commercialServiceErrorForOperations(scope)) return [];
+
+  const scopeWhere = deliveryOrderWhereForScope(scope) ?? {};
+
+  const rows = await prisma.deliveryOrder.findMany({
+    where: {
+      ...scopeWhere,
+      status: ValidationStatus.PENDING,
+    },
+    orderBy: [{ dateIssued: "desc" }, { deliveryOrderNo: "desc" }],
+    take: 200,
+    select: {
+      deliveryOrderNo: true,
+      dateIssued: true,
+      customer: { select: { name: true } },
+      details: { select: { amount: true } },
+    },
+  });
+
+  return rows.map((r) => {
+    const total = r.details.reduce(
+      (acc, d) => acc.add(d.amount ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    );
+    const fmt = total.gt(0)
+      ? `${money2Print(total).toNumber().toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} XAF`
+      : "";
+    return {
+      deliveryOrderNo: r.deliveryOrderNo,
+      dateIssued: r.dateIssued.toISOString().slice(0, 10),
+      customerName: r.customer.name,
+      totalLabel: fmt,
+    };
+  });
+}
+
+export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderResult> {
   const prisma = getPrismaClient();
   const idRaw = String(formData.get("id") ?? "").trim();
   const customerId = String(formData.get("customerId") ?? "").trim();
@@ -348,11 +490,15 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
   const spSubmitErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
   if (spSubmitErr) return { ok: false, error: spSubmitErr };
 
+  const scope = resolveServiceScope(session);
+  const csOpErr = commercialServiceErrorForOperations(scope);
+  if (csOpErr) return { ok: false, error: csOpErr };
+
   if (!canCreateOrEditDeliveryOrderDraft(session.role)) {
     return {
       ok: false,
       error:
-        "Only senior sales supervisors can create or edit delivery order drafts. Managers validate pending orders once they are ready.",
+        "Only senior sales supervisors can create or edit delivery order drafts. Directors validate pending orders once they are ready.",
     };
   }
 
@@ -378,6 +524,23 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
       );
   if (Number.isNaN(dateIssued.getTime())) return { ok: false, error: "Invalid date." };
 
+  let lines: LineInput[];
+  try {
+    lines = JSON.parse(String(formData.get("lines") ?? "[]")) as LineInput[];
+  } catch {
+    return { ok: false, error: "Invalid line data." };
+  }
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return { ok: false, error: "Add at least one line item." };
+  }
+
+  let payments: PaymentInput[];
+  try {
+    payments = JSON.parse(String(formData.get("payments") ?? "[]")) as PaymentInput[];
+  } catch {
+    return { ok: false, error: "Invalid payment data." };
+  }
+
   try {
     const openPeriod = await getOpenFinancialYearPeriod();
     if (!openPeriod) {
@@ -390,128 +553,18 @@ export async function saveDeliveryOrderHeader(formData: FormData): Promise<SaveH
     const financialMonth = postingCalendarMonth;
 
     const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
-
-    if (idRaw) {
-      const id = Number.parseInt(idRaw, 10);
-      if (!Number.isFinite(id)) return { ok: false, error: "Invalid order." };
-
-      const existing = await prisma.deliveryOrder.findUnique({
-        where: { id },
-        select: { status: true, createdByUserId: true, salesPointId: true },
-      });
-      if (!existing) return { ok: false, error: "Order not found." };
-      if (existing.status === ValidationStatus.VALIDATED) {
-        return { ok: false, error: "Validated delivery orders cannot be edited." };
-      }
-      const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
-      if (accessErr) return { ok: false, error: accessErr };
-
-      await prisma.deliveryOrder.update({
-        where: { id },
-        data: {
-          customerId,
-          dateIssued,
-          orderRef,
-          salesPointId: effectiveSalesPointId,
-          financialYear,
-          financialMonth,
-          postingCalendarYear,
-          createdByUserId: existing.createdByUserId ?? session.userId,
-          commercialServiceId: commercialService.id,
-          issuerPhoneSnapshot: commercialService.phone ?? null,
-          issuerAddressSnapshot: commercialService.address ?? null,
-          commercialServiceNameSnapshot: commercialService.name,
-        },
-      });
-
-      const row = await prisma.deliveryOrder.findUnique({
-        where: { id },
-        select: { id: true, deliveryOrderNo: true },
-      });
-      if (!row) return { ok: false, error: "Order not found." };
-
-      revalidateOrderPaths(row.id);
-      return { ok: true, id: row.id, deliveryOrderNo: row.deliveryOrderNo };
-    }
-
-    const deliveryOrderNo = await allocateDeliveryOrderNo(dateIssued);
-    const created = await prisma.deliveryOrder.create({
-      data: {
-        deliveryOrderNo,
-        dateIssued,
-        customerId,
-        orderRef,
-        salesPointId: effectiveSalesPointId,
-        financialYear,
-        financialMonth,
-        postingCalendarYear,
-        createdByUserId: session.userId,
-        status: ValidationStatus.PENDING,
-        commercialServiceId: commercialService.id,
-        issuerPhoneSnapshot: commercialService.phone ?? null,
-        issuerAddressSnapshot: commercialService.address ?? null,
-        commercialServiceNameSnapshot: commercialService.name,
-      },
-      select: { id: true, deliveryOrderNo: true },
-    });
-
-    revalidateOrderPaths(created.id);
-    return { ok: true, id: created.id, deliveryOrderNo: created.deliveryOrderNo };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Could not save delivery order header.";
-    return { ok: false, error: msg };
-  }
-}
-
-export async function saveDeliveryOrderDetails(formData: FormData): Promise<SaveSectionResult> {
-  const prisma = getPrismaClient();
-  const deliveryOrderId = Number.parseInt(String(formData.get("deliveryOrderId") ?? ""), 10);
-  if (!Number.isFinite(deliveryOrderId)) {
-    return { ok: false, error: "Save the delivery order header first." };
-  }
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
-  try {
-    await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
-  }
-
-  if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
-    return {
-      ok: false,
-      error:
-        "Only senior sales supervisors can edit line items on a delivery order draft.",
-    };
-  }
-
-  let lines: LineInput[];
-  try {
-    lines = JSON.parse(String(formData.get("lines") ?? "[]")) as LineInput[];
-  } catch {
-    return { ok: false, error: "Invalid line data." };
-  }
-
-  if (!Array.isArray(lines) || lines.length === 0) {
-    return { ok: false, error: "Add at least one line item." };
-  }
-
-  try {
-    const order = await prisma.deliveryOrder.findUnique({
-      where: { id: deliveryOrderId },
-      select: { customerId: true, status: true, salesPointId: true, dateIssued: true },
-    });
-    if (!order) return { ok: false, error: "Order not found." };
-    if (order.status === ValidationStatus.VALIDATED) {
-      return { ok: false, error: "Validated delivery orders cannot be edited." };
-    }
-    const accessErr = salesPointErrorForResource(actor, order.salesPointId);
-    if (accessErr) return { ok: false, error: accessErr };
+    const custCheck = await validateCustomerForCommercialPosting(
+      prisma,
+      scope,
+      customerId,
+      commercialService.id,
+    );
+    if (!custCheck.ok) return custCheck;
 
     const [resolvedTaxes, customer] = await Promise.all([
-      resolveTaxesForCustomer(prisma, order.customerId, order.dateIssued),
+      resolveTaxesForCustomer(prisma, customerId, dateIssued),
       prisma.customer.findUnique({
-        where: { id: order.customerId },
+        where: { id: customerId },
         select: { customerType: true },
       }),
     ]);
@@ -519,7 +572,7 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
     if (!customer) return { ok: false, error: "Customer not found." };
     const comb = combinedVatAndOtherRates(resolvedTaxes.taxes);
 
-    const prepared: Array<{
+    const preparedLines: Array<{
       productId: number;
       orderQty: number;
       orderUnit: string | null;
@@ -534,11 +587,16 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
 
     for (const l of lines) {
       const productId = Number.parseInt(l.productId, 10);
-      if (!Number.isFinite(productId)) throw new Error("Invalid product on a line.");
+      if (!Number.isFinite(productId)) {
+        return { ok: false, error: "Invalid product on a line." };
+      }
 
       const orderQty = Number.parseInt(l.orderQty, 10);
       if (!Number.isFinite(orderQty) || orderQty <= 0) {
-        throw new Error("Quantity must be a positive whole number.");
+        return {
+          ok: false,
+          error: "Quantity must be a positive whole number.",
+        };
       }
 
       const orderUnit = String(l.orderUnit ?? "").trim() || null;
@@ -546,19 +604,18 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
         prisma,
         productId,
         customer.customerType,
-        order.dateIssued,
+        dateIssued,
       );
-      if (!priced.ok) throw new Error(priced.error);
+      if (!priced.ok) return { ok: false, error: priced.error };
 
       const unitPrice = money2(priced.unitPriceExTax);
       const lineSubtotalExTax = money2(unitPrice.mul(d(orderQty)));
       const vatAmount = money2(lineSubtotalExTax.mul(comb.vatRate));
       const otherTaxAmount = money2(lineSubtotalExTax.mul(comb.otherRate));
       const otherTaxLabel = comb.otherLabel;
-
       const amount = money2(lineSubtotalExTax.add(vatAmount).add(otherTaxAmount));
 
-      prepared.push({
+      preparedLines.push({
         productId,
         orderQty,
         orderUnit,
@@ -572,99 +629,162 @@ export async function saveDeliveryOrderDetails(formData: FormData): Promise<Save
       });
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.deliveryOrderDetails.deleteMany({ where: { deliveryOrderId } });
-      if (prepared.length > 0) {
+    const preparedPayments: Array<{
+      method: PaymentMethod;
+      paymentDate: Date;
+      chequeNo: string | null;
+      bank: string | null;
+      cashReceiptNo: string | null;
+      receiptDate: Date | null;
+    }> = [];
+    for (const p of Array.isArray(payments) ? payments : []) {
+      if (!p || (p.method !== "CASH" && p.method !== "CHEQUE")) continue;
+      const paymentDate = p.paymentDate
+        ? new Date(`${p.paymentDate}T12:00:00`)
+        : dateIssued;
+      if (Number.isNaN(paymentDate.getTime())) {
+        return { ok: false, error: "Invalid payment date." };
+      }
+      let receiptDate: Date | null = null;
+      if (p.receiptDate) {
+        const rd = new Date(`${p.receiptDate}T12:00:00`);
+        if (!Number.isNaN(rd.getTime())) receiptDate = rd;
+      }
+      preparedPayments.push({
+        method:
+          p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH,
+        paymentDate,
+        chequeNo: String(p.chequeNo ?? "").trim() || null,
+        bank: String(p.bank ?? "").trim() || null,
+        cashReceiptNo: String(p.cashReceiptNo ?? "").trim() || null,
+        receiptDate,
+      });
+    }
+
+    let existingForUpdate:
+      | {
+          status: ValidationStatus;
+          createdByUserId: string | null;
+          salesPointId: number;
+          commercialServiceId: string | null;
+        }
+      | null = null;
+    if (idRaw) {
+      const id = Number.parseInt(idRaw, 10);
+      if (!Number.isFinite(id)) return { ok: false, error: "Invalid order." };
+      existingForUpdate = await prisma.deliveryOrder.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          createdByUserId: true,
+          salesPointId: true,
+          commercialServiceId: true,
+        },
+      });
+      if (!existingForUpdate) {
+        return { ok: false, error: "Order not found." };
+      }
+      if (existingForUpdate.status === ValidationStatus.VALIDATED) {
+        return {
+          ok: false,
+          error: "Validated delivery orders cannot be edited.",
+        };
+      }
+      const accessErr = salesPointErrorForResource(
+        actor,
+        existingForUpdate.salesPointId,
+      );
+      if (accessErr) return { ok: false, error: accessErr };
+      const csResErr = commercialServiceErrorForResource(
+        scope,
+        existingForUpdate.commercialServiceId,
+      );
+      if (csResErr) return { ok: false, error: csResErr };
+    }
+
+    const written = await prisma.$transaction(async (tx) => {
+      let writtenId: number;
+      let writtenNo: string;
+
+      if (idRaw && existingForUpdate) {
+        const id = Number.parseInt(idRaw, 10);
+        const row = await tx.deliveryOrder.update({
+          where: { id },
+          data: {
+            customerId,
+            dateIssued,
+            orderRef,
+            salesPointId: effectiveSalesPointId,
+            financialYear,
+            financialMonth,
+            postingCalendarYear,
+            createdByUserId:
+              existingForUpdate.createdByUserId ?? session.userId,
+            commercialServiceId: commercialService.id,
+            issuerPhoneSnapshot: commercialService.phone ?? null,
+            issuerAddressSnapshot: commercialService.address ?? null,
+            commercialServiceNameSnapshot: commercialService.name,
+          },
+          select: { id: true, deliveryOrderNo: true },
+        });
+        writtenId = row.id;
+        writtenNo = row.deliveryOrderNo;
+      } else {
+        const deliveryOrderNo = await allocateDeliveryOrderNo(tx, dateIssued);
+        const created = await tx.deliveryOrder.create({
+          data: {
+            deliveryOrderNo,
+            dateIssued,
+            customerId,
+            orderRef,
+            salesPointId: effectiveSalesPointId,
+            financialYear,
+            financialMonth,
+            postingCalendarYear,
+            createdByUserId: session.userId,
+            status: ValidationStatus.PENDING,
+            commercialServiceId: commercialService.id,
+            issuerPhoneSnapshot: commercialService.phone ?? null,
+            issuerAddressSnapshot: commercialService.address ?? null,
+            commercialServiceNameSnapshot: commercialService.name,
+          },
+          select: { id: true, deliveryOrderNo: true },
+        });
+        writtenId = created.id;
+        writtenNo = created.deliveryOrderNo;
+      }
+
+      await tx.deliveryOrderDetails.deleteMany({
+        where: { deliveryOrderId: writtenId },
+      });
+      if (preparedLines.length > 0) {
         await tx.deliveryOrderDetails.createMany({
-          data: prepared.map((p) => ({ ...p, deliveryOrderId })),
+          data: preparedLines.map((p) => ({
+            ...p,
+            deliveryOrderId: writtenId,
+          })),
         });
       }
-    });
 
-    revalidateOrderPaths(deliveryOrderId);
-    return { ok: true };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Could not save line items.";
-    return { ok: false, error: msg };
-  }
-}
-
-export async function saveDeliveryOrderPayments(formData: FormData): Promise<SaveSectionResult> {
-  const prisma = getPrismaClient();
-  const deliveryOrderId = Number.parseInt(String(formData.get("deliveryOrderId") ?? ""), 10);
-  if (!Number.isFinite(deliveryOrderId)) {
-    return { ok: false, error: "Save the delivery order header first." };
-  }
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
-  try {
-    await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
-  }
-
-  if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
-    return {
-      ok: false,
-      error: "Only senior sales supervisors can edit payments on a delivery order draft.",
-    };
-  }
-
-  let payments: PaymentInput[];
-  try {
-    payments = JSON.parse(String(formData.get("payments") ?? "[]")) as PaymentInput[];
-  } catch {
-    return { ok: false, error: "Invalid payment data." };
-  }
-
-  try {
-    const order = await prisma.deliveryOrder.findUnique({
-      where: { id: deliveryOrderId },
-      select: { id: true, dateIssued: true, salesPointId: true, status: true },
-    });
-    if (!order) return { ok: false, error: "Order not found." };
-    if (order.status === ValidationStatus.VALIDATED) {
-      return { ok: false, error: "Validated delivery orders cannot be edited." };
-    }
-    const accessErr = salesPointErrorForResource(actor, order.salesPointId);
-    if (accessErr) return { ok: false, error: accessErr };
-
-    const dateIssued = order.dateIssued;
-
-    const preparedPayments = (Array.isArray(payments) ? payments : [])
-      .filter((p) => p && (p.method === "CASH" || p.method === "CHEQUE"))
-      .map((p) => {
-        const paymentDate = p.paymentDate ? new Date(`${p.paymentDate}T12:00:00`) : dateIssued;
-        if (Number.isNaN(paymentDate.getTime())) throw new Error("Invalid payment date.");
-        const method = p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH;
-        return {
-          method,
-          paymentDate,
-          chequeNo: String(p.chequeNo ?? "").trim() || null,
-          bank: String(p.bank ?? "").trim() || null,
-          cashReceiptNo: String(p.cashReceiptNo ?? "").trim() || null,
-          receiptDate: p.receiptDate
-            ? (() => {
-                const rd = new Date(`${p.receiptDate}T12:00:00`);
-                return Number.isNaN(rd.getTime()) ? null : rd;
-              })()
-            : null,
-        };
+      await tx.deliveryOrderPaymentDetails.deleteMany({
+        where: { deliveryOrderId: writtenId },
       });
-
-    await prisma.$transaction(async (tx) => {
-      await tx.deliveryOrderPaymentDetails.deleteMany({ where: { deliveryOrderId } });
       if (preparedPayments.length > 0) {
         await tx.deliveryOrderPaymentDetails.createMany({
-          data: preparedPayments.map((p) => ({ ...p, deliveryOrderId })),
+          data: preparedPayments.map((p) => ({
+            ...p,
+            deliveryOrderId: writtenId,
+          })),
         });
       }
+
+      return { id: writtenId, deliveryOrderNo: writtenNo };
     });
 
-    revalidateOrderPaths(deliveryOrderId);
-    return { ok: true };
+    revalidateOrderPaths(written.id);
+    return { ok: true, id: written.id, deliveryOrderNo: written.deliveryOrderNo };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Could not save payments.";
+    const msg = e instanceof Error ? e.message : "Could not save delivery order.";
     return { ok: false, error: msg };
   }
 }
@@ -675,20 +795,25 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
   if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
 
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/delivery-orders");
-    ({ actor } = await requireActor(prisma));
+    ({ session, actor } = await requireActor(prisma));
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
 
+  const scope = resolveServiceScope(session);
+
   const existing = await prisma.deliveryOrder.findUnique({
     where: { id },
-    select: { status: true, salesPointId: true },
+    select: { status: true, salesPointId: true, commercialServiceId: true },
   });
   if (!existing) return { ok: false, error: "Delivery order not found." };
   const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
   if (accessErr) return { ok: false, error: accessErr };
+  const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+  if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) {
     return { ok: false, error: "Validated delivery orders cannot be deleted." };
   }
@@ -717,25 +842,90 @@ export async function validateDeliveryOrder(formData: FormData): Promise<SaveSec
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-  if (!canValidateDeliveryOrder(session.role)) {
+  const perms = await getPermissionsForSession(session);
+  if (!perms["ui:validate-delivery-orders"]) {
     return {
       ok: false,
-      error: "Only managers can validate a delivery order.",
+      error: "You do not have permission to validate delivery orders.",
     };
   }
 
+  const scope = resolveServiceScope(session);
+
   const existing = await prisma.deliveryOrder.findUnique({
     where: { id },
-    select: { status: true, salesPointId: true },
+    select: { status: true, salesPointId: true, commercialServiceId: true },
   });
   if (!existing) return { ok: false, error: "Order not found." };
   const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
   if (accessErr) return { ok: false, error: accessErr };
+  const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+  if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
   await prisma.deliveryOrder.update({
     where: { id },
     data: { status: ValidationStatus.VALIDATED, validatedAt: new Date(), validatedByUserId: session.userId },
+  });
+  revalidateOrderPaths(id);
+  return { ok: true };
+}
+
+export async function cancelValidatedDeliveryOrder(
+  formData: FormData,
+): Promise<SaveSectionResult> {
+  const prisma = getPrismaClient();
+  const id = Number.parseInt(String(formData.get("id") ?? ""), 10);
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
+  if (!reason) return { ok: false, error: "Cancellation reason is required." };
+
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    ({ session, actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  // Manager-only correction flow.
+  if (session.role !== "MANAGER") {
+    return { ok: false, error: "Only managers can cancel a validated delivery order." };
+  }
+
+  const perms = await getPermissionsForSession(session);
+  if (!perms["ui:validate-delivery-orders"]) {
+    return {
+      ok: false,
+      error: "You do not have permission to validate delivery orders.",
+    };
+  }
+
+  const scope = resolveServiceScope(session);
+
+  const existing = await prisma.deliveryOrder.findUnique({
+    where: { id },
+    select: { status: true, salesPointId: true, commercialServiceId: true },
+  });
+  if (!existing) return { ok: false, error: "Order not found." };
+  const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
+  if (accessErr) return { ok: false, error: accessErr };
+  const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+  if (csErr) return { ok: false, error: csErr };
+
+  if (existing.status !== ValidationStatus.VALIDATED) {
+    return { ok: false, error: "Only validated delivery orders can be cancelled." };
+  }
+
+  await prisma.deliveryOrder.update({
+    where: { id },
+    data: {
+      status: ValidationStatus.REJECTED,
+      cancelledAt: new Date(),
+      cancelledByUserId: session.userId,
+      cancelReason: reason,
+    },
   });
   revalidateOrderPaths(id);
   return { ok: true };
@@ -757,15 +947,19 @@ export async function loadDeliveryOrderPrintById(
 > {
   const prisma = getPrismaClient();
   let actor;
+  let session;
   let settings;
   try {
     await assertPermissionKey("route:/delivery-orders");
     const r = await requireActor(prisma);
     actor = r.actor;
+    session = r.session;
     settings = await getOrInitCompanySettings();
   } catch {
     return { ok: false, reason: "auth" };
   }
+
+  const scope = resolveServiceScope(session);
 
   const order = await prisma.deliveryOrder.findUnique({
     where: { id },
@@ -795,6 +989,9 @@ export async function loadDeliveryOrderPrintById(
   if (salesPointErrorForResource(actor, order.salesPointId)) {
     return { ok: false, reason: "missing" };
   }
+  if (commercialServiceErrorForResource(scope, order.commercialServiceId)) {
+    return { ok: false, reason: "missing" };
+  }
 
   if (
     roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
@@ -807,6 +1004,7 @@ export async function loadDeliveryOrderPrintById(
   const orderModel: DeliveryOrderPrintModel = {
     deliveryOrderNo: order.deliveryOrderNo,
     dateIssuedIso: order.dateIssued.toISOString(),
+    status: order.status,
     orderRef: order.orderRef,
     collectionPoint: order.salesPoint.name,
     customer: order.customer,
@@ -840,7 +1038,7 @@ export async function loadDeliveryOrderPrintById(
   const logoSrc =
     settings.logoUrl && settings.logoUrl.trim() !== ""
       ? settings.logoUrl.trim()
-      : "/cdc-logo-svg.svg";
+      : "/logo.svg";
 
   const deptParts = [settings.department?.trim(), order.commercialServiceNameSnapshot?.trim()].filter(
     (s): s is string => Boolean(s && s.length > 0),

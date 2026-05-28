@@ -5,13 +5,22 @@ import { useRouter } from "next/navigation";
 import { UserRole } from "@/lib/domain";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleLabel, roleRequiresSalesPoint } from "@/lib/auth-display";
+import { roleRequiresSalesPoint } from "@/lib/auth-display";
+import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 
 type CommercialOption = {
   id: string;
   name: string;
   invoicePrefix: string;
   isActive: boolean;
+  siteKind: "SALES_POINT" | "FACTORY";
+};
+
+type ServiceRoleOption = {
+  id: string;
+  code: string;
+  name: string;
+  commercialServiceId: string;
 };
 
 type UserRow = {
@@ -19,23 +28,23 @@ type UserRow = {
   username: string;
   name: string;
   role: UserRole;
+  globalRoleDefinitionId: string | null;
+  globalRoleDefinition: { id: string; displayName: string } | null;
   isActive: boolean;
   salesPointId: number | null;
   salesPoint: { id: number; name: string } | null;
-  service: string | null;
+  factoryId: string | null;
+  factory: { id: string; name: string } | null;
   commercialServiceId: string | null;
-  commercialService: { id: string; name: string; invoicePrefix: string } | null;
+  commercialServiceRoleId: string | null;
+  commercialService: {
+    id: string;
+    name: string;
+    invoicePrefix: string;
+    siteKind: "SALES_POINT" | "FACTORY";
+  } | null;
+  commercialServiceRole: { id: string; code: string; name: string } | null;
 };
-
-const ROLE_OPTIONS: UserRole[] = [
-  UserRole.ADMIN,
-  UserRole.DIRECTOR,
-  UserRole.MANAGER,
-  UserRole.SENIOR_SUPERVISOR,
-  UserRole.SUPERVISOR,
-  UserRole.CLERK,
-  UserRole.CLERK_IN_CHARGE_BPO,
-];
 
 const inputClass =
   "h-8 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm";
@@ -52,15 +61,39 @@ const fieldLabelClass = [
 ].join(" ");
 const fieldControlClass = "min-w-0 flex-1";
 
+function globalRoleOptionValue(id: string) {
+  return `global:${id}`;
+}
+
+function lineRoleOptionValue(id: string) {
+  return `line:${id}`;
+}
+
 export function UsersClient(props: {
   users: UserRow[];
   salesPoints: Array<{ id: number; name: string }>;
+  factories: Array<{ id: string; name: string; commercialServiceId: string }>;
   commercialServices: CommercialOption[];
+  serviceRoles: ServiceRoleOption[];
+  globalRoles: Array<{
+    id: string;
+    code: string;
+    displayName: string;
+    legacyRole: UserRole | null;
+  }>;
   saveUserAction: (formData: FormData) => Promise<void> | void;
   setUserActiveAction: (formData: FormData) => Promise<void> | void;
 }) {
-  const { users, salesPoints, commercialServices, saveUserAction, setUserActiveAction } =
-    props;
+  const {
+    users,
+    salesPoints,
+    factories,
+    commercialServices,
+    serviceRoles,
+    globalRoles,
+    saveUserAction,
+    setUserActiveAction,
+  } = props;
   const router = useRouter();
   const { status, session, refreshSession } = useAuth();
 
@@ -71,9 +104,12 @@ export function UsersClient(props: {
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [role, setRole] = React.useState<UserRole | "">("");
+  const [globalRoleDefinitionId, setGlobalRoleDefinitionId] = React.useState("");
+  const [roleSelect, setRoleSelect] = React.useState("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [commercialServiceId, setCommercialServiceId] = React.useState<string>("");
-  const [service, setService] = React.useState("");
+  const [commercialServiceRoleId, setCommercialServiceRoleId] = React.useState<string>("");
+  const [factoryId, setFactoryId] = React.useState<string>("");
   const [banner, setBanner] = React.useState<{
     type: "error" | "ok";
     text: string;
@@ -85,6 +121,51 @@ export function UsersClient(props: {
 
   const isAdmin = session?.role === UserRole.ADMIN;
 
+  const userRoleLabelForUser = React.useCallback(
+    (u: UserRow) => {
+      if (u.commercialServiceRole?.name) return u.commercialServiceRole.name;
+      if (u.globalRoleDefinition?.displayName) return u.globalRoleDefinition.displayName;
+      const g = globalRoles.find((gr) => gr.legacyRole === u.role);
+      return g?.displayName ?? u.role;
+    },
+    [globalRoles],
+  );
+
+  const isLineStaffAccount = Boolean(commercialServiceId);
+
+  function applyRoleSelect(value: string) {
+    setRoleSelect(value);
+    if (value.startsWith("global:")) {
+      const id = value.slice("global:".length);
+      const g = globalRoles.find((gr) => gr.id === id);
+      setGlobalRoleDefinitionId(id);
+      setCommercialServiceRoleId("");
+      setRole((g?.legacyRole ?? UserRole.DIRECTOR) as UserRole);
+      setSalesPointId("");
+      setFactoryId("");
+      return;
+    }
+    if (value.startsWith("line:")) {
+      const id = value.slice("line:".length);
+      const lineRole = serviceRoles.find((r) => r.id === id);
+      setGlobalRoleDefinitionId("");
+      setCommercialServiceRoleId(id);
+      setRole(
+        lineRole ? userRoleFromLineRoleCode(lineRole.code) : ("" as UserRole),
+      );
+      if (lineRole && !roleRequiresSalesPoint(userRoleFromLineRoleCode(lineRole.code))) {
+        setSalesPointId("");
+      }
+    }
+  }
+
+  const selectedLine = commercialServices.find((s) => s.id === commercialServiceId);
+  const lineSiteKind = selectedLine?.siteKind ?? "SALES_POINT";
+  const rolesForLine = serviceRoles.filter(
+    (r) => r.commercialServiceId === commercialServiceId,
+  );
+  const factoriesForLine = factories.filter((f) => f.commercialServiceId === commercialServiceId);
+
   function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
     setUsername("");
@@ -92,9 +173,12 @@ export function UsersClient(props: {
     setPassword("");
     setConfirmPassword("");
     setRole("");
+    setGlobalRoleDefinitionId("");
+    setRoleSelect("");
     setSalesPointId("");
     setCommercialServiceId("");
-    setService("");
+    setCommercialServiceRoleId("");
+    setFactoryId("");
     if (opts?.clearBanner !== false) setBanner(null);
   }
 
@@ -115,10 +199,27 @@ export function UsersClient(props: {
     setName(u.name);
     setPassword("");
     setConfirmPassword("");
-    setRole(u.role);
-    setSalesPointId(u.salesPointId != null ? String(u.salesPointId) : "");
     setCommercialServiceId(u.commercialServiceId ?? "");
-    setService(u.service ?? "");
+    setCommercialServiceRoleId(u.commercialServiceRoleId ?? "");
+    if (u.globalRoleDefinitionId) {
+      setGlobalRoleDefinitionId(u.globalRoleDefinitionId);
+      setRoleSelect(globalRoleOptionValue(u.globalRoleDefinitionId));
+      const g = globalRoles.find((gr) => gr.id === u.globalRoleDefinitionId);
+      setRole((g?.legacyRole ?? u.role) as UserRole);
+    } else if (u.commercialServiceRoleId) {
+      setGlobalRoleDefinitionId("");
+      setRoleSelect(lineRoleOptionValue(u.commercialServiceRoleId));
+      const lineRole = serviceRoles.find((r) => r.id === u.commercialServiceRoleId);
+      setRole(
+        lineRole ? userRoleFromLineRoleCode(lineRole.code) : (u.role as UserRole),
+      );
+    } else {
+      setGlobalRoleDefinitionId("");
+      setRoleSelect("");
+      setRole("");
+    }
+    setSalesPointId(u.salesPointId != null ? String(u.salesPointId) : "");
+    setFactoryId(u.factoryId ?? "");
     setBanner(null);
     setIsFormOpen(true);
   }
@@ -133,13 +234,36 @@ export function UsersClient(props: {
       return;
     }
     setBanner(null);
-    if (!role) {
-      setBanner({ type: "error", text: "Please select a role." });
-      return;
-    }
-    if (roleRequiresSalesPoint(role) && !salesPointId) {
-      setBanner({ type: "error", text: "Please select a sales point." });
-      return;
+    if (isLineStaffAccount) {
+      if (!commercialServiceRoleId) {
+        setBanner({ type: "error", text: "Please select a role for this line." });
+        return;
+      }
+      const lineRole = serviceRoles.find((r) => r.id === commercialServiceRoleId);
+      const derivedRole = lineRole
+        ? userRoleFromLineRoleCode(lineRole.code)
+        : null;
+      if (!derivedRole) {
+        setBanner({ type: "error", text: "Please select a role." });
+        return;
+      }
+      if (lineSiteKind === "FACTORY" && !factoryId) {
+        setBanner({ type: "error", text: "Please select a factory." });
+        return;
+      }
+      if (
+        lineSiteKind === "SALES_POINT" &&
+        roleRequiresSalesPoint(derivedRole) &&
+        !salesPointId
+      ) {
+        setBanner({ type: "error", text: "Please select a sales point." });
+        return;
+      }
+    } else {
+      if (!globalRoleDefinitionId) {
+        setBanner({ type: "error", text: "Please select an org-wide role." });
+        return;
+      }
     }
     if (!editingId) {
       if (password !== confirmPassword) {
@@ -325,9 +449,17 @@ export function UsersClient(props: {
                     name="commercialServiceId"
                     className={selectClass}
                     value={commercialServiceId}
-                    onChange={(e) => setCommercialServiceId(e.target.value)}
+                    onChange={(e) => {
+                      setCommercialServiceId(e.target.value);
+                      setCommercialServiceRoleId("");
+                      setRoleSelect("");
+                      setRole("");
+                      setGlobalRoleDefinitionId("");
+                      setFactoryId("");
+                      setSalesPointId("");
+                    }}
                   >
-                    <option value="">Default (company fallback)</option>
+                    <option value="">None (org-wide role)</option>
                     {commercialServices.map((s) => (
                       <option key={s.id} value={s.id} disabled={!s.isActive}>
                         {s.name}
@@ -336,28 +468,129 @@ export function UsersClient(props: {
                     ))}
                   </select>
                   <p className={hintClass}>
-                    Invoice prefix and letterhead for this user&apos;s sales.
+                    Pick a line for operational staff, or leave as none for org-wide
+                    access.
+                  </p>
+                </div>
+              </div>
+
+              <input
+                type="hidden"
+                name="globalRoleDefinitionId"
+                value={globalRoleDefinitionId}
+              />
+              <input
+                type="hidden"
+                name="commercialServiceRoleId"
+                value={commercialServiceRoleId}
+              />
+
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="roleSelect">
+                  Role
+                </label>
+                <div className={fieldControlClass}>
+                  <select
+                    id="roleSelect"
+                    className={selectClass}
+                    value={roleSelect}
+                    onChange={(e) => applyRoleSelect(e.target.value)}
+                    required
+                  >
+                    <option value="">Select role…</option>
+                    {isLineStaffAccount
+                      ? rolesForLine.length === 0 ? (
+                          <option value="" disabled>
+                            No roles for this line — add roles in Setup
+                          </option>
+                        ) : (
+                          rolesForLine.map((r) => (
+                            <option key={r.id} value={lineRoleOptionValue(r.id)}>
+                              {r.name}
+                            </option>
+                          ))
+                        )
+                      : globalRoles.map((r) => (
+                          <option key={r.id} value={globalRoleOptionValue(r.id)}>
+                            {r.displayName}
+                          </option>
+                        ))}
+                  </select>
+                  <p className={hintClass}>
+                    {isLineStaffAccount
+                      ? "Permissions come from the line role in Setup → Permissions."
+                      : "Org-wide access (Admin, Director, or custom)."}
                   </p>
                 </div>
               </div>
 
               <div className={fieldRowClass}>
-                <label className={fieldLabelClass} htmlFor="service">
-                  Service note
+                <label
+                  className={fieldLabelClass}
+                  htmlFor={
+                    isLineStaffAccount && lineSiteKind === "FACTORY"
+                      ? "factoryId"
+                      : "salesPointId"
+                  }
+                >
+                  {isLineStaffAccount && lineSiteKind === "FACTORY"
+                    ? "Factory"
+                    : "Sales point"}
                 </label>
-                <div className={fieldControlClass}>
-                  <input
-                    id="service"
-                    name="service"
-                    value={service}
-                    onChange={(e) => setService(e.target.value)}
-                    className={inputClass}
-                    placeholder="Optional"
-                  />
-                  <p className={hintClass}>
-                    Extra label in the shell after sign-in.
+                {isLineStaffAccount && lineSiteKind === "FACTORY" ? (
+                  <select
+                    id="factoryId"
+                    name="factoryId"
+                    className={`${selectClass} ${fieldControlClass}`}
+                    value={factoryId}
+                    onChange={(e) => setFactoryId(e.target.value)}
+                    required
+                  >
+                    {factoriesForLine.length === 0 ? (
+                      <option value="">Add a factory first</option>
+                    ) : (
+                      <>
+                        <option value="">Select factory…</option>
+                        {factoriesForLine.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                ) : isLineStaffAccount &&
+                  lineSiteKind === "SALES_POINT" &&
+                  role !== "" &&
+                  roleRequiresSalesPoint(role) ? (
+                  <select
+                    id="salesPointId"
+                    name="salesPointId"
+                    className={`${selectClass} ${fieldControlClass}`}
+                    value={salesPointId}
+                    onChange={(e) => setSalesPointId(e.target.value)}
+                    required
+                  >
+                    {salesPoints.length === 0 ? (
+                      <option value="">Add a sales point first</option>
+                    ) : (
+                      <>
+                        <option value="">Select sales point…</option>
+                        {salesPoints.map((sp) => (
+                          <option key={sp.id} value={String(sp.id)}>
+                            {sp.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                ) : (
+                  <p className={`${fieldControlClass} text-xs opacity-70 py-1.5`}>
+                    {isLineStaffAccount
+                      ? "No sales point required for this role."
+                      : "Organization-wide access (no single posting site)."}
                   </p>
-                </div>
+                )}
               </div>
 
               <div className={fieldRowClass}>
@@ -397,66 +630,6 @@ export function UsersClient(props: {
                     required={!editingId || password.length > 0}
                   />
                 </div>
-              </div>
-
-              <div className={fieldRowClass}>
-                <label className={fieldLabelClass} htmlFor="role">
-                  Role
-                </label>
-                <select
-                  id="role"
-                  name="role"
-                  className={`${selectClass} ${fieldControlClass}`}
-                  value={role}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setRole(v === "" ? "" : (v as UserRole));
-                    if (!roleRequiresSalesPoint(v as UserRole)) {
-                      setSalesPointId("");
-                    }
-                  }}
-                  required
-                >
-                  <option value="">Select role…</option>
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {roleLabel(r)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={fieldRowClass}>
-                <label className={fieldLabelClass} htmlFor="salesPointId">
-                  Sales point
-                </label>
-                {role !== "" && roleRequiresSalesPoint(role) ? (
-                  <select
-                    id="salesPointId"
-                    name="salesPointId"
-                    className={`${selectClass} ${fieldControlClass}`}
-                    value={salesPointId}
-                    onChange={(e) => setSalesPointId(e.target.value)}
-                    required
-                  >
-                    {salesPoints.length === 0 ? (
-                      <option value="">Add a sales point first</option>
-                    ) : (
-                      <>
-                        <option value="">Select sales point…</option>
-                        {salesPoints.map((sp) => (
-                          <option key={sp.id} value={String(sp.id)}>
-                            {sp.name}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                ) : (
-                  <p className={`${fieldControlClass} text-xs opacity-70 py-1.5`}>
-                    Organization-wide access (no single sales point).
-                  </p>
-                )}
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 pt-1 pl-[7.25rem]">
@@ -500,7 +673,7 @@ export function UsersClient(props: {
                   <th className="p-2 font-medium">Username</th>
                   <th className="p-2 font-medium">Name</th>
                   <th className="p-2 font-medium">Role</th>
-                  <th className="p-2 font-medium">Sales point</th>
+                  <th className="p-2 font-medium">Site</th>
                   <th className="p-2 font-medium">Line</th>
                   <th className="p-2 font-medium w-20">Active</th>
                   <th className="p-2 font-medium w-36 text-right">Actions</th>
@@ -522,20 +695,19 @@ export function UsersClient(props: {
                       {u.username}
                     </td>
                     <td className="p-2 font-medium">{u.name}</td>
-                    <td className="p-2 opacity-90">{roleLabel(u.role)}</td>
+                    <td className="p-2 opacity-90">{userRoleLabelForUser(u)}</td>
                     <td className="p-2 text-xs opacity-80">
-                      {u.salesPoint?.name ?? "—"}
+                      {u.factory?.name ?? u.salesPoint?.name ?? "—"}
                     </td>
                     <td
                       className="p-2 text-xs opacity-80 max-w-[8rem] truncate"
                       title={
                         u.commercialService?.name
                           ? `${u.commercialService.name} (${u.commercialService.invoicePrefix})`
-                          : (u.service ?? "")
+                          : undefined
                       }
                     >
-                      {u.commercialService?.name ??
-                        (u.service?.trim() ? u.service : "—")}
+                      {u.commercialService?.name ?? "—"}
                     </td>
                     <td className="p-2">
                       {u.isActive ? (
@@ -548,8 +720,8 @@ export function UsersClient(props: {
                         </span>
                       )}
                     </td>
-                    <td className="p-2 text-right">
-                      <div className="flex justify-end gap-2 flex-wrap">
+                    <td className="p-2 text-right whitespace-nowrap">
+                      <div className="flex justify-end items-center gap-2">
                         <button
                           type="button"
                           onClick={() => startEdit(u)}
@@ -627,3 +799,4 @@ export function UsersClient(props: {
     </div>
   );
 }
+

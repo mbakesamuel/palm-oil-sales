@@ -4,12 +4,12 @@ import type { CustomerType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaDateToIso } from "@/lib/posting-calendar";
-import { MAIN_PRODUCT_CATEGORY_ID } from "@/lib/pricing/constants";
 
 export type PrismaForPricing = ReturnType<typeof getPrismaClient>;
 
 /**
- * Latest schedule row with effectiveFrom <= transaction calendar day (UTC), same idea as tax rates.
+ * Latest schedule row with effectiveFrom <= transaction calendar day (UTC).
+ * Bottled products use a single direct price (customerType null).
  */
 export async function resolveUnitPriceExTax(
   prisma: PrismaForPricing,
@@ -20,33 +20,44 @@ export async function resolveUnitPriceExTax(
   | { ok: true; unitPriceExTax: Prisma.Decimal; productName: string }
   | { ok: false; error: string }
 > {
-
   const dayIso = prismaDateToIso(asOfDate);
   const asOfStartUtc = new Date(`${dayIso}T00:00:00.000Z`);
 
   const product = await prisma.product.findUnique({
     where: { productId },
-    select: { productName: true, productCatId: true },
+    select: {
+      productName: true,
+      productCat: { select: { isMain: true, isBottled: true } },
+    },
   });
-  
+
   if (!product) {
     return { ok: false, error: `Product ${productId} was not found.` };
   }
 
-  const isMainCategory = product.productCatId === MAIN_PRODUCT_CATEGORY_ID;
+  const isMainCategory = product.productCat?.isMain === true;
+  const isBottled = product.productCat?.isBottled === true;
 
   const row = await prisma.productUnitPriceSchedule.findFirst({
     where: {
       productId,
       effectiveFrom: { lte: asOfStartUtc },
-      ...(isMainCategory
-        ? { customerType }
-        : { customerType: null }),
+      ...(isBottled
+        ? { customerType: null }
+        : isMainCategory
+          ? { customerType }
+          : { customerType: null }),
     },
     orderBy: { effectiveFrom: "desc" },
   });
 
   if (!row) {
+    if (isBottled) {
+      return {
+        ok: false,
+        error: `No unit price scheduled for "${product.productName}" on or before ${dayIso}. Add a price in Product pricing (setup).`,
+      };
+    }
     if (isMainCategory) {
       return {
         ok: false,
@@ -66,9 +77,40 @@ export async function resolveUnitPriceExTax(
   };
 }
 
+/** Bottled BPO sales: tax-inclusive price from direct schedule row. */
+export async function resolveBottledUnitPriceExTax(
+  prisma: PrismaForPricing,
+  productId: number,
+  asOfDate: Date,
+): Promise<
+  | { ok: true; unitPriceExTax: Prisma.Decimal; productName: string; productId: number }
+  | { ok: false; error: string }
+> {
+  const product = await prisma.product.findUnique({
+    where: { productId },
+    select: {
+      productName: true,
+      productCat: { select: { isBottled: true } },
+    },
+  });
+  if (!product) return { ok: false, error: "Product not found." };
+  if (product.productCat?.isBottled !== true) {
+    return { ok: false, error: "Product is not a bottled SKU." };
+  }
+  const r = await resolveUnitPriceExTax(
+    prisma,
+    productId,
+    "RETAIL" as CustomerType,
+    asOfDate,
+  );
+  if (!r.ok) return r;
+  return { ok: true, unitPriceExTax: r.unitPriceExTax, productName: r.productName, productId };
+}
+
+/** @deprecated Use resolveBottledUnitPriceExTax(productId) — variants removed. */
 export async function resolveVariantUnitPriceExTax(
   prisma: PrismaForPricing,
-  productVariantId: string,
+  productIdOrLegacyVariantId: string,
   asOfDate: Date,
 ): Promise<
   | {
@@ -80,47 +122,17 @@ export async function resolveVariantUnitPriceExTax(
     }
   | { ok: false; error: string }
 > {
-  const dayIso = prismaDateToIso(asOfDate);
-  const asOfStartUtc = new Date(`${dayIso}T00:00:00.000Z`);
-
-  const variant = await prisma.productVariant.findUnique({
-    where: { id: productVariantId },
-    select: {
-      id: true,
-      name: true,
-      productId: true,
-      product: { select: { productName: true, isBottledPalmOil: true } },
-    },
-  });
-
-  if (!variant) {
-    return { ok: false, error: "Product variant was not found." };
-  }
-  if (!variant.product.isBottledPalmOil) {
-    return { ok: false, error: "Variant pricing is only used for Bottled Palm Oil." };
-  }
-
-  const row = await prisma.productVariantPriceSchedule.findFirst({
-    where: {
-      productVariantId,
-      effectiveFrom: { lte: asOfStartUtc },
-    },
-    orderBy: { effectiveFrom: "desc" },
-  });
-
-  if (!row) {
+  const asNum = Number.parseInt(productIdOrLegacyVariantId, 10);
+  if (Number.isFinite(asNum)) {
+    const r = await resolveBottledUnitPriceExTax(prisma, asNum, asOfDate);
+    if (!r.ok) return r;
     return {
-      ok: false,
-      error: `No unit price scheduled for "${variant.product.productName} - ${variant.name}" on or before ${dayIso}. Add a variant price in Bottled Palm Oil pricing setup.`,
+      ok: true,
+      unitPriceExTax: r.unitPriceExTax,
+      productName: r.productName,
+      variantName: r.productName,
+      productId: r.productId,
     };
   }
-
-  // BPO: the schedule value is treated as the tax-inclusive unit price in business rules (DB column name is historical).
-  return {
-    ok: true,
-    unitPriceExTax: row.unitPriceExTax,
-    productName: variant.product.productName,
-    variantName: variant.name,
-    productId: variant.productId,
-  };
+  return { ok: false, error: "Select a bottled product." };
 }

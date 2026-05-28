@@ -1,5 +1,10 @@
 import { UserRole } from "@/lib/domain";
 
+export {
+  roleRequiresCommercialServiceAssignment,
+  roleSeesAllCommercialServices,
+} from "@/lib/service-scope";
+
 /**
  * Roles that must have a fixed sales point on the user record (assigned by admin).
  * Server actions enforce posting scope for these roles via `lib/auth-sales-point-scope`.
@@ -31,22 +36,25 @@ export function roleMayRaiseBpoConsignmentSenderVoucher(role: UserRole): boolean
 }
 
 /**
- * Roles allowed to validate **sales invoices** (and similar). Delivery orders use
- * {@link canValidateDeliveryOrder} (managers only).
+ * Roles allowed to validate **sales invoices** (legacy helper; POS uses
+ * permission `ui:validate-documents`). Excludes senior supervisors — they
+ * draft DOs / BPO workflows; line supervisors validate clerk invoices.
  */
 export function canValidateDocuments(role: UserRole): boolean {
   return (
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
-    role === UserRole.MANAGER ||
-    role === UserRole.SENIOR_SUPERVISOR ||
     role === UserRole.SUPERVISOR
   );
 }
 
-/** Validate BPO consignment receipt/outbound workflows without granting general invoice validation. */
+/** BPO document validation (outbound sales, etc.). */
 export function canValidateBpoDocuments(role: UserRole): boolean {
-  return canValidateDocuments(role) || role === UserRole.CLERK_IN_CHARGE_BPO;
+  return (
+    canValidateDocuments(role) ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.CLERK_IN_CHARGE_BPO
+  );
 }
 
 /** Draft delivery orders: created / edited / deleted while still pending. */
@@ -56,7 +64,23 @@ export function canCreateOrEditDeliveryOrderDraft(role: UserRole): boolean {
 
 /** Validate a pending delivery order after a senior supervisor has prepared it. */
 export function canValidateDeliveryOrder(role: UserRole): boolean {
-  return role === UserRole.MANAGER || role === UserRole.ADMIN;
+  return (
+    role === UserRole.DIRECTOR ||
+    role === UserRole.ADMIN ||
+    role === UserRole.MANAGER
+  );
+}
+
+/** Open the POS pending-invoice picker (supervisors validate; senior supervisors review). */
+export function canPickPendingPosSales(params: {
+  validateDocuments: boolean;
+  role: UserRole;
+  commercialServiceRoleCode?: string | null;
+}): boolean {
+  if (params.validateDocuments) return true;
+  if (params.role === UserRole.SENIOR_SUPERVISOR) return true;
+  const c = (params.commercialServiceRoleCode ?? "").toLowerCase();
+  return c.includes("senior") && c.includes("supervisor");
 }
 
 /** Draft vehicle consignment notes (1:1 with Sale): clerks prepare; supervisors validate. */

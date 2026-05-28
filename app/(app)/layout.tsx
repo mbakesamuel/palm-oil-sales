@@ -15,22 +15,22 @@ import { resolveCompanyLogoSrc } from "@/lib/company-logo";
 import { getDefaultCommercialInvoicePrefix } from "@/lib/commercial-service";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { redirect } from "next/navigation";
+import { reportNavItems, reportNavSections } from "@/lib/reports-catalog";
 import { Sidebar } from "./Sidebar";
 
 const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
   { href: "/setup", label: "General Parameters" },
-  { href: "/setup/commercial-services", label: "Commercial services" },
+  { href: "/setup/commercial-services", label: "Sales Services" },
   { href: "/setup/sales-budget", label: "Sales budget Phasing" },
   { href: "/setup/product-pricing", label: "Product pricing" },
-  { href: "/setup/bpo-variants", label: "Bottled Palm Oil Products/pricing" },
   { href: "/setup/permissions", label: "User access control" },
   { href: "/users", label: "Users" },
   { href: "/customers", label: "Customers" },
   { href: "/financial-years", label: "Financial years" },
   { href: "/sales-points", label: "Sales points" },
-  { href: "/storage-locations", label: "Storage locations" },
+  { href: "/factories", label: "Factories" },
   { href: "/tax-regimes", label: "Tax regimes" },
   { href: "/tax-types", label: "Tax types" },
   { href: "/product-categories", label: "Product categories" },
@@ -38,38 +38,13 @@ const setupNav = [
 ] as const;
 
 const operationsNav = [
+  { href: "/rubber", label: "Rubber sales" },
   { href: "/delivery-orders", label: "Delivery orders" },
-  { href: "/consignment-notes", label: "VehicleConsignment notes" },
-  { href: "/pos", label: "Sales" },
+  { href: "/delivery-orders/list", label: "Delivery orders list" },
+  { href: "/consignment-notes", label: "Vehicle Consignment" },
+  { href: "/pos", label: "Sales Invoice" },
   { href: "/bpo-sales", label: "Bottled Palm Oil sales" },
-  { href: "/stock/receive", label: "Stock In" },
-  { href: "/stock/bpo-receive", label: "Bottled Palms Oil Stock" },
-  { href: "/stock/bpo-consignments", label: "Bottled Palms Oil Consignments" },
-  { href: "/stock/bpo-outbound", label: "Bottled Palm Oil gift / out" },
-] as const;
-
-const reportNav = [
-  { href: "/reports/sales", label: "Sales register" },
-  { href: "/reports/daily-sales-summary", label: "Daily sales summary" },
-  { href: "/reports/delivery-orders", label: "Delivery orders" },
-  { href: "/reports/delivery-order-monitor", label: "View DOs by DO-Number" },
-  { href: "/reports/customer-delivery-monitor", label: "View DOs by customer" },
-  { href: "/reports/do-commitment-crosstab", label: "Commitments" },
-  { href: "/reports/stock-on-hand", label: "Stock" },
-  { href: "/reports/stock-vs-commitments", label: "Stock vs commitments" },
-  {
-    href: "/reports/sales-budget-monthly-crosstab",
-    label: "Budget phasing (monthly)",
-  },
-  {
-    href: "/reports/sales-budget-weekly-crosstab",
-    label: "Budget phasing (weekly)",
-  },
-  { href: "/reports/pricing", label: "Product pricing" },
-  { href: "/reports/bpo-pricing", label: "Bottled Palm Oil pricing" },
-  { href: "/reports/bpo", label: "BPO monitor" },
-  { href: "/reports/bpo-sales-crosstab", label: "BPO sales crosstab" },
-  { href: "/reports/bpo-stock-cross", label: "BPO stock cross" },
+  { href: "/stock", label: "Stock" },
 ] as const;
 
 export default async function AppLayout({
@@ -88,10 +63,11 @@ export default async function AppLayout({
     h.get("x-matched-path") ??
     ""
   ).trim();
-  if (!pathname) {
-    redirect("/forbidden");
+  // `proxy.ts` already enforced `route:*` on `request.nextUrl.pathname`. The invoke-path
+  // header is missing on some RSC sub-requests; do not treat that as forbidden here.
+  if (pathname) {
+    await assertRouteAllowedForPath(pathname, session);
   }
-  await assertRouteAllowedForPath(pathname, session.role);
 
   const [settings, openPeriod, invoicePrefix] = await Promise.all([
     getOrInitCompanySettings(),
@@ -131,7 +107,8 @@ export default async function AppLayout({
                 dashboardNav={[...dashboardNav]}
                 setupNav={[...setupNav]}
                 operationsNav={[...operationsNav]}
-                reportNav={[...reportNav]}
+                reportNav={reportNavItems()}
+                reportNavSections={reportNavSections()}
               />
             </div>
 

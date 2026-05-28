@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import * as React from "react";
 import { FinancialYearStatus, UserRole } from "@/lib/domain";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,7 +30,7 @@ export function FinancialYearsClient(props: {
   const canManage =
     status === "ready" &&
     session != null &&
-    (session.role === UserRole.ADMIN || session.role === UserRole.MANAGER);
+    (session.role === UserRole.ADMIN || session.role === UserRole.DIRECTOR);
 
   const [yearToOpen, setYearToOpen] = React.useState(() => String(new Date().getFullYear()));
   const [startDate, setStartDate] = React.useState(() => {

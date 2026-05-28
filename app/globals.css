@@ -131,4 +131,17 @@ body {
   [data-print-page="bpo-sales-crosstab"] {
     page: bpo-sales-crosstab;
   }
+
+  /* Daily sales summary: fit seven columns on A4 portrait without horizontal scroll. */
+  .daily-sales-summary-print-table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  .daily-sales-summary-print-table th,
+  .daily-sales-summary-print-table td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }

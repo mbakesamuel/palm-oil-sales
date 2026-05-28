@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const allowed = await isRouteAllowedForPath(pathname, session.role);
+  const allowed = await isRouteAllowedForPath(pathname, session);
   return NextResponse.json(
     { allowed },
     { headers: { "Cache-Control": "no-store, max-age=0" } },
