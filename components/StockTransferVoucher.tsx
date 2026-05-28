@@ -52,6 +52,8 @@ export type StockTransferVoucherModel = {
   lines: Array<{
     lineNo: number;
     productName: string;
+    fromStorageLocationName: string;
+    toStorageLocationName: string | null;
     uom: string;
     qty: string;
   }>;
@@ -125,6 +127,8 @@ export function StockTransferVoucher(props: {
             <tr>
               <th className="text-left border border-black/25 py-2 px-2 w-10">#</th>
               <th className="text-left border border-black/25 py-2 px-2">Product</th>
+              <th className="text-left border border-black/25 py-2 px-2">From</th>
+              <th className="text-left border border-black/25 py-2 px-2">To</th>
               <th className="text-left border border-black/25 py-2 px-2 w-20">UOM</th>
               <th className="text-right border border-black/25 py-2 px-2 w-32">Quantity</th>
             </tr>
@@ -137,6 +141,12 @@ export function StockTransferVoucher(props: {
                 </td>
                 <td className="border border-black/10 py-2 px-2 align-top font-medium">
                   {l.productName}
+                </td>
+                <td className="border border-black/10 py-2 px-2 align-top opacity-80">
+                  {l.fromStorageLocationName}
+                </td>
+                <td className="border border-black/10 py-2 px-2 align-top opacity-80">
+                  {l.toStorageLocationName ?? "Pending receipt"}
                 </td>
                 <td className="border border-black/10 py-2 px-2 align-top opacity-80">
                   {l.uom}

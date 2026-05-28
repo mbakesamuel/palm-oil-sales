@@ -14,7 +14,9 @@ import { ValidationStatus } from "@/lib/domain";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 import type {
+  AvailableDeliveryOrderRow,
   LoadedSaleView,
+  PendingSaleRow,
   PosTaxPreviewRow,
   SaleMutationResult,
   SaveSaleResult,
@@ -38,6 +40,7 @@ type Line = {
   qtyUnits?: string;
   unitPricePerKg: string;
   unitPricePerUnit?: string;
+  storageLocationId: string;
 };
 
 type Payment = {
@@ -55,12 +58,96 @@ function parseDec(s: string) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function trimQtyDisplay(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return n
+    .toFixed(3)
+    .replace(/0+$/, "")
+    .replace(/\.$/, "") || "0";
+}
+
+type LineStockHintState = {
+  salesBlocked: boolean;
+  message: string | null;
+  unsellableQty: string;
+  sellableQty: string;
+};
+
+function aggregatedQtyAtLocation(
+  lines: Line[],
+  productId: string,
+  storageLocationId: string,
+): number {
+  const key = `${productId}:${storageLocationId}`;
+  let total = 0;
+  for (const l of lines) {
+    if (`${l.productId.trim()}:${l.storageLocationId.trim()}` === key) {
+      total += parseDec(l.qtyKg);
+    }
+  }
+  return total;
+}
+
+function lineSellableStockFeedback(
+  line: Line,
+  lines: Line[],
+  hints: Record<string, LineStockHintState | undefined>,
+): { availableLabel: string | null; exceedMessage: string | null } {
+  const pid = line.productId.trim();
+  const locId = line.storageLocationId.trim();
+  if (!pid || !locId) return { availableLabel: null, exceedMessage: null };
+  const hint = hints[`${pid}:${locId}`];
+  if (!hint) return { availableLabel: null, exceedMessage: null };
+  if (hint.salesBlocked) {
+    return { availableLabel: null, exceedMessage: hint.message };
+  }
+  const available = parseDec(hint.sellableQty);
+  const totalAtLocation = aggregatedQtyAtLocation(lines, pid, locId);
+  const availableLabel = `Sellable at location: ${hint.sellableQty} kg`;
+  if (totalAtLocation > available + 1e-9) {
+    return {
+      availableLabel,
+      exceedMessage: `Total at this location (${trimQtyDisplay(totalAtLocation)} kg) exceeds sellable stock (${hint.sellableQty} kg).`,
+    };
+  }
+  return { availableLabel, exceedMessage: null };
+}
+
 function linesFromDeliveryOrderProducts(data: DeliveryOrderLookupDto): Line[] {
   return data.perProduct.map((row) => ({
     productId: String(row.productId),
     qtyKg: "0",
     unitPricePerKg: "0",
+    storageLocationId: "",
   }));
+}
+
+/** Apply DO lines without wiping qty, location, or resolved prices on customer re-lookup. */
+function mergeLinesFromDeliveryOrder(
+  prev: Line[],
+  data: DeliveryOrderLookupDto,
+): Line[] {
+  const fromDo = linesFromDeliveryOrderProducts(data);
+  const doKey = fromDo.map((l) => l.productId).join(",");
+  const prevKey = prev.map((l) => l.productId).join(",");
+  if (doKey !== "" && doKey === prevKey) {
+    return prev;
+  }
+  const prevByProduct = new Map(
+    prev
+      .filter((l) => l.productId.trim() !== "")
+      .map((l) => [l.productId, l] as const),
+  );
+  return fromDo.map((row) => {
+    const existing = prevByProduct.get(row.productId);
+    if (!existing) return row;
+    return {
+      ...row,
+      qtyKg: existing.qtyKg,
+      unitPricePerKg: existing.unitPricePerKg,
+      storageLocationId: existing.storageLocationId || row.storageLocationId,
+    };
+  });
 }
 
 function legacyAppliedTaxesFromSale(
@@ -78,11 +165,26 @@ export function SalesClient(props: {
   customers: Customer[];
   products: Product[];
   salesPoints: Array<{ id: number; name: string }>;
+  storageLocations: Array<{ id: number; salesPointId: number; name: string; isDefault: boolean }>;
   previewPosTaxesAction: (
     customerId: string,
     transactionIso: string,
   ) => Promise<
     { ok: true; taxes: PosTaxPreviewRow[] } | { ok: false; error: string }
+  >;
+  previewPosLineStockAction: (
+    salesPointId: string,
+    storageLocationId: string,
+    productId: string,
+  ) => Promise<
+    | {
+        ok: true;
+        sellableQty: string;
+        unsellableQty: string;
+        salesBlocked: boolean;
+        message: string | null;
+      }
+    | { ok: false; error: string }
   >;
   saveSaleAction: (formData: FormData) => Promise<SaveSaleResult>;
   loadSaleByInvoiceNo: (invoiceNo: string) => Promise<LoadedSaleView | null>;
@@ -93,8 +195,13 @@ export function SalesClient(props: {
     | { ok: true; data: DeliveryOrderLookupDto & { customerMatches: boolean } }
     | { ok: false; error: string }
   >;
+  listAvailableDeliveryOrdersAction: (
+    salesPointId: string,
+  ) => Promise<AvailableDeliveryOrderRow[]>;
   validateSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
   canValidateDocuments: boolean;
+  canPickPendingSales: boolean;
+  listPendingSalesAction: () => Promise<PendingSaleRow[]>;
   deleteSaleAction: (formData: FormData) => Promise<SaleMutationResult>;
   previewProductUnitPriceAction: (
     customerId: string,
@@ -109,11 +216,15 @@ export function SalesClient(props: {
     products,
     salesPoints,
     previewPosTaxesAction,
+    previewPosLineStockAction,
     saveSaleAction,
     loadSaleByInvoiceNo,
     lookupDeliveryOrderAction,
+    listAvailableDeliveryOrdersAction,
     validateSaleAction,
     canValidateDocuments: canValidateDocumentsProp,
+    canPickPendingSales: canPickPendingSalesProp,
+    listPendingSalesAction,
     deleteSaleAction,
     previewProductUnitPriceAction,
   } = props;
@@ -125,16 +236,40 @@ export function SalesClient(props: {
   const [saleId, setSaleId] = React.useState<string | null>(null);
   const [invoiceNo, setInvoiceNo] = React.useState<string>("");
   const [lookupNo, setLookupNo] = React.useState<string>("");
+  const [pendingSales, setPendingSales] = React.useState<PendingSaleRow[]>([]);
+  const [pendingPickerOpen, setPendingPickerOpen] = React.useState(false);
+  const pendingPickerRef = React.useRef<HTMLDivElement>(null);
   const [soldAtIso, setSoldAtIso] = React.useState<string>("");
   const [referenceNumber, setReferenceNumber] = React.useState<string>("");
   const [vehicleNumber, setVehicleNumber] = React.useState("");
   const [deliveryOrderNo, setDeliveryOrderNo] = React.useState("");
+  const [availableDos, setAvailableDos] = React.useState<AvailableDeliveryOrderRow[]>(
+    [],
+  );
+  const [doPickerOpen, setDoPickerOpen] = React.useState(false);
+  const doPickerRef = React.useRef<HTMLDivElement>(null);
   const [doLookupData, setDoLookupData] = React.useState<
     (DeliveryOrderLookupDto & { customerMatches: boolean }) | null
   >(null);
   const [doLookupError, setDoLookupError] = React.useState<string | null>(null);
   const [doLookupBusy, setDoLookupBusy] = React.useState(false);
   const [salesPointId, setSalesPointId] = React.useState<string>("");
+  const effectiveSalesPointId =
+    session?.salesPoint?.id != null ? String(session.salesPoint.id) : salesPointId;
+
+  function locationsForSalesPoint(spId: string): Array<{ id: number; name: string; isDefault: boolean }> {
+    const n = Number.parseInt(spId, 10);
+    if (!Number.isFinite(n)) return [];
+    return props.storageLocations
+      .filter((l) => l.salesPointId === n)
+      .map((l) => ({ id: l.id, name: l.name, isDefault: l.isDefault }));
+  }
+
+  function defaultLocationId(spId: string): string {
+    const locs = locationsForSalesPoint(spId);
+    const d = locs.find((l) => l.isDefault) ?? locs[0];
+    return d ? String(d.id) : "";
+  }
   const [saleStatus, setSaleStatus] = React.useState<ValidationStatus | null>(
     null,
   );
@@ -147,6 +282,7 @@ export function SalesClient(props: {
       productId: "",
       qtyKg: "0",
       unitPricePerKg: "0",
+      storageLocationId: "",
     },
   ]);
   const [payments, setPayments] = React.useState<Payment[]>(() => [
@@ -181,6 +317,17 @@ export function SalesClient(props: {
   const [linePriceErrors, setLinePriceErrors] = React.useState<
     Record<number, string>
   >({});
+  const [lineStockHints, setLineStockHints] = React.useState<
+    Record<
+      string,
+      {
+        salesBlocked: boolean;
+        message: string | null;
+        unsellableQty: string;
+        sellableQty: string;
+      }
+    >
+  >({});
 
   React.useEffect(() => {
     const sessionSalesPointId = session?.salesPoint?.id;
@@ -213,6 +360,55 @@ export function SalesClient(props: {
       alive = false;
     };
   }, [wp.openFinancialYear, wp.workingCalendarYear, wp.workingCalendarMonth]);
+
+  React.useEffect(() => {
+    if (saleId != null) {
+      setAvailableDos([]);
+      return;
+    }
+    if (authStatus !== "ready" || !session) {
+      setAvailableDos([]);
+      return;
+    }
+    const spid = effectiveSalesPointId.trim();
+    if (!spid) {
+      setAvailableDos([]);
+      return;
+    }
+    let alive = true;
+    void listAvailableDeliveryOrdersAction(spid).then((rows) => {
+      if (!alive) return;
+      setAvailableDos(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [
+    authStatus,
+    session,
+    effectiveSalesPointId,
+    saleId,
+    listAvailableDeliveryOrdersAction,
+  ]);
+
+  React.useEffect(() => {
+    if (!doPickerOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!doPickerRef.current) return;
+      if (!doPickerRef.current.contains(event.target as Node)) {
+        setDoPickerOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setDoPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [doPickerOpen]);
 
   React.useEffect(() => {
     const no = deliveryOrderNo.trim();
@@ -264,7 +460,7 @@ export function SalesClient(props: {
           setDoLookupData(r.data);
           setDoLookupError(null);
           if (saleId == null) {
-            setLines(linesFromDeliveryOrderProducts(r.data));
+            setLines((prev) => mergeLinesFromDeliveryOrder(prev, r.data));
           }
         } else {
           setDoLookupData(null);
@@ -285,6 +481,45 @@ export function SalesClient(props: {
     saleId,
     session?.userId,
   ]);
+
+  React.useEffect(() => {
+    if (authStatus !== "ready" || !session || !canPickPendingSalesProp) {
+      setPendingSales([]);
+      return;
+    }
+    let alive = true;
+    void listPendingSalesAction().then((rows) => {
+      if (!alive) return;
+      setPendingSales(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [
+    authStatus,
+    session,
+    canPickPendingSalesProp,
+    listPendingSalesAction,
+  ]);
+
+  React.useEffect(() => {
+    if (!pendingPickerOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!pendingPickerRef.current) return;
+      if (!pendingPickerRef.current.contains(event.target as Node)) {
+        setPendingPickerOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setPendingPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pendingPickerOpen]);
 
   React.useEffect(() => {
     let alive = true;
@@ -394,6 +629,72 @@ export function SalesClient(props: {
     previewProductUnitPriceAction,
   ]);
 
+  const lineLocationKey = lines
+    .map((l) => `${l.productId}:${l.storageLocationId}`)
+    .join(",");
+
+  React.useEffect(() => {
+    let alive = true;
+    if (saleId != null) {
+      window.queueMicrotask(() => {
+        if (alive) setLineStockHints({});
+      });
+      return () => {
+        alive = false;
+      };
+    }
+    const spid = effectiveSalesPointId.trim();
+    if (!spid || authStatus !== "ready") {
+      window.queueMicrotask(() => {
+        if (alive) setLineStockHints({});
+      });
+      return () => {
+        alive = false;
+      };
+    }
+    const productIds = [
+      ...new Set(lines.map((l) => l.productId.trim()).filter(Boolean)),
+    ];
+    const locs = locationsForSalesPoint(spid);
+    if (productIds.length === 0 || locs.length === 0) {
+      window.queueMicrotask(() => {
+        if (alive) setLineStockHints({});
+      });
+      return () => {
+        alive = false;
+      };
+    }
+    void (async () => {
+      const next: typeof lineStockHints = {};
+      await Promise.all(
+        productIds.flatMap((pid) =>
+          locs.map(async (loc) => {
+            const r = await previewPosLineStockAction(spid, String(loc.id), pid);
+            if (!alive || !r.ok) return;
+            next[`${pid}:${loc.id}`] = {
+              salesBlocked: r.salesBlocked,
+              message: r.message,
+              unsellableQty: r.unsellableQty,
+              sellableQty: r.sellableQty,
+            };
+          }),
+        ),
+      );
+      if (!alive) return;
+      setLineStockHints(next);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [
+    authStatus,
+    effectiveSalesPointId,
+    lineLocationKey,
+    lineProductKey,
+    saleId,
+    previewPosLineStockAction,
+  ]);
+
   const customer = customers.find((c) => c.id === customerId);
   const net = lines.reduce(
     (sum, l) => sum + parseDec(l.qtyKg) * parseDec(l.unitPricePerKg),
@@ -439,6 +740,39 @@ export function SalesClient(props: {
 
   const deliveryOrderControlsItems =
     saleId == null && deliveryOrderNo.trim() !== "" && doLookupData != null;
+
+  const stockSaveBlock = (() => {
+    if (saleId != null) return { block: false as boolean, hint: null as string | null };
+    const totalsByLocation = new Map<string, number>();
+    for (const l of lines) {
+      const pid = l.productId.trim();
+      const locId = l.storageLocationId.trim();
+      if (!pid || !locId) continue;
+      const hint = lineStockHints[`${pid}:${locId}`];
+      if (hint?.salesBlocked) {
+        return {
+          block: true,
+          hint:
+            hint.message ??
+            "This location holds unsellable stock. Choose another location.",
+        };
+      }
+      const key = `${pid}:${locId}`;
+      totalsByLocation.set(key, (totalsByLocation.get(key) ?? 0) + parseDec(l.qtyKg));
+    }
+    for (const [key, totalQty] of totalsByLocation) {
+      const hint = lineStockHints[key];
+      if (!hint) continue;
+      const available = parseDec(hint.sellableQty);
+      if (totalQty > available + 1e-9) {
+        return {
+          block: true,
+          hint: `Total at this location (${trimQtyDisplay(totalQty)} kg) exceeds sellable stock (${hint.sellableQty} kg).`,
+        };
+      }
+    }
+    return { block: false, hint: null };
+  })();
 
   const deliveryOrderSaveBlock = (() => {
     const trimmed = deliveryOrderNo.trim();
@@ -508,6 +842,7 @@ export function SalesClient(props: {
         productId: "",
         qtyKg: "0",
         unitPricePerKg: "0",
+        storageLocationId: defaultLocationId(session?.salesPoint ? String(session.salesPoint.id) : ""),
       },
     ]);
     setPayments([{ method: "CASH", amount: "0" }]);
@@ -516,6 +851,7 @@ export function SalesClient(props: {
     setTaxPreviewRows([]);
     setTaxPreviewError(null);
     setLinePriceErrors({});
+    setLineStockHints({});
     setBanner(null);
     setLoadedTotals(null);
   }
@@ -548,12 +884,15 @@ export function SalesClient(props: {
             qtyUnits: l.qtyUnits ?? l.qtyKg,
             unitPricePerKg: l.unitPricePerKg,
             unitPricePerUnit: l.unitPricePerUnit ?? l.unitPricePerKg,
+            storageLocationId:
+              l.storageLocationId != null ? String(l.storageLocationId) : defaultLocationId(String(s.salesPointId ?? "")),
           }))
         : [
             {
               productId: "",
               qtyKg: "0",
               unitPricePerKg: "0",
+              storageLocationId: defaultLocationId(String(s.salesPointId ?? "")),
             },
           ],
     );
@@ -580,6 +919,7 @@ export function SalesClient(props: {
     setLoadedAppliedTaxes(legacyAppliedTaxesFromSale(s));
     setTaxPreviewError(null);
     setLinePriceErrors({});
+    setLineStockHints({});
     setBanner({
       type: "ok",
       text: bannerText ?? `Loaded ${s.invoiceNo}.`,
@@ -587,7 +927,9 @@ export function SalesClient(props: {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function onLoadByNo() {
+  async function onLoadByNo(explicit?: string) {
+    const no = String(explicit ?? lookupNo ?? "").trim();
+    if (!no) return;
     setBusy("load");
     setBanner(null);
     try {
@@ -595,16 +937,16 @@ export function SalesClient(props: {
         setBanner({ type: "error", text: "Login required." });
         return;
       }
-      const data = await loadSaleByInvoiceNo(lookupNo); //calling the server action to load the sale by invoice number
+      const data = await loadSaleByInvoiceNo(no);
       if (!data) {
-        //if no sale matches the invoice number, or the user cannot access it, show an error banner
         setBanner({
           type: "error",
           text: "No sale matches that invoice number, or you cannot access it.",
         });
         return;
       }
-      applyLoaded(data); //apply the loaded sale to the state
+      setLookupNo(no);
+      applyLoaded(data);
     } finally {
       setBusy(null);
     }
@@ -629,12 +971,25 @@ export function SalesClient(props: {
         setBanner({ type: "error", text: "Vehicle number is required." });
         return;
       }
+      if (!deliveryOrderNo.trim()) {
+        setBanner({ type: "error", text: "Delivery Order number is required." });
+        return;
+      }
       if (deliveryOrderSaveBlock.block) {
         setBanner({
           type: "error",
           text:
             deliveryOrderSaveBlock.hint ??
             "Fix delivery order details before saving.",
+        });
+        return;
+      }
+      if (stockSaveBlock.block) {
+        setBanner({
+          type: "error",
+          text:
+            stockSaveBlock.hint ??
+            "Fix stock availability before saving.",
         });
         return;
       }
@@ -649,7 +1004,22 @@ export function SalesClient(props: {
           ? String(session.salesPoint.id)
           : salesPointId,
       );
-      fd.set("lines", JSON.stringify(lines));
+      if (lines.some((l) => !String(l.storageLocationId ?? "").trim())) {
+        setBanner({
+          type: "error",
+          text: "Select a storage location on every line.",
+        });
+        return;
+      }
+      fd.set(
+        "lines",
+        JSON.stringify(
+          lines.map((l) => ({
+            ...l,
+            storageLocationId: String(l.storageLocationId),
+          })),
+        ),
+      );
       fd.set("payments", JSON.stringify(payments));
       fd.set(
         "postingFinancialYear",
@@ -672,6 +1042,11 @@ export function SalesClient(props: {
         }
         setBanner({ type: "ok", text: `Created ${r.invoiceNo}.` });
         router.refresh();
+        if (effectiveSalesPointId.trim()) {
+          void listAvailableDeliveryOrdersAction(effectiveSalesPointId).then(
+            setAvailableDos,
+          );
+        }
       } else {
         setBanner({ type: "error", text: r.error });
       }
@@ -692,6 +1067,9 @@ export function SalesClient(props: {
     resetNew();
     setBanner({ type: "ok", text: "Sale deleted." });
     router.refresh();
+    if (canPickPendingSalesProp) {
+      void listPendingSalesAction().then(setPendingSales);
+    }
   }
 
   async function onValidate() {
@@ -709,6 +1087,9 @@ export function SalesClient(props: {
       if (r.ok) {
         setBanner({ type: "ok", text: "Invoice validated." });
         router.refresh();
+        if (canPickPendingSalesProp) {
+          void listPendingSalesAction().then(setPendingSales);
+        }
       } else {
         setBanner({ type: "error", text: r.error });
       }
@@ -716,6 +1097,11 @@ export function SalesClient(props: {
       setBusy(null);
     }
   }
+
+  const canPickPending =
+    authStatus === "ready" && session && canPickPendingSalesProp;
+  const canPickAvailableDo =
+    saleId == null && effectiveSalesPointId.trim() !== "";
 
   return (
     <div className="space-y-8">
@@ -732,17 +1118,108 @@ export function SalesClient(props: {
       ) : null}
 
       <div className="rounded-lg border border-border p-3 sm:p-4">
+        <div className="text-sm font-semibold mb-1">Open existing invoice</div>
+        <p className="text-xs opacity-75 mb-3">
+          Enter the invoice number (e.g. PO-2026-000001) to load the full
+          document.
+          {canPickPending ? (
+            <>
+              {" "}
+              You can also pick one from the list of invoices awaiting
+              validation.
+            </>
+          ) : null}
+        </p>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
           <div className="grid gap-1 flex-1 min-w-0">
             <label className="text-xs font-medium opacity-70">
-              Open existing invoice
+              Invoice no.
             </label>
-            <input
-              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-              value={lookupNo}
-              onChange={(e) => setLookupNo(e.target.value)}
-              placeholder="PO-2026-000001"
-            />
+            <div className="relative" ref={pendingPickerRef}>
+              <div className="flex">
+                <input
+                  className={
+                    canPickPending
+                      ? "flex-1 rounded-l-md border border-border border-r-0 bg-transparent px-3 py-2 text-sm focus:outline-none"
+                      : "w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  }
+                  value={lookupNo}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setLookupNo(next);
+                    if (
+                      canPickPending &&
+                      pendingSales.some((s) => s.invoiceNo === next)
+                    ) {
+                      void onLoadByNo(next);
+                    }
+                  }}
+                  placeholder="PO-2026-000001"
+                />
+                {canPickPending ? (
+                  <button
+                    type="button"
+                    aria-label="Pick from invoices awaiting validation"
+                    aria-haspopup="listbox"
+                    aria-expanded={pendingPickerOpen}
+                    title={
+                      pendingSales.length === 0
+                        ? "No invoices awaiting validation"
+                        : `Pick from ${pendingSales.length} pending invoice${pendingSales.length === 1 ? "" : "s"}`
+                    }
+                    onClick={() => setPendingPickerOpen((v) => !v)}
+                    className="rounded-r-md border border-border bg-accent/10 px-3 py-2 text-sm hover:bg-accent/25 focus:outline-none"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <span className="opacity-70">{pendingSales.length}</span>
+                      <span aria-hidden="true">
+                        {pendingPickerOpen ? "\u25b4" : "\u25be"}
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              {canPickPending && pendingPickerOpen ? (
+                <div
+                  role="listbox"
+                  className="absolute z-20 mt-1 max-h-72 w-full min-w-88 overflow-auto rounded-md border border-border bg-background shadow-lg"
+                >
+                  {pendingSales.length === 0 ? (
+                    <div className="px-3 py-3 text-xs opacity-70">
+                      No sales invoices are currently awaiting validation.
+                    </div>
+                  ) : (
+                    <ul className="py-1">
+                      {pendingSales.map((s) => (
+                        <li key={s.invoiceNo}>
+                          <button
+                            type="button"
+                            role="option"
+                            className="block w-full text-left px-3 py-2 text-sm hover:bg-accent/25 focus:bg-accent/25 focus:outline-none"
+                            onClick={() => {
+                              setLookupNo(s.invoiceNo);
+                              setPendingPickerOpen(false);
+                              void onLoadByNo(s.invoiceNo);
+                            }}
+                          >
+                            <div className="font-medium tabular-nums">
+                              {s.invoiceNo}
+                            </div>
+                            <div className="text-xs opacity-75">
+                              {s.customerName}
+                              {" \u00b7 "}
+                              {s.soldAtIso}
+                              {s.salesPointName ? ` \u00b7 ${s.salesPointName}` : ""}
+                              {s.totalLabel ? ` \u00b7 ${s.totalLabel}` : ""}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
             <button
@@ -909,7 +1386,25 @@ export function SalesClient(props: {
                 <select
                   className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                   value={salesPointId}
-                  onChange={(e) => setSalesPointId(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSalesPointId(next);
+                    setDeliveryOrderNo("");
+                    setDoLookupData(null);
+                    setDoLookupError(null);
+                    const def = defaultLocationId(next);
+                    setLines((prev) =>
+                      prev.map((l) => ({
+                        ...l,
+                        storageLocationId:
+                          locationsForSalesPoint(next).some(
+                            (loc) => String(loc.id) === l.storageLocationId,
+                          ) && l.storageLocationId
+                            ? l.storageLocationId
+                            : def,
+                      })),
+                    );
+                  }}
                   disabled={saleId != null}
                 >
                   <option value="">select sales point</option>
@@ -962,16 +1457,95 @@ export function SalesClient(props: {
           </div>
           <div className="grid gap-1">
             <label className="text-xs font-medium opacity-80">
-              Delivery order no.{" "}
-              <span className="font-normal opacity-60">(optional)</span>
+              Delivery order no.
             </label>
-            <input
-              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-              value={deliveryOrderNo}
-              onChange={(e) => setDeliveryOrderNo(e.target.value)}
-              placeholder="Link to D.O. for qty control"
-              disabled={saleId != null}
-            />
+            <div className="relative" ref={doPickerRef}>
+              <div className="flex">
+                <input
+                  className={
+                    canPickAvailableDo
+                      ? "flex-1 rounded-l-md border border-border border-r-0 bg-transparent px-3 py-2 text-sm focus:outline-none"
+                      : "w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  }
+                  value={deliveryOrderNo}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setDeliveryOrderNo(next);
+                    if (
+                      canPickAvailableDo &&
+                      availableDos.some((d) => d.deliveryOrderNo === next)
+                    ) {
+                      setDoPickerOpen(false);
+                    }
+                  }}
+                  placeholder="DO-2026-000001"
+                  disabled={saleId != null}
+                />
+                {canPickAvailableDo ? (
+                  <button
+                    type="button"
+                    aria-label="Pick from delivery orders with balance"
+                    aria-haspopup="listbox"
+                    aria-expanded={doPickerOpen}
+                    title={
+                      availableDos.length === 0
+                        ? "No delivery orders with balance at this sales point"
+                        : `Pick from ${availableDos.length} order${availableDos.length === 1 ? "" : "s"} with balance`
+                    }
+                    onClick={() => setDoPickerOpen((v) => !v)}
+                    disabled={saleId != null}
+                    className="rounded-r-md border border-border bg-accent/10 px-3 py-2 text-sm hover:bg-accent/25 focus:outline-none disabled:opacity-50"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <span className="opacity-70">{availableDos.length}</span>
+                      <span aria-hidden="true">
+                        {doPickerOpen ? "\u25b4" : "\u25be"}
+                      </span>
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              {canPickAvailableDo && doPickerOpen ? (
+                <div
+                  role="listbox"
+                  className="absolute z-20 mt-1 max-h-72 w-full min-w-88 overflow-auto rounded-md border border-border bg-background shadow-lg"
+                >
+                  {availableDos.length === 0 ? (
+                    <div className="px-3 py-3 text-xs opacity-70">
+                      No validated delivery orders with remaining balance at
+                      this sales point.
+                    </div>
+                  ) : (
+                    <ul className="py-1">
+                      {availableDos.map((d) => (
+                        <li key={d.deliveryOrderNo}>
+                          <button
+                            type="button"
+                            role="option"
+                            className="block w-full text-left px-3 py-2 text-sm hover:bg-accent/25 focus:bg-accent/25 focus:outline-none"
+                            onClick={() => {
+                              setDeliveryOrderNo(d.deliveryOrderNo);
+                              setDoPickerOpen(false);
+                            }}
+                          >
+                            <div className="font-medium tabular-nums">
+                              {d.deliveryOrderNo}
+                            </div>
+                            <div className="text-xs opacity-75">
+                              {d.customerName}
+                              {" \u00b7 "}
+                              {d.dateIssued}
+                              {" \u00b7 "}
+                              {d.balanceKg} kg balance
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {deliveryOrderNo.trim() ? (
@@ -1090,6 +1664,7 @@ export function SalesClient(props: {
                     productId: "",
                     qtyKg: "0",
                     unitPricePerKg: "0",
+                    storageLocationId: defaultLocationId(effectiveSalesPointId),
                   },
                 ])
               }
@@ -1110,17 +1685,18 @@ export function SalesClient(props: {
 
           <div className="rounded-lg border border-border overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
-              <div className="col-span-5">Product</div>
-              <div className="col-span-3">Qty (kg)</div>
-              <div className="col-span-3">Price / kg (ex tax)</div>
+              <div className="col-span-4">Product</div>
+              <div className="col-span-3">Location</div>
+              <div className="col-span-2">Qty (kg)</div>
+              <div className="col-span-2">Price / kg (ex tax)</div>
               <div className="col-span-1" />
             </div>
             {lines.map((l, idx) => (
               <div
                 key={idx}
-                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-center"
+                className="grid grid-cols-12 gap-2 px-3 py-2 text-sm items-start"
               >
-                <div className="col-span-5">
+                <div className="col-span-4">
                   <select
                     className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
                     value={l.productId}
@@ -1149,6 +1725,53 @@ export function SalesClient(props: {
                   </select>
                 </div>
                 <div className="col-span-3">
+                  <select
+                    className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                    value={l.storageLocationId}
+                    onChange={(e) =>
+                      setLines((prev) =>
+                        prev.map((x, i) =>
+                          i === idx ? { ...x, storageLocationId: e.target.value } : x,
+                        ),
+                      )
+                    }
+                    disabled={!effectiveSalesPointId}
+                  >
+                    <option value="" disabled>
+                      Select location
+                    </option>
+                    {locationsForSalesPoint(effectiveSalesPointId).map((loc) => {
+                      const blocked =
+                        l.productId.trim() !== "" &&
+                        lineStockHints[`${l.productId}:${loc.id}`]?.salesBlocked ===
+                          true;
+                      return (
+                        <option
+                          key={loc.id}
+                          value={String(loc.id)}
+                          disabled={blocked}
+                        >
+                          {loc.name}
+                          {blocked ? " — unsellable" : ""}
+                          {loc.isDefault ? " (default)" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {(() => {
+                    const stockHint =
+                      l.productId.trim() && l.storageLocationId.trim()
+                        ? lineStockHints[`${l.productId}:${l.storageLocationId}`]
+                        : null;
+                    if (!stockHint?.message) return null;
+                    return (
+                      <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-200/90 leading-snug">
+                        {stockHint.message}
+                      </p>
+                    );
+                  })()}
+                </div>
+                <div className="col-span-2">
                   <input
                     className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm tabular-nums"
                     value={l.qtyKg}
@@ -1161,8 +1784,32 @@ export function SalesClient(props: {
                       )
                     }
                   />
+                  {(() => {
+                    const qtyFeedback = lineSellableStockFeedback(
+                      l,
+                      lines,
+                      lineStockHints,
+                    );
+                    if (!qtyFeedback.availableLabel && !qtyFeedback.exceedMessage) {
+                      return null;
+                    }
+                    return (
+                      <div className="mt-1 space-y-0.5">
+                        {qtyFeedback.availableLabel ? (
+                          <p className="text-[11px] opacity-70 leading-snug">
+                            {qtyFeedback.availableLabel}
+                          </p>
+                        ) : null}
+                        {qtyFeedback.exceedMessage ? (
+                          <p className="text-[11px] text-red-700 dark:text-red-300 leading-snug">
+                            {qtyFeedback.exceedMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div className="col-span-3 min-w-0">
+                <div className="col-span-2 min-w-0">
                   <input
                     className="w-full rounded-md border border-border bg-foreground/6 px-3 py-2 text-sm tabular-nums"
                     value={l.unitPricePerKg}
@@ -1432,6 +2079,7 @@ export function SalesClient(props: {
         <div className="flex flex-col gap-2">
           {saleId == null &&
           (deliveryOrderSaveBlock.block ||
+            stockSaveBlock.block ||
             !vehicleNumber.trim() ||
             Boolean(taxPreviewError)) ? (
             <p className="text-xs text-amber-800 dark:text-amber-300 max-w-xl">
@@ -1439,7 +2087,8 @@ export function SalesClient(props: {
                 ? "Fix tax configuration before saving."
                 : !vehicleNumber.trim()
                   ? "Enter a vehicle number before saving."
-                  : (deliveryOrderSaveBlock.hint ??
+                  : (stockSaveBlock.hint ??
+                    deliveryOrderSaveBlock.hint ??
                     "Fix delivery order validation before saving.")}
             </p>
           ) : null}
@@ -1451,6 +2100,7 @@ export function SalesClient(props: {
                 saleId != null ||
                 !vehicleNumber.trim() ||
                 deliveryOrderSaveBlock.block ||
+                stockSaveBlock.block ||
                 Boolean(taxPreviewError)
               }
               onClick={() => void onSaveSale()}

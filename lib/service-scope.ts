@@ -10,12 +10,7 @@ export type ServiceScope =
 
 /** Leadership and org-wide managers see every commercial line. */
 export function roleSeesAllCommercialServices(role: UserRole): boolean {
-  return (
-    role === UserRoleEnum.ADMIN ||
-    role === UserRoleEnum.DIRECTOR ||
-    role === UserRoleEnum.MANAGER ||
-    role === UserRoleEnum.OFFICER
-  );
+  return role === UserRoleEnum.ADMIN || role === UserRoleEnum.DIRECTOR;
 }
 
 /** Operational roles must have an active commercial line before posting or scoped reads. */

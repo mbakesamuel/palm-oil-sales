@@ -21,6 +21,7 @@ import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
 import { taxRegimeWhereForCommercialLine } from "@/lib/service-scope";
 import { isInsufficientStockError } from "@/lib/stock/errors";
 import { applyMovement } from "@/lib/stock/post";
+import { resolveDefaultStorageLocationId } from "@/lib/stock/storage-location";
 import {
   BpoEmployeeCollectedProduct,
   CustomerType,
@@ -314,10 +315,12 @@ export async function createBpoOutboundSale(formData: FormData): Promise<BpoOutb
             });
           }
 
+          const defaultStorageLocationId = await resolveDefaultStorageLocationId(tx, botaId);
           for (const line of preparedLines) {
             await applyMovement(tx, {
               salesPointId: botaId,
               productId: line.productId,
+              storageLocationId: defaultStorageLocationId,
               qty: line.qtyUnits,
               kind: StockMovementKind.SALE,
               occurredAt: soldAt,

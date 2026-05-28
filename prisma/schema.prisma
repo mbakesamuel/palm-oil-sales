@@ -89,6 +89,12 @@ enum StockDocStatus {
   CANCELLED
 }
 
+/// Quality/condition of stock within a storage location.
+enum StockCondition {
+  SELLABLE
+  UNSELLABLE
+}
+
 model RolePermission {
   id        String   @id @default(cuid())
   role      UserRole
@@ -351,6 +357,8 @@ model User {
   validatedSales            Sale[]                   @relation("SalesValidatedBy")
   deliveryOrdersCreated     DeliveryOrder[]          @relation("DeliveryOrdersCreatedBy")
   deliveryOrdersValidated   DeliveryOrder[]          @relation("DeliveryOrdersValidatedBy")
+  deliveryOrdersReviewed    DeliveryOrder[]          @relation("DeliveryOrdersReviewedBy")
+  deliveryOrdersCancelled   DeliveryOrder[]          @relation("DeliveryOrdersCancelledBy")
   consignmentNotesCreated   VehicleConsignmentNote[] @relation("ConsignmentNotesCreatedBy")
   consignmentNotesValidated VehicleConsignmentNote[] @relation("ConsignmentNotesValidatedBy")
 
@@ -642,6 +650,7 @@ model SaleLine {
   id               String   @id @default(cuid())
   saleId           String
   productId        Int
+  storageLocationId Int?
   qtyKg            Decimal  @db.Decimal(14, 3)
   qtyUnits         Decimal? @db.Decimal(14, 3)
   unitPricePerKg   Decimal  @db.Decimal(14, 2)
@@ -652,9 +661,11 @@ model SaleLine {
 
   sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  storageLocation StorageLocation? @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([saleId])
   @@index([productId])
+  @@index([storageLocationId])
 }
 
 model Payment {
@@ -710,6 +721,7 @@ model SalesPoint {
   deliveryOrders DeliveryOrder[]
   sales          Sale[]
 
+  storageLocations   StorageLocation[]
   stockBalances      StockBalance[]
   stockMovements     StockMovement[]
   stockReceipts      StockReceipt[]
@@ -719,6 +731,33 @@ model SalesPoint {
 
   @@index([millId])
   @@map("SalesPoint") // maps to the actual Derby table name
+}
+
+/// Named storage bin/tank within a sales point (e.g. production tank, floor).
+model StorageLocation {
+  id           Int      @id @default(autoincrement())
+  salesPointId Int
+  name         String
+  /// One default per sales point — used for outbound sales deductions when no bin is specified.
+  isDefault    Boolean  @default(false)
+  /// Whether stock stored here may be sold (e.g., quarantine/damaged bins are unsellable).
+  isSellable   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  salesPoint SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  stockBalances          StockBalance[]
+  stockMovements         StockMovement[]
+  stockReceiptLines      StockReceiptLine[]
+  stockAdjustmentLines   StockAdjustmentLine[]
+  stockTransferLinesFrom StockTransferLine[] @relation("TransferLineFromLocation")
+  stockTransferLinesTo   StockTransferLine[] @relation("TransferLineToLocation")
+  saleLines              SaleLine[]
+
+  @@unique([salesPointId, name])
+  @@index([salesPointId])
+  @@map("StorageLocation")
 }
 
 model DeliveryOrder {
@@ -735,8 +774,15 @@ model DeliveryOrder {
   postingCalendarYear           Int?
   createdByUserId               String?
   status                        ValidationStatus   @default(PENDING)
+  /// Manager review checkpoint before bulk validation.
+  reviewedAt                    DateTime?
+  reviewedByUserId              String?
   validatedAt                   DateTime?
   validatedByUserId             String?
+  /// Cancellation of a previously validated DO (correction workflow).
+  cancelledAt                   DateTime?
+  cancelledByUserId             String?
+  cancelReason                  String?
   commercialServiceId           String?
   commercialService             CommercialService? @relation(fields: [commercialServiceId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   issuerPhoneSnapshot           String?
@@ -745,7 +791,9 @@ model DeliveryOrder {
 
   customer    Customer                      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   createdBy   User?                         @relation("DeliveryOrdersCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewedBy  User?                         @relation("DeliveryOrdersReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   validatedBy User?                         @relation("DeliveryOrdersValidatedBy", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+  cancelledBy User?                         @relation("DeliveryOrdersCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   details     DeliveryOrderDetails[]
   payments    DeliveryOrderPaymentDetails[]
 
@@ -753,6 +801,8 @@ model DeliveryOrder {
   @@index([salesPointId])
   @@index([financialYear, postingCalendarYear, financialMonth])
   @@index([status, dateIssued])
+  @@index([status, reviewedAt])
+  @@index([status, cancelledAt])
   @@index([commercialServiceId])
   @@map("DeliveryOrder")
 }
@@ -856,46 +906,54 @@ model StockAdjustmentSequence {
   @@map("StockAdjustmentSequence")
 }
 
-/// Denormalized current on-hand quantity per (sales point, product). Maintained by the stock posting layer only.
+/// Denormalized current on-hand quantity per (sales point, product, storage location). Maintained by the stock posting layer only.
 model StockBalance {
-  salesPointId Int
-  productId    Int
+  salesPointId      Int
+  productId         Int
+  storageLocationId Int
+  condition         StockCondition @default(SELLABLE)
   /// Native UOM per product (Kg for loose, Units for bottled). Always >= 0 when posting succeeds.
-  qty          Decimal  @db.Decimal(14, 3)
-  updatedAt    DateTime @updatedAt
+  qty               Decimal  @db.Decimal(14, 3)
+  updatedAt         DateTime @updatedAt
 
-  salesPoint SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  product    Product    @relation(fields: [productId], references: [productId], onDelete: Cascade, onUpdate: Cascade)
+  salesPoint      SalesPoint      @relation(fields: [salesPointId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  product         Product         @relation(fields: [productId], references: [productId], onDelete: Cascade, onUpdate: Cascade)
+  storageLocation StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  @@id([salesPointId, productId])
+  @@id([salesPointId, productId, storageLocationId, condition])
   @@index([productId])
+  @@index([storageLocationId])
   @@map("StockBalance")
 }
 
 /// Immutable ledger: one row per line per posting event. Sign of the balance change is implied by `kind`.
 model StockMovement {
-  id           String            @id @default(cuid())
-  salesPointId Int
-  productId    Int
-  kind         StockMovementKind
+  id                String            @id @default(cuid())
+  salesPointId      Int
+  productId         Int
+  storageLocationId Int
+  kind              StockMovementKind
+  condition         StockCondition    @default(SELLABLE)
   /// Always positive; the `kind` decides whether balance went up or down.
-  qty          Decimal           @db.Decimal(14, 3)
+  qty               Decimal           @db.Decimal(14, 3)
   /// Business date of the movement (matches sale date / receipt date / dispatch date / receive date).
-  occurredAt   DateTime
+  occurredAt        DateTime
   /// User who actioned the posting (validator for sales, poster for receipts/adjustments, dispatcher/receiver for transfers).
-  userId       String
+  userId            String
   /// One of 'RECEIPT' | 'TRANSFER' | 'SALE' | 'ADJUSTMENT' (free text but kept stable in code).
-  sourceKind   String
+  sourceKind        String
   /// Document id of the source (StockReceipt.id, StockTransfer.id, Sale.id, StockAdjustment.id).
-  sourceId     String
-  notes        String?
-  createdAt    DateTime          @default(now())
+  sourceId          String
+  notes             String?
+  createdAt         DateTime          @default(now())
 
-  salesPoint SalesPoint @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  product    Product    @relation(fields: [productId], references: [productId], onDelete: Restrict, onUpdate: Cascade)
-  user       User       @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  salesPoint      SalesPoint      @relation(fields: [salesPointId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product         Product         @relation(fields: [productId], references: [productId], onDelete: Restrict, onUpdate: Cascade)
+  storageLocation StorageLocation @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([salesPointId, productId, occurredAt])
+  @@index([storageLocationId, productId])
   @@index([sourceKind, sourceId])
   @@index([occurredAt])
   @@index([userId, occurredAt])
@@ -929,16 +987,19 @@ model StockReceipt {
 }
 
 model StockReceiptLine {
-  id        String  @id @default(cuid())
-  receiptId String
-  productId Int
-  qty       Decimal @db.Decimal(14, 3)
+  id                String  @id @default(cuid())
+  receiptId         String
+  productId         Int
+  storageLocationId Int
+  qty               Decimal @db.Decimal(14, 3)
 
-  receipt StockReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  product Product      @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  receipt         StockReceipt      @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product         Product           @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  storageLocation StorageLocation   @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([receiptId])
   @@index([productId])
+  @@index([storageLocationId])
   @@map("StockReceiptLine")
 }
 
@@ -972,13 +1033,18 @@ model StockTransfer {
 }
 
 model StockTransferLine {
-  id         String  @id @default(cuid())
-  transferId String
-  productId  Int
-  qty        Decimal @db.Decimal(14, 3)
+  id                    String  @id @default(cuid())
+  transferId            String
+  productId             Int
+  fromStorageLocationId Int
+  /// Set by the receiver when confirming receipt at the destination sales point.
+  toStorageLocationId   Int?
+  qty                   Decimal @db.Decimal(14, 3)
 
-  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  product  Product       @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  transfer            StockTransfer     @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product             Product           @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  fromStorageLocation StorageLocation   @relation("TransferLineFromLocation", fields: [fromStorageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  toStorageLocation   StorageLocation?  @relation("TransferLineToLocation", fields: [toStorageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([transferId])
   @@index([productId])
@@ -1010,16 +1076,22 @@ model StockAdjustment {
 }
 
 model StockAdjustmentLine {
-  id           String  @id @default(cuid())
-  adjustmentId String
-  productId    Int
+  id                String  @id @default(cuid())
+  adjustmentId      String
+  productId         Int
+  storageLocationId Int
   /// Signed delta (+ for gain, - for loss). Posting layer guards against driving balance negative.
-  deltaQty     Decimal @db.Decimal(14, 3)
+  deltaQty          Decimal @db.Decimal(14, 3)
+  /// Optional: when set, this line is a reclassification between conditions at the same location.
+  fromCondition     StockCondition?
+  toCondition       StockCondition?
 
-  adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
-  product    Product         @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  adjustment      StockAdjustment   @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product         Product           @relation(fields: [productId], references: [productId], onDelete: Restrict)
+  storageLocation StorageLocation   @relation(fields: [storageLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([adjustmentId])
   @@index([productId])
+  @@index([storageLocationId])
   @@map("StockAdjustmentLine")
 }

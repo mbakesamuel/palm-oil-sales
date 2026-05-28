@@ -1,7 +1,6 @@
 import "server-only";
 
-import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
-import { getServerSession } from "@/lib/auth-server";
+import { getPermissionsForSession } from "@/lib/access-control";
 import {
   fetchActorSalesPointScope,
   type ActorSalesPointRow,
@@ -11,13 +10,25 @@ import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import type { AuthSession } from "@/lib/auth-session";
 import {
+  assertStockPageActionAccess,
+  assertFullStockActionAccess,
+} from "@/lib/stock/stock-page-access-server";
+import {
   Prisma,
+  StockCondition,
   StockDocStatus,
   StockMovementKind,
   UserRole,
 } from "@prisma/client";
 
 export type SalesPointOption = { id: number; name: string };
+export type StorageLocationOption = {
+  id: number;
+  salesPointId: number;
+  name: string;
+  isDefault: boolean;
+  isSellable: boolean;
+};
 export type ProductOption = {
   productId: number;
   productName: string;
@@ -28,9 +39,12 @@ export type ProductOption = {
 export type StockBalanceRow = {
   salesPointId: number;
   salesPointName: string;
+  storageLocationId: number;
+  storageLocationName: string;
   productId: number;
   productName: string;
   uom: string;
+  condition: StockCondition;
   qty: string;
 };
 
@@ -39,10 +53,13 @@ export type StockMovementRow = {
   occurredAtIso: string;
   salesPointId: number;
   salesPointName: string;
+  storageLocationId: number;
+  storageLocationName: string;
   productId: number;
   productName: string;
   uom: string;
   kind: StockMovementKind;
+  condition: StockCondition;
   qty: string;
   sourceKind: string;
   sourceId: string;
@@ -71,7 +88,15 @@ export type ReceiptListRow = {
 
 export type ReceiptDetail = ReceiptListRow & {
   notes: string | null;
-  lines: { id: string; productId: number; productName: string; uom: string; qty: string }[];
+  lines: {
+    id: string;
+    productId: number;
+    productName: string;
+    uom: string;
+    qty: string;
+    storageLocationId: number;
+    storageLocationName: string;
+  }[];
 };
 
 export type TransferListRow = {
@@ -94,7 +119,17 @@ export type TransferListRow = {
 
 export type TransferDetail = TransferListRow & {
   notes: string | null;
-  lines: { id: string; productId: number; productName: string; uom: string; qty: string }[];
+  lines: {
+    id: string;
+    productId: number;
+    productName: string;
+    uom: string;
+    qty: string;
+    fromStorageLocationId: number;
+    fromStorageLocationName: string;
+    toStorageLocationId: number | null;
+    toStorageLocationName: string | null;
+  }[];
 };
 
 export type AdjustmentListRow = {
@@ -119,6 +154,8 @@ export type AdjustmentDetail = AdjustmentListRow & {
     productName: string;
     uom: string;
     deltaQty: string;
+    storageLocationId: number;
+    storageLocationName: string;
   }[];
 };
 
@@ -127,11 +164,13 @@ export type StockBootstrap = {
   canDispatchTransfers: boolean;
   canReceiveTransfers: boolean;
   canPostAdjustments: boolean;
+  canReclassifyStock: boolean;
   canCancelDocuments: boolean;
   canDraftReceipts: boolean;
   canDraftTransfers: boolean;
   scopedSalesPointId: number | null;
   salesPoints: SalesPointOption[];
+  storageLocations: StorageLocationOption[];
   products: ProductOption[];
   onHand: StockBalanceRow[];
   movements: StockMovementRow[];
@@ -156,15 +195,8 @@ function canDraftStockDocumentsForSession(session: AuthSession): boolean {
     return false;
   }
   const csrCode = session.commercialServiceRole?.code?.toLowerCase() ?? "";
-  if (csrCode.includes("manager")) return false;
   if (csrCode.includes("supervisor") && !csrCode.includes("senior")) return false;
   return true;
-}
-
-async function requireSession() {
-  const session = await getServerSession();
-  if (!session?.userId) throw new Error("Login required.");
-  return session;
 }
 
 function uomForBottled(isBottled: boolean): string {
@@ -184,18 +216,27 @@ async function salesPointScopeForActor(
 }
 
 export async function loadStockBootstrap(): Promise<StockBootstrap> {
-  const session = await requireSession();
-  await assertPermissionKey("route:/stock");
+  const session = await assertStockPageActionAccess();
   const prisma = getPrismaClient();
   const { scopedSalesPointId } = await salesPointScopeForActor(prisma, session.userId);
 
   const permissions = await getPermissionsForSession(session);
 
-  const [salesPoints, products, onHand, movements, receipts, transfers, adjustments] =
+  const [salesPoints, storageLocations, products, onHand, movements, receipts, transfers, adjustments] =
     await Promise.all([
       prisma.salesPoint.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
+      }),
+      prisma.storageLocation.findMany({
+        orderBy: [{ salesPointId: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          salesPointId: true,
+          name: true,
+          isDefault: true,
+          isSellable: true,
+        },
       }),
       prisma.product.findMany({
         orderBy: { productName: "asc" },
@@ -220,11 +261,13 @@ export async function loadStockBootstrap(): Promise<StockBootstrap> {
     canDispatchTransfers: permissions["ui:dispatch-stock-transfer"],
     canReceiveTransfers: permissions["ui:receive-stock-transfer"],
     canPostAdjustments: permissions["ui:post-stock-adjustment"],
+    canReclassifyStock: permissions["ui:reclassify-stock-condition"],
     canCancelDocuments: permissions["ui:cancel-stock-document"],
     canDraftReceipts: canDraft,
     canDraftTransfers: canDraft,
     scopedSalesPointId,
     salesPoints,
+    storageLocations,
     products: products.map((p) => ({
       productId: p.productId,
       productName: p.productName,
@@ -250,6 +293,7 @@ async function loadOnHand(
     where,
     include: {
       salesPoint: { select: { name: true } },
+      storageLocation: { select: { name: true } },
       product: {
         select: {
           productName: true,
@@ -260,6 +304,7 @@ async function loadOnHand(
     },
     orderBy: [
       { salesPoint: { name: "asc" } },
+      { storageLocation: { name: "asc" } },
       { product: { productName: "asc" } },
     ],
   });
@@ -267,11 +312,14 @@ async function loadOnHand(
   return rows.map((r) => ({
     salesPointId: r.salesPointId,
     salesPointName: r.salesPoint.name,
+    storageLocationId: r.storageLocationId,
+    storageLocationName: r.storageLocation.name,
     productId: r.productId,
     productName: r.product.productName,
     uom:
       r.product.uom?.trim() ||
       uomForBottled(r.product.productCat?.isBottled === true),
+    condition: r.condition,
     qty: r.qty.toString(),
   }));
 }
@@ -306,6 +354,7 @@ async function loadMovements(
     where,
     include: {
       salesPoint: { select: { name: true } },
+      storageLocation: { select: { name: true } },
       product: {
         select: {
           productName: true,
@@ -364,12 +413,15 @@ async function loadMovements(
     occurredAtIso: r.occurredAt.toISOString(),
     salesPointId: r.salesPointId,
     salesPointName: r.salesPoint.name,
+    storageLocationId: r.storageLocationId,
+    storageLocationName: r.storageLocation.name,
     productId: r.productId,
     productName: r.product.productName,
     uom:
       r.product.uom?.trim() ||
       uomForBottled(r.product.productCat?.isBottled === true),
     kind: r.kind,
+    condition: r.condition,
     qty: r.qty.toString(),
     sourceKind: r.sourceKind,
     sourceId: r.sourceId,
@@ -512,8 +564,7 @@ async function loadAdjustments(
 }
 
 export async function loadReceiptDetail(id: string): Promise<ReceiptDetail | null> {
-  const session = await requireSession();
-  await assertPermissionKey("route:/stock");
+  const session = await assertFullStockActionAccess();
   const prisma = getPrismaClient();
   const { scopedSalesPointId } = await salesPointScopeForActor(prisma, session.userId);
 
@@ -525,6 +576,7 @@ export async function loadReceiptDetail(id: string): Promise<ReceiptDetail | nul
       postedBy: { select: { name: true } },
       lines: {
         include: {
+          storageLocation: { select: { name: true } },
           product: {
             select: {
               productName: true,
@@ -568,13 +620,14 @@ export async function loadReceiptDetail(id: string): Promise<ReceiptDetail | nul
         l.product.uom?.trim() ||
         uomForBottled(l.product.productCat?.isBottled === true),
       qty: l.qty.toString(),
+      storageLocationId: l.storageLocationId,
+      storageLocationName: l.storageLocation.name,
     })),
   };
 }
 
 export async function loadTransferDetail(id: string): Promise<TransferDetail | null> {
-  const session = await requireSession();
-  await assertPermissionKey("route:/stock");
+  const session = await assertFullStockActionAccess();
   const prisma = getPrismaClient();
   const { scopedSalesPointId } = await salesPointScopeForActor(prisma, session.userId);
 
@@ -588,6 +641,8 @@ export async function loadTransferDetail(id: string): Promise<TransferDetail | n
       receivedBy: { select: { name: true } },
       lines: {
         include: {
+          fromStorageLocation: { select: { name: true } },
+          toStorageLocation: { select: { name: true } },
           product: {
             select: {
               productName: true,
@@ -639,13 +694,16 @@ export async function loadTransferDetail(id: string): Promise<TransferDetail | n
         l.product.uom?.trim() ||
         uomForBottled(l.product.productCat?.isBottled === true),
       qty: l.qty.toString(),
+      fromStorageLocationId: l.fromStorageLocationId,
+      fromStorageLocationName: l.fromStorageLocation.name,
+      toStorageLocationId: l.toStorageLocationId,
+      toStorageLocationName: l.toStorageLocation?.name ?? null,
     })),
   };
 }
 
 export async function loadAdjustmentDetail(id: string): Promise<AdjustmentDetail | null> {
-  const session = await requireSession();
-  await assertPermissionKey("route:/stock");
+  const session = await assertStockPageActionAccess();
   const prisma = getPrismaClient();
   const { scopedSalesPointId } = await salesPointScopeForActor(prisma, session.userId);
 
@@ -657,6 +715,7 @@ export async function loadAdjustmentDetail(id: string): Promise<AdjustmentDetail
       postedBy: { select: { name: true } },
       lines: {
         include: {
+          storageLocation: { select: { name: true } },
           product: {
             select: {
               productName: true,
@@ -693,6 +752,8 @@ export async function loadAdjustmentDetail(id: string): Promise<AdjustmentDetail
         l.product.uom?.trim() ||
         uomForBottled(l.product.productCat?.isBottled === true),
       deltaQty: l.deltaQty.toString(),
+      storageLocationId: l.storageLocationId,
+      storageLocationName: l.storageLocation.name,
     })),
   };
 }

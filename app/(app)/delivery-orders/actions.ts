@@ -283,11 +283,15 @@ export async function previewStockOnHandForDeliveryOrder(
   const accessErr = salesPointErrorForResource(actor, salesPointId);
   if (accessErr) return { ok: false, error: accessErr };
 
-  const row = await prisma.stockBalance.findUnique({
-    where: { salesPointId_productId: { salesPointId, productId } },
+  const rows = await prisma.stockBalance.findMany({
+    where: { salesPointId, productId },
     select: { qty: true },
   });
-  return { ok: true, onHand: (row?.qty ?? new Prisma.Decimal(0)).toString() };
+  const total = rows.reduce(
+    (acc, row) => acc.add(row.qty),
+    new Prisma.Decimal(0),
+  );
+  return { ok: true, onHand: total.toString() };
 }
 
 function revalidateOrderPaths(id: number) {
@@ -494,7 +498,7 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
     return {
       ok: false,
       error:
-        "Only senior sales supervisors can create or edit delivery order drafts. Managers validate pending orders once they are ready.",
+        "Only senior sales supervisors can create or edit delivery order drafts. Directors validate pending orders once they are ready.",
     };
   }
 
@@ -867,6 +871,66 @@ export async function validateDeliveryOrder(formData: FormData): Promise<SaveSec
   return { ok: true };
 }
 
+export async function cancelValidatedDeliveryOrder(
+  formData: FormData,
+): Promise<SaveSectionResult> {
+  const prisma = getPrismaClient();
+  const id = Number.parseInt(String(formData.get("id") ?? ""), 10);
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!Number.isFinite(id)) return { ok: false, error: "Invalid delivery order." };
+  if (!reason) return { ok: false, error: "Cancellation reason is required." };
+
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    await assertPermissionKey("route:/delivery-orders");
+    ({ session, actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  // Manager-only correction flow.
+  if (session.role !== "MANAGER") {
+    return { ok: false, error: "Only managers can cancel a validated delivery order." };
+  }
+
+  const perms = await getPermissionsForSession(session);
+  if (!perms["ui:validate-delivery-orders"]) {
+    return {
+      ok: false,
+      error: "You do not have permission to validate delivery orders.",
+    };
+  }
+
+  const scope = resolveServiceScope(session);
+
+  const existing = await prisma.deliveryOrder.findUnique({
+    where: { id },
+    select: { status: true, salesPointId: true, commercialServiceId: true },
+  });
+  if (!existing) return { ok: false, error: "Order not found." };
+  const accessErr = salesPointErrorForResource(actor, existing.salesPointId);
+  if (accessErr) return { ok: false, error: accessErr };
+  const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
+  if (csErr) return { ok: false, error: csErr };
+
+  if (existing.status !== ValidationStatus.VALIDATED) {
+    return { ok: false, error: "Only validated delivery orders can be cancelled." };
+  }
+
+  await prisma.deliveryOrder.update({
+    where: { id },
+    data: {
+      status: ValidationStatus.REJECTED,
+      cancelledAt: new Date(),
+      cancelledByUserId: session.userId,
+      cancelReason: reason,
+    },
+  });
+  revalidateOrderPaths(id);
+  return { ok: true };
+}
+
 export type DeliveryOrderPrintPayload = {
   companyName: string;
   department: string | null;
@@ -940,6 +1004,7 @@ export async function loadDeliveryOrderPrintById(
   const orderModel: DeliveryOrderPrintModel = {
     deliveryOrderNo: order.deliveryOrderNo,
     dateIssuedIso: order.dateIssued.toISOString(),
+    status: order.status,
     orderRef: order.orderRef,
     collectionPoint: order.salesPoint.name,
     customer: order.customer,

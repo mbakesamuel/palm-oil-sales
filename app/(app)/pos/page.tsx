@@ -11,20 +11,25 @@ import {
 import {
   createSale,
   deleteSale,
+  listAvailableDeliveryOrdersForSale,
+  listPendingSales,
   loadSaleByInvoiceNo,
   lookupDeliveryOrderForSale,
+  previewPosLineStock,
   previewPosTaxes,
   validateSale,
 } from "./actions";
 import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 import { SalesClient } from "./SalesClient";
+import { ReportHeader } from "@/components/ReportHeader";
 import Link from "next/link";
+import { canPickPendingPosSales } from "@/lib/auth-roles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function PosPage() {
-  await getOrInitCompanySettings();
+  const settings = await getOrInitCompanySettings();
   const prisma = getPrismaClient();
   const session = await getServerSession();
   const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
@@ -32,12 +37,20 @@ export default async function PosPage() {
     session != null
       ? (await getPermissionsForSession(session))["ui:validate-documents"]
       : false;
+  const canPickPendingSales =
+    session != null
+      ? canPickPendingPosSales({
+          validateDocuments: canValidateDocuments,
+          role: session.role,
+          commercialServiceRoleCode: session.commercialServiceRole?.code,
+        })
+      : false;
   const productWhere = productWhereForScope(scope, {
     productCat: { isBottled: false },
   });
   const customerWhere = customerWhereForScope(scope) ?? {};
 
-  const [customers, grades, salesPoints] = await Promise.all([
+  const [customers, grades, salesPoints, storageLocations] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
         where: customerWhere,
@@ -69,16 +82,26 @@ export default async function PosPage() {
         take: 200,
       }),
     ),
+    prismaRetry(() =>
+      prisma.storageLocation.findMany({
+        orderBy: [{ salesPointId: "asc" }, { name: "asc" }],
+        select: { id: true, salesPointId: true, name: true, isDefault: true },
+        take: 1000,
+      }),
+    ),
   ]);
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Sales</h1>
-        <p className="text-sm opacity-75">
-          Payments: cash, cheque, or bank traite (no credit sales).
-        </p>
-      </div>
+      <ReportHeader
+        companyName={settings.companyName}
+        department={settings.department}
+        logoSrc={settings.logoUrl}
+        title="Sales"
+      />
+      <p className="text-sm opacity-75">
+        Payments: cash, cheque, or bank traite (no credit sales).
+      </p>
 
       {customers.length === 0 || grades.length === 0 ? (
         <div className="rounded-lg border border-border p-4 text-sm">
@@ -104,14 +127,19 @@ export default async function PosPage() {
           customers={customers}
           products={grades}
           salesPoints={salesPoints}
+          storageLocations={storageLocations}
           previewPosTaxesAction={previewPosTaxes}
+          previewPosLineStockAction={previewPosLineStock}
           saveSaleAction={createSale}
           loadSaleByInvoiceNo={loadSaleByInvoiceNo}
           lookupDeliveryOrderAction={lookupDeliveryOrderForSale}
+          listAvailableDeliveryOrdersAction={listAvailableDeliveryOrdersForSale}
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
           previewProductUnitPriceAction={previewProductUnitPrice}
           canValidateDocuments={canValidateDocuments}
+          canPickPendingSales={canPickPendingSales}
+          listPendingSalesAction={listPendingSales}
         />
       )}
     </div>

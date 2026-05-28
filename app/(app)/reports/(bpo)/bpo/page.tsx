@@ -4,8 +4,7 @@ import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
-import { PrintButton } from "@/components/PrintButton";
-import { ReportSignatory } from "@/components/ReportSignatory";
+import { OpenReportButton } from "@/components/OpenReportButton";
 import { Prisma, ValidationStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +72,7 @@ export default async function BpoReportPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between gap-4 print:block">
+      <div className="flex justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Bottled Palm Oil monitor</h1>
           <p className="text-sm opacity-80 mt-1">{settings.companyName}</p>
@@ -81,8 +80,8 @@ export default async function BpoReportPage() {
             Generated {generated.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
           </p>
         </div>
-        <div className="print:hidden">
-          <PrintButton label="Print report" />
+        <div>
+          <OpenReportButton href="/reports/bpo/print" label="Print report" />
         </div>
       </div>
 
@@ -123,10 +122,6 @@ export default async function BpoReportPage() {
           </table>
         </div>
       </section>
-
-      <div className="hidden print:block">
-        <ReportSignatory />
-      </div>
     </div>
   );
 }

@@ -4,8 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { PrintButton } from "@/components/PrintButton";
-import { ReportHeader } from "@/components/ReportHeader";
+import { OpenReportButton } from "@/components/OpenReportButton";
 import { CustomerType } from "@/lib/domain";
 
 type ProductOpt = {
@@ -116,9 +115,6 @@ function groupSchedulesByProduct(rows: ScheduleRow[]): ScheduleGroup[] {
 }
 
 export function ProductPricingClient(props: {
-  companyName: string;
-  department: string | null;
-  logoUrl?: string | null;
   products: ProductOpt[];
   schedules: ScheduleRow[];
   saveScheduleAction: (formData: FormData) => void | Promise<void>;
@@ -127,9 +123,6 @@ export function ProductPricingClient(props: {
   embedded?: boolean;
 }) {
   const {
-    companyName,
-    department,
-    logoUrl,
     products,
     schedules,
     saveScheduleAction,
@@ -271,17 +264,8 @@ export function ProductPricingClient(props: {
 
   return (
     <div className="space-y-8">
-      <div className="hidden print:block">
-        <ReportHeader
-          companyName={companyName}
-          department={department}
-          logoSrc={logoUrl}
-          title="Product pricing"
-        />
-      </div>
-
       {!embedded ? (
-        <div className="space-y-1 print:hidden">
+        <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Product pricing</h1>
           <p className="text-sm opacity-75">
             Ex-tax unit prices by effective date. Products in the{" "}
@@ -290,14 +274,14 @@ export function ProductPricingClient(props: {
           </p>
         </div>
       ) : (
-        <p className="text-sm opacity-75 print:hidden">
+        <p className="text-sm opacity-75">
           The <span className="font-medium">Main</span> category uses
           customer-type segments; other categories use one price per product.
           Bottled SKUs use a single direct price per product (no customer-type
           column).
         </p>
       )}
-      <p className="text-sm opacity-75 print:hidden">
+      <p className="text-sm opacity-75">
         Manage the catalog under{" "}
         <Link href="/products" className="underline underline-offset-4">
           Products
@@ -310,7 +294,7 @@ export function ProductPricingClient(props: {
       </p>
 
       {products.length === 0 ? (
-        <div className="rounded-lg border border-border p-4 text-sm print:hidden">
+        <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Add products first</div>
           <p className="opacity-80 mt-2">
             Create products before scheduling price effective dates.
@@ -328,8 +312,8 @@ export function ProductPricingClient(props: {
         <div
           className={
             banner.type === "error"
-              ? "rounded-lg border border-red-600/40 bg-red-600/5 px-4 py-3 text-sm text-red-800 dark:text-red-300 print:hidden"
-              : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200 print:hidden"
+              ? "rounded-lg border border-red-600/40 bg-red-600/5 px-4 py-3 text-sm text-red-800 dark:text-red-300"
+              : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200"
           }
         >
           {banner.text}
@@ -338,7 +322,7 @@ export function ProductPricingClient(props: {
 
       {isFormOpen && products.length > 0 ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-label={editingId ? "Edit price row" : "Add price row"}
@@ -534,11 +518,14 @@ export function ProductPricingClient(props: {
       ) : null}
 
       <section className="space-y-2 -mt-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h2 className="text-lg font-semibold">Scheduled prices</h2>
           {products.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
-              <PrintButton label="Print report" />
+              <OpenReportButton
+                href="/setup/product-pricing/print"
+                label="Print report"
+              />
               <button
                 type="button"
                 className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
@@ -559,13 +546,13 @@ export function ProductPricingClient(props: {
                 <tr className="border-b border-border text-left">
                   <th className="p-2 font-medium">Customer type</th>
                   <th className="p-2 font-medium text-right">Ex-tax unit</th>
-                  <th className="p-2 font-medium w-36 text-right print:hidden">Actions</th>
+                  <th className="p-2 font-medium w-36 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {scheduleGroups.map((g) => (
                   <React.Fragment key={g.productId}>
-                    <tr className="bg-foreground/6 border-b border-border print:bg-black/4">
+                    <tr className="bg-foreground/6 border-b border-border">
                       <td colSpan={3} className="p-2 font-semibold">
                         <span>{g.productName}</span>
                         <span className="ml-2 text-xs font-normal opacity-70 tabular-nums">
@@ -587,7 +574,7 @@ export function ProductPricingClient(props: {
                         <td className="p-2 tabular-nums text-right">
                           {r.unitPriceExTax}
                         </td>
-                        <td className="p-2 text-right print:hidden">
+                        <td className="p-2 text-right">
                           <div className="flex justify-end gap-2 flex-wrap">
                             {products.length > 0 ? (
                               <button

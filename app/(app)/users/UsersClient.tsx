@@ -140,7 +140,7 @@ export function UsersClient(props: {
       const g = globalRoles.find((gr) => gr.id === id);
       setGlobalRoleDefinitionId(id);
       setCommercialServiceRoleId("");
-      setRole((g?.legacyRole ?? UserRole.MANAGER) as UserRole);
+      setRole((g?.legacyRole ?? UserRole.DIRECTOR) as UserRole);
       setSalesPointId("");
       setFactoryId("");
       return;
@@ -519,7 +519,7 @@ export function UsersClient(props: {
                   <p className={hintClass}>
                     {isLineStaffAccount
                       ? "Permissions come from the line role in Setup → Permissions."
-                      : "Org-wide access (Director, Manager, etc.)."}
+                      : "Org-wide access (Admin, Director, or custom)."}
                   </p>
                 </div>
               </div>

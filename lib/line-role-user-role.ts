@@ -14,9 +14,10 @@ export function userRoleFromLineRoleCode(code: string): UserRole {
 
   if (c.includes("bpo")) return UserRole.CLERK_IN_CHARGE_BPO;
   if (c.includes("senior") && c.includes("supervisor")) return UserRole.SENIOR_SUPERVISOR;
-  // Line/site managers roam across sales points (same as senior supervisor), not fixed to one point.
+  // Factory site managers supervise one factory like a supervisor.
   if (c.includes("factory") && c.includes("manager")) return UserRole.SUPERVISOR;
-  if (c.includes("manager")) return UserRole.SENIOR_SUPERVISOR;
+  // Line/site managers (commercial service staff) — validate DOs, reclassify stock, etc.
+  if (c.includes("manager")) return UserRole.MANAGER;
   if (c.includes("supervisor")) return UserRole.SUPERVISOR;
   if (c.includes("clerk")) return UserRole.CLERK;
 

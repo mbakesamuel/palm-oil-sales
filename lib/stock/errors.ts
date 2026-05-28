@@ -8,6 +8,8 @@ export class InsufficientStockError extends Error {
   readonly productId: number;
   readonly productLabel: string;
   readonly salesPointLabel: string;
+  readonly storageLocationLabel: string | null;
+  readonly condition: string | null;
   readonly requested: string;
   readonly available: string;
 
@@ -16,11 +18,17 @@ export class InsufficientStockError extends Error {
     productId: number;
     productLabel: string;
     salesPointLabel: string;
+    storageLocationLabel?: string | null;
+    condition?: string | null;
     requested: string;
     available: string;
   }) {
+    const locationPart = args.storageLocationLabel
+      ? ` at "${args.storageLocationLabel}"`
+      : "";
+    const conditionPart = args.condition ? ` (${args.condition.toLowerCase()})` : "";
     super(
-      `Insufficient stock for "${args.productLabel}" at "${args.salesPointLabel}". ` +
+      `Insufficient stock for "${args.productLabel}" at "${args.salesPointLabel}"${locationPart}${conditionPart}. ` +
         `Requested ${args.requested}, available ${args.available}.`,
     );
     this.name = "InsufficientStockError";
@@ -28,6 +36,8 @@ export class InsufficientStockError extends Error {
     this.productId = args.productId;
     this.productLabel = args.productLabel;
     this.salesPointLabel = args.salesPointLabel;
+    this.storageLocationLabel = args.storageLocationLabel ?? null;
+    this.condition = args.condition ?? null;
     this.requested = args.requested;
     this.available = args.available;
   }

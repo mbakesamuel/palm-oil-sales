@@ -10,7 +10,7 @@ async function assertCanManageCalendarFromSession() {
   const session = await getServerSession();
   if (!session?.userId) throw new Error("Login required.");
   const role = session.role as UserRole;
-  if (role !== UserRole.ADMIN && role !== UserRole.MANAGER) {
+  if (role !== UserRole.ADMIN && role !== UserRole.DIRECTOR) {
     throw new Error("Only admin or manager can manage the financial year calendar (open / close).");
   }
 }

@@ -3,20 +3,21 @@ import { getPrismaClient } from "@/lib/prisma";
 import { roleLabel } from "@/lib/auth-display";
 
 /** Built-in org-wide roles seeded on first run (also have `legacyRole`). */
-export const GLOBAL_USER_ROLES = [
-  UserRole.ADMIN,
-  UserRole.DIRECTOR,
-  UserRole.MANAGER,
-  UserRole.OFFICER,
-] as const;
+export const GLOBAL_USER_ROLES = [UserRole.ADMIN, UserRole.DIRECTOR] as const;
+
+/** Retired global definitions — hidden from Setup → Permissions (line staff use commercial roles). */
+export const RETIRED_GLOBAL_LEGACY_ROLES = [UserRole.MANAGER, UserRole.OFFICER] as const;
+
+export function isRetiredGlobalLegacyRole(legacyRole: UserRole | null | undefined): boolean {
+  if (!legacyRole) return false;
+  return (RETIRED_GLOBAL_LEGACY_ROLES as readonly UserRole[]).includes(legacyRole);
+}
 
 export type GlobalUserRole = (typeof GLOBAL_USER_ROLES)[number];
 
 const BUILTIN_SORT: Record<GlobalUserRole, number> = {
   [UserRole.ADMIN]: 10,
   [UserRole.DIRECTOR]: 20,
-  [UserRole.MANAGER]: 30,
-  [UserRole.OFFICER]: 35,
 };
 
 /** Insert missing built-in global roles (idempotent). */

@@ -62,6 +62,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/reports/delivery-order-monitor": Search,
   "/reports/customer-delivery-monitor": Users2,
   "/reports/do-commitment-crosstab": Table2,
+  "/reports/stock-on-hand": Boxes,
   "/reports/sales-budget-monthly-crosstab": LayoutGrid,
   "/reports/sales-budget-weekly-crosstab": LayoutGrid,
   "/reports/pricing": CircleDollarSign,

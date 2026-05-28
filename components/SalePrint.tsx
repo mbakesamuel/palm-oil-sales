@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ReportHeader } from "@/components/ReportHeader";
 
 function moneyLabel(value: string | null | undefined) {
   if (value == null || value === "") return "—";
@@ -82,27 +83,31 @@ export function SalePrint(props: {
   department: string | null;
   companyPhone: string | null;
   companyAddress: string | null;
+  logoSrc?: string | null;
   sale: SalePrintModel;
 }) {
-  const { companyName, department, companyPhone, companyAddress, sale } = props;
+  const { companyName, department, companyPhone, companyAddress, logoSrc, sale } = props;
 
   return (
     <article className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
-      <header className="border-b border-black/20 pb-4 mb-6 text-center flex flex-col items-center">
-        <h1 className="text-xl font-bold mt-1">{companyName}</h1>
-        {department ? (
-          <p className="text-xs font-semibold uppercase tracking-widest opacity-80">{department}</p>
+      <header className="border-b border-black/20 pb-4 mb-6">
+        <ReportHeader
+          companyName={companyName}
+          department={department}
+          logoSrc={logoSrc}
+          title="Sales invoice"
+        />
+        {companyAddress || companyPhone ? (
+          <div className="text-center text-sm opacity-90 space-y-0.5">
+            {companyAddress ? <p>{companyAddress}</p> : null}
+            {companyPhone ? <p>Tel: {companyPhone}</p> : null}
+          </div>
         ) : null}
-        <div className="mt-2 text-sm opacity-90 space-y-0.5">
-          {companyAddress ? <p>{companyAddress}</p> : null}
-          {companyPhone ? <p>Tel: {companyPhone}</p> : null}
-        </div>
       </header>
 
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-lg font-bold uppercase tracking-wide">Sales invoice</h2>
-          <p className="text-sm mt-1">
+          <p className="text-sm">
             <span className="opacity-70">Invoice</span>{" "}
             <span className="font-semibold tabular-nums">{sale.invoiceNo}</span>
           </p>

@@ -1,76 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getPrismaClient } from "@/lib/prisma";
-import { getOrInitCompanySettings } from "@/lib/settings";
-import { prismaRetry } from "@/lib/prisma-retry";
-import { PrintButton } from "@/components/PrintButton";
-import { ReportHeader } from "@/components/ReportHeader";
-import { ReportSignatory } from "@/components/ReportSignatory";
 import { Prisma, ValidationStatus } from "@prisma/client";
+import { OpenReportButton } from "@/components/OpenReportButton";
+import { ReportHeader } from "@/components/ReportHeader";
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import {
-  customerWhereForScope,
-  deliveryOrderWhereForScope,
-  resolveServiceScope,
-} from "@/lib/service-scope";
+  describeFulfillment,
+  fmtKgCdm,
+  invoicedKgByProductFromSales,
+  loadCustomerDeliveryMonitor,
+  xafCdm,
+} from "./loader";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function xaf(d: Prisma.Decimal) {
-  const n = Number(d.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP));
-  return new Intl.NumberFormat("fr-FR", {
-    maximumFractionDigits: 0,
-    minimumFractionDigits: 0,
-  }).format(n);
-}
-
-function fmtKg(d: Prisma.Decimal) {
-  const n = Number(d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP));
-  return new Intl.NumberFormat("fr-FR", {
-    maximumFractionDigits: 3,
-    minimumFractionDigits: 0,
-  }).format(n);
-}
-
 const z = new Prisma.Decimal(0);
-
-function invoicedKgByProductFromSales(
-  validatedSales: Array<{
-    lines: Array<{ productId: number; qtyKg: Prisma.Decimal }>;
-  }>,
-): Map<number, Prisma.Decimal> {
-  const map = new Map<number, Prisma.Decimal>();
-  for (const s of validatedSales) {
-    for (const l of s.lines) {
-      map.set(l.productId, (map.get(l.productId) ?? z).add(l.qtyKg));
-    }
-  }
-  return map;
-}
-
-function describeFulfillment(
-  doStatus: ValidationStatus,
-  details: Array<{ productId: number; orderQty: number }>,
-  invoicedKgByProduct: Map<number, Prisma.Decimal>,
-): { label: string; kind: "pending" | "complete" | "partial" | "over" } {
-  if (doStatus === ValidationStatus.PENDING) {
-    return { label: "Pending validation", kind: "pending" };
-  }
-  let over = false;
-  let partial = false;
-  for (const d of details) {
-    const inv = invoicedKgByProduct.get(d.productId) ?? z;
-    const ordered = new Prisma.Decimal(d.orderQty);
-    if (inv.gt(ordered)) over = true;
-    else if (inv.lt(ordered)) partial = true;
-  }
-  if (over) return { label: "Over-invoiced (check quantities)", kind: "over" };
-  if (partial)
-    return { label: "Incomplete (partial invoicing)", kind: "partial" };
-  return { label: "Complete", kind: "complete" };
-}
 
 export default async function CustomerDeliveryMonitorPage(props: {
   searchParams: Promise<{ customerId?: string }>;
@@ -78,12 +23,10 @@ export default async function CustomerDeliveryMonitorPage(props: {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
-  const assignedSalesPointId = session.salesPoint?.id ?? null;
-  const assignedSalesPointName = session.salesPoint?.name ?? null;
-  const serviceScope = resolveServiceScope(session);
+  const { customerId: customerIdRaw } = await props.searchParams;
+  const result = await loadCustomerDeliveryMonitor(session, customerIdRaw);
 
-  if (scopedToSalesPoint && assignedSalesPointId == null) {
+  if ("type" in result) {
     return (
       <div className="space-y-4 max-w-xl">
         <h1 className="text-2xl font-semibold">Delivery orders by customer</h1>
@@ -91,220 +34,32 @@ export default async function CustomerDeliveryMonitorPage(props: {
           Your role is tied to a sales point, but none is assigned. Ask an
           administrator.
         </div>
-        <div className="hidden print:block">
-          <ReportSignatory />
-        </div>
       </div>
     );
   }
 
-  const { customerId: customerIdRaw } = await props.searchParams;
-  const requestedCustomerId = String(customerIdRaw ?? "").trim();
-
-  const [settings, prisma] = await Promise.all([
-    getOrInitCompanySettings(),
-    getPrismaClient(),
-  ]);
-
-  const doServiceWhere = deliveryOrderWhereForScope(serviceScope);
-  const doScopeWhere = {
-    ...(scopedToSalesPoint && assignedSalesPointId != null
-      ? { salesPointId: assignedSalesPointId }
-      : {}),
-    ...(doServiceWhere ?? {}),
-  };
-
-  const customerScopeWhere = customerWhereForScope(serviceScope) ?? {};
-
-  const customerIdsWithScopedOrders = await prismaRetry(() =>
-    prisma.deliveryOrder.findMany({
-      where: doScopeWhere,
-      distinct: ["customerId"],
-      select: { customerId: true },
-    }),
-  );
-  const allowedCustomerIds = new Set(
-    customerIdsWithScopedOrders.map((r) => r.customerId),
-  );
-
-  const customerOptions = scopedToSalesPoint
-    ? await prismaRetry(() =>
-        prisma.customer.findMany({
-          where: {
-            AND: [{ id: { in: [...allowedCustomerIds] } }, customerScopeWhere],
-          },
-          orderBy: { name: "asc" },
-          select: { id: true, name: true },
-        }),
-      )
-    : await prismaRetry(() =>
-        prisma.customer.findMany({
-          where: customerScopeWhere,
-          orderBy: { name: "asc" },
-          take: 500,
-          select: { id: true, name: true },
-        }),
-      );
-
-  let selectedCustomerId = "";
-  let customerInvalid = false;
-  if (requestedCustomerId) {
-    if (scopedToSalesPoint) {
-      if (allowedCustomerIds.has(requestedCustomerId)) {
-        selectedCustomerId = requestedCustomerId;
-      } else {
-        customerInvalid = true;
-      }
-    } else {
-      const exists = await prismaRetry(() =>
-        prisma.customer.findFirst({
-          where: { id: requestedCustomerId, ...customerScopeWhere },
-          select: { id: true },
-        }),
-      );
-      if (exists) {
-        selectedCustomerId = requestedCustomerId;
-      } else {
-        customerInvalid = true;
-      }
-    }
-  }
-
-  const customerRow =
-    selectedCustomerId &&
-    (await prismaRetry(() =>
-      prisma.customer.findUnique({
-        where: { id: selectedCustomerId },
-        select: { id: true, name: true, phone: true },
-      }),
-    ));
-
-  const orders =
-    selectedCustomerId && customerRow
-      ? await prismaRetry(() =>
-          prisma.deliveryOrder.findMany({
-            where: {
-              customerId: selectedCustomerId,
-              ...doScopeWhere,
-            },
-            orderBy: [{ dateIssued: "desc" }, { id: "desc" }],
-            include: {
-              salesPoint: { select: { id: true, name: true } },
-              details: {
-                orderBy: { id: "asc" },
-                include: {
-                  product: {
-                    select: {
-                      productId: true,
-                      productName: true,
-                      productCode: true,
-                    },
-                  },
-                },
-              },
-            },
-          }),
-        )
-      : [];
-
-  const deliveryOrderNos = orders.map((o) => o.deliveryOrderNo);
-  const allSales =
-    deliveryOrderNos.length > 0
-      ? await prismaRetry(() =>
-          prisma.sale.findMany({
-            where: {
-              deliveryOrderNo: { in: deliveryOrderNos },
-              ...(scopedToSalesPoint && assignedSalesPointId != null
-                ? { salesPointId: assignedSalesPointId }
-                : {}),
-            },
-            orderBy: [{ soldAt: "asc" }, { id: "asc" }],
-            include: {
-              salesPoint: { select: { name: true } },
-              lines: {
-                orderBy: { id: "asc" },
-                include: { product: { select: { productName: true } } },
-              },
-              createdBy: { select: { name: true } },
-            },
-          }),
-        )
-      : [];
-
-  const salesByDoNo = new Map<string, typeof allSales>();
-  for (const s of allSales) {
-    const k = s.deliveryOrderNo ?? "";
-    if (!k) continue;
-    const arr = salesByDoNo.get(k) ?? [];
-    arr.push(s);
-    salesByDoNo.set(k, arr);
-  }
-
-  type OrderRow = {
-    id: number;
-    deliveryOrderNo: string;
-    dateIssued: Date;
-    salesPointName: string;
-    status: ValidationStatus;
-    doTotalQty: number;
-    doTotalAmount: Prisma.Decimal;
-    saleCount: number;
-    validatedSaleCount: number;
-    invoicedGross: Prisma.Decimal;
-    balanceAmount: Prisma.Decimal;
-    fulfillmentLabel: string;
-    fulfillmentKind: "pending" | "complete" | "partial" | "over";
-  };
-
-  const summaryRows: OrderRow[] = orders.map((o) => {
-    const salesForDo = salesByDoNo.get(o.deliveryOrderNo) ?? [];
-    const validated = salesForDo.filter(
-      (s) => s.status === ValidationStatus.VALIDATED,
-    );
-    const invoicedGross = validated.reduce(
-      (acc, s) => acc.add(s.grossAmount),
-      z,
-    );
-    const doTotalAmount = o.details.reduce(
-      (acc, d) => acc.add(d.amount ?? z),
-      z,
-    );
-    const doTotalQty = o.details.reduce((acc, d) => acc + d.orderQty, 0);
-    const invMap = invoicedKgByProductFromSales(validated);
-    const { label, kind } = describeFulfillment(o.status, o.details, invMap);
-    return {
-      id: o.id,
-      deliveryOrderNo: o.deliveryOrderNo,
-      dateIssued: o.dateIssued,
-      salesPointName: o.salesPoint.name,
-      status: o.status,
-      doTotalQty,
-      doTotalAmount,
-      saleCount: salesForDo.length,
-      validatedSaleCount: validated.length,
-      invoicedGross,
-      balanceAmount: doTotalAmount.sub(invoicedGross),
-      fulfillmentLabel: label,
-      fulfillmentKind: kind,
-    };
-  });
-
-  const grandDoAmount = summaryRows.reduce(
-    (acc, r) => acc.add(r.doTotalAmount),
-    z,
-  );
-  const grandInvoiced = summaryRows.reduce(
-    (acc, r) => acc.add(r.invoicedGross),
-    z,
-  );
-  const grandBalance = grandDoAmount.sub(grandInvoiced);
-  const grandDoQty = summaryRows.reduce((acc, r) => acc + r.doTotalQty, 0);
+  const {
+    settings,
+    scopedToSalesPoint,
+    assignedSalesPointName,
+    customerOptions,
+    selectedCustomerId,
+    customerInvalid,
+    customerRow,
+    orders,
+    salesByDoNo,
+    summaryRows,
+    grandDoAmount,
+    grandInvoiced,
+    grandBalance,
+    grandDoQty,
+  } = result;
 
   const generated = new Date();
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3 print:block">
+      <div className="space-y-3">
         <ReportHeader
           companyName={settings.companyName}
           department={settings.department}
@@ -335,13 +90,19 @@ export default async function CustomerDeliveryMonitorPage(props: {
               })}
             </p>
           </div>
-          <div className="print:hidden">
-            <PrintButton label="Print" />
+          <div>
+            <OpenReportButton
+              href="/reports/customer-delivery-monitor/print"
+              params={{ customerId: selectedCustomerId }}
+              label="Print report"
+              disabled={!selectedCustomerId}
+              title={!selectedCustomerId ? "Pick a customer first" : undefined}
+            />
           </div>
         </div>
       </div>
 
-      <form method="GET" className="max-w-2xl space-y-2 print:hidden">
+      <form method="GET" className="max-w-2xl space-y-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
           <div className="grid min-w-0 flex-1 gap-1">
             <label htmlFor="customerId" className="text-sm font-medium">
@@ -393,7 +154,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
 
       {selectedCustomerId && customerRow ? (
         <>
-          <section className="rounded-lg border border-border p-4 sm:p-5 space-y-1 print:break-inside-avoid">
+          <section className="rounded-lg border border-border p-4 sm:p-5 space-y-1">
             <h2 className="text-lg font-semibold">Customer</h2>
             <p className="text-sm">
               <span className="font-medium">{customerRow.name}</span>
@@ -411,7 +172,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
             </p>
           ) : (
             <>
-              <section className="space-y-2 print:break-inside-avoid">
+              <section className="space-y-2">
                 <h2 className="text-lg font-semibold">Summary</h2>
                 <p className="text-xs opacity-75 max-w-3xl">
                   <span className="font-medium">Fulfillment</span> compares
@@ -447,9 +208,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                         <th className="px-3 py-2 font-medium text-right">
                           Balance
                         </th>
-                        <th className="px-3 py-2 font-medium print:hidden">
-                          {" "}
-                        </th>
+                        <th className="px-3 py-2 font-medium"> </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -480,18 +239,18 @@ export default async function CustomerDeliveryMonitorPage(props: {
                             {r.doTotalQty}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {xaf(r.doTotalAmount)}
+                            {xafCdm(r.doTotalAmount)}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums text-xs">
                             {r.validatedSaleCount}/{r.saleCount} val.
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {xaf(r.invoicedGross)}
+                            {xafCdm(r.invoicedGross)}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums font-medium">
-                            {xaf(r.balanceAmount)}
+                            {xafCdm(r.balanceAmount)}
                           </td>
-                          <td className="px-3 py-2 print:hidden">
+                          <td className="px-3 py-2">
                             <Link
                               href={`/reports/delivery-order-monitor?no=${encodeURIComponent(r.deliveryOrderNo)}`}
                               className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100"
@@ -515,16 +274,16 @@ export default async function CustomerDeliveryMonitorPage(props: {
                           {grandDoQty}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {xaf(grandDoAmount)}
+                          {xafCdm(grandDoAmount)}
                         </td>
                         <td className="px-3 py-2" aria-hidden />
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {xaf(grandInvoiced)}
+                          {xafCdm(grandInvoiced)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {xaf(grandBalance)}
+                          {xafCdm(grandBalance)}
                         </td>
-                        <td className="px-3 py-2 print:hidden" aria-hidden />
+                        <td className="px-3 py-2" aria-hidden />
                       </tr>
                     </tfoot>
                   </table>
@@ -558,7 +317,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                   return (
                     <div
                       key={o.id}
-                      className="rounded-lg border border-border p-4 sm:p-5 space-y-3 print:break-inside-avoid"
+                      className="rounded-lg border border-border p-4 sm:p-5 space-y-3"
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <div>
@@ -585,7 +344,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                         </div>
                         <Link
                           href={`/reports/delivery-order-monitor?no=${encodeURIComponent(o.deliveryOrderNo)}`}
-                          className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100 print:hidden"
+                          className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100"
                         >
                           Open in DO monitor
                         </Link>
@@ -635,13 +394,13 @@ export default async function CustomerDeliveryMonitorPage(props: {
                                     {d.orderUnit ?? "—"}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums">
-                                    {fmtKg(inv)}
+                                    {fmtKgCdm(inv)}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums">
-                                    {fmtKg(bal)}
+                                    {fmtKgCdm(bal)}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums">
-                                    {xaf(d.amount ?? z)}
+                                    {xafCdm(d.amount ?? z)}
                                   </td>
                                 </tr>
                               );
@@ -657,7 +416,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                               <td className="px-3 py-2" />
                               <td className="px-3 py-2" />
                               <td className="px-3 py-2 text-right tabular-nums">
-                                {xaf(doTotalAmount)}
+                                {xafCdm(doTotalAmount)}
                               </td>
                             </tr>
                           </tfoot>
@@ -700,7 +459,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                                   <th className="px-3 py-2 font-medium text-right">
                                     Gross
                                   </th>
-                                  <th className="px-3 py-2 font-medium print:hidden" />
+                                  <th className="px-3 py-2 font-medium" />
                                 </tr>
                               </thead>
                               <tbody>
@@ -708,7 +467,7 @@ export default async function CustomerDeliveryMonitorPage(props: {
                                   const hint = s.lines
                                     .map(
                                       (l) =>
-                                        `${fmtKg(l.qtyKg)} ${l.product.productName}`,
+                                        `${fmtKgCdm(l.qtyKg)} ${l.product.productName}`,
                                     )
                                     .join(" · ");
                                   return (
@@ -740,9 +499,9 @@ export default async function CustomerDeliveryMonitorPage(props: {
                                         {hint || "—"}
                                       </td>
                                       <td className="px-3 py-2 text-right tabular-nums">
-                                        {xaf(s.grossAmount)}
+                                        {xafCdm(s.grossAmount)}
                                       </td>
-                                      <td className="px-3 py-2 print:hidden">
+                                      <td className="px-3 py-2">
                                         <Link
                                           href={`/sales/${s.id}`}
                                           className="text-xs underline underline-offset-2"
@@ -766,10 +525,6 @@ export default async function CustomerDeliveryMonitorPage(props: {
           )}
         </>
       ) : null}
-
-      <div className="hidden print:block">
-        <ReportSignatory />
-      </div>
     </div>
   );
 }

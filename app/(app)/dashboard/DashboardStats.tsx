@@ -66,35 +66,56 @@ export async function DashboardStats() {
   const doScopeFilter = deliveryOrderWhereForScope(scope);
   const deliveryWhere = doScopeFilter ? { AND: [doBase, doScopeFilter] } : doBase;
 
-  const [saleCount, pendingDoCount] = await Promise.all([
+  const [saleCount, pendingDoCount, pendingSaleCount] = await Promise.all([
     prisma.sale.count({ where: saleWhere }),
     prisma.deliveryOrder.count({
       where: { ...deliveryWhere, status: ValidationStatus.PENDING },
     }),
+    prisma.sale.count({
+      where: {
+        AND: [
+          saleWhere,
+          { status: ValidationStatus.PENDING },
+          {
+            lines: {
+              some: { product: { productCat: { isBottled: false } } },
+            },
+          },
+        ],
+      },
+    }),
   ]);
 
-  const lineLabel =
-    scope.mode === "single" && session.commercialService
-      ? session.commercialService.name
-      : "All commercial lines";
-
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <Link
         href="/reports/sales"
-        className="rounded-lg border border-border p-4 hover:bg-accent/25"
+        className="rounded-xl border border-brand/30 bg-brand/12 p-4 shadow-sm transition-all hover:border-brand/45 hover:bg-brand/18 hover:shadow-md"
       >
-        <div className="text-sm opacity-75">{lineLabel}</div>
-        <div className="text-2xl font-semibold tabular-nums">{saleCount}</div>
-        <div className="text-sm opacity-75">Sales this working month</div>
+        <div className="text-2xl font-semibold tabular-nums text-brand">
+          {saleCount}
+        </div>
+        <div className="mt-1 text-sm text-foreground/80">Sales this working month</div>
       </Link>
       <Link
         href="/delivery-orders"
-        className="rounded-lg border border-border p-4 hover:bg-accent/25"
+        className="rounded-xl border border-accent/50 bg-accent/28 p-4 shadow-sm transition-all hover:border-accent/65 hover:bg-accent/38 hover:shadow-md"
       >
-        <div className="text-sm opacity-75">{lineLabel}</div>
-        <div className="text-2xl font-semibold tabular-nums">{pendingDoCount}</div>
-        <div className="text-sm opacity-75">Pending delivery orders</div>
+        <div className="text-2xl font-semibold tabular-nums text-accent-foreground">
+          {pendingDoCount}
+        </div>
+        <div className="mt-1 text-sm text-accent-foreground/85">
+          Pending delivery orders
+        </div>
+      </Link>
+      <Link
+        href="/pos"
+        className="rounded-xl border border-brand/30 border-l-4 border-l-accent bg-brand/10 p-4 shadow-sm transition-all hover:border-brand/45 hover:bg-brand/16 hover:shadow-md"
+      >
+        <div className="text-2xl font-semibold tabular-nums text-brand">
+          {pendingSaleCount}
+        </div>
+        <div className="mt-1 text-sm text-foreground/80">Pending sales</div>
       </Link>
     </div>
   );

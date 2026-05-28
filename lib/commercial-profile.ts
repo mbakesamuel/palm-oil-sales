@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { AuthSession } from "@/lib/auth-session";
 import type { PermissionKey } from "@/lib/access-control-keys";
 import type { CommercialSiteKind } from "@/lib/domain-commercial";
@@ -9,6 +11,7 @@ import {
   PALM_OIL_MODULE_KEYS,
   RUBBER_MODULE_KEYS,
 } from "@/lib/commercial-modules";
+import { getPrismaClient } from "@/lib/prisma";
 export type CommercialProfile = {
   commercialServiceId: string;
   code: string;
@@ -57,6 +60,29 @@ export function resolveCommercialProfile(session: AuthSession): CommercialProfil
     siteKind,
     enabledModules: modules,
   };
+}
+
+/** Module list from DB so route gates are not blocked by a stale JWT `enabledModules`. */
+export async function loadCommercialProfileForSession(
+  session: AuthSession,
+): Promise<CommercialProfile | null> {
+  const fallback = resolveCommercialProfile(session);
+  const serviceId = fallback?.commercialServiceId ?? session.commercialService?.id;
+  if (!serviceId) return fallback;
+
+  const row = await getPrismaClient().commercialService.findUnique({
+    where: { id: serviceId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      siteKind: true,
+      enabledModules: true,
+      isActive: true,
+    },
+  });
+  if (!row?.isActive) return fallback;
+  return profileFromCommercialService(row);
 }
 
 export function isModuleEnabled(

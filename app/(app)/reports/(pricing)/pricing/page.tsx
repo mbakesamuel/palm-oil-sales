@@ -5,7 +5,7 @@ import { getOrInitCompanySettings } from "@/lib/settings";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getServerSession } from "@/lib/auth-server";
 import { PricingReport } from "@/app/(app)/setup/product-pricing/PricingReport";
-import { ReportSignatory } from "@/components/ReportSignatory";
+import type { PricingScheduleRow } from "@/lib/pricing-report";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +19,8 @@ export default async function PricingReportPage() {
     getOrInitCompanySettings(),
   ]);
 
+  void settings;
+
   if (!openFy) {
     return (
       <div className="space-y-6">
@@ -29,23 +31,19 @@ export default async function PricingReportPage() {
           </p>
         </div>
         <p className="text-sm opacity-80 rounded-lg border border-border p-4">
-          No financial year is open. Open a period under Financial years, then print again.
+          No financial year is open. Open a period under Financial years, then
+          print again.
         </p>
-        <div className="hidden print:block">
-          <ReportSignatory />
-        </div>
       </div>
     );
   }
 
   const prisma = getPrismaClient();
-  const fyWhere = {
-    effectiveFrom: { gte: openFy.startDate, lte: openFy.endDate },
-  };
-
   const schedules = await prismaRetry(() =>
     prisma.productUnitPriceSchedule.findMany({
-      where: fyWhere,
+      where: {
+        effectiveFrom: { gte: openFy.startDate, lte: openFy.endDate },
+      },
       orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
       include: {
         product: {
@@ -55,7 +53,7 @@ export default async function PricingReportPage() {
     }),
   );
 
-  const scheduleModels = schedules.map((r) => ({
+  const scheduleModels: PricingScheduleRow[] = schedules.map((r) => ({
     id: r.id,
     productId: r.productId,
     productName: r.product.productName,
@@ -68,24 +66,19 @@ export default async function PricingReportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold print:text-xl">Product pricing</h1>
-        <p className="text-sm opacity-80 mt-1 print:hidden">
+        <h1 className="text-2xl font-semibold">Product pricing</h1>
+        <p className="text-sm opacity-80 mt-1">
           Unit prices for the open financial year, grouped by product. FY{" "}
           {String(openFy.financialYear)} (
-          {openFy.startDate.toISOString().slice(0, 10)}–{openFy.endDate.toISOString().slice(0, 10)}).
+          {openFy.startDate.toISOString().slice(0, 10)}–
+          {openFy.endDate.toISOString().slice(0, 10)}).
         </p>
       </div>
 
       <PricingReport
-        companyName={settings.companyName}
-        department={settings.department ?? null}
-        logoUrl={settings.logoUrl}
         schedules={scheduleModels}
+        printHref="/reports/pricing/print"
       />
-
-      <div className="hidden print:block">
-        <ReportSignatory />
-      </div>
     </div>
   );
 }

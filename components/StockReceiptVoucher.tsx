@@ -51,6 +51,7 @@ export type StockReceiptVoucherModel = {
   lines: Array<{
     lineNo: number;
     productName: string;
+    storageLocationName: string;
     uom: string;
     qty: string;
   }>;
@@ -120,6 +121,7 @@ export function StockReceiptVoucher(props: {
             <tr>
               <th className="text-left border border-black/25 py-2 px-2 w-10">#</th>
               <th className="text-left border border-black/25 py-2 px-2">Product</th>
+              <th className="text-left border border-black/25 py-2 px-2">Location</th>
               <th className="text-left border border-black/25 py-2 px-2 w-20">UOM</th>
               <th className="text-right border border-black/25 py-2 px-2 w-32">Quantity</th>
             </tr>
@@ -132,6 +134,9 @@ export function StockReceiptVoucher(props: {
                 </td>
                 <td className="border border-black/10 py-2 px-2 align-top font-medium">
                   {l.productName}
+                </td>
+                <td className="border border-black/10 py-2 px-2 align-top opacity-80">
+                  {l.storageLocationName}
                 </td>
                 <td className="border border-black/10 py-2 px-2 align-top opacity-80">
                   {l.uom}

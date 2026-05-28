@@ -6,6 +6,7 @@ import { useBranding } from "@/components/BrandingProvider";
 export type ConfirmDialogProps = {
   title: string;
   description: string;
+  children?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   /** Default `danger` (red). Use `neutral` for confirmations that are not destructive. */
@@ -18,6 +19,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   const {
     title,
     description,
+    children,
     confirmLabel = "Delete",
     cancelLabel = "Cancel",
     confirmTone = "danger",
@@ -104,6 +106,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
               {description}
             </p>
           </div>
+          {children ? <div className="space-y-2">{children}</div> : null}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
             <button
               type="button"

@@ -261,7 +261,7 @@ export function GlobalRoleDefinitions(props: {
           <div>
             <h2 className="text-sm font-semibold">Global role definitions</h2>
             <p className="text-xs opacity-70 mt-0.5">
-              Org-wide roles (Admin, Director, Manager, Officer, or custom). Select a row to
+              Org-wide roles (Admin, Director, or custom). Select a row to
               configure route access below. Line staff roles are defined per commercial line.
             </p>
           </div>

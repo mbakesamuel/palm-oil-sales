@@ -11,6 +11,7 @@ import { DeliveryOrdersClient } from "./DeliveryOrdersClient";
 import {
   deleteDeliveryOrder,
   listPendingDeliveryOrders,
+  cancelValidatedDeliveryOrder,
   loadDeliveryOrderByNo,
   previewDeliveryOrderTaxes,
   previewStockOnHandForDeliveryOrder,
@@ -22,7 +23,9 @@ import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function DeliveryOrdersPage() {
+export default async function DeliveryOrdersPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const prisma = getPrismaClient();
   const session = await getServerSession();
   const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
@@ -30,6 +33,9 @@ export default async function DeliveryOrdersPage() {
     session != null
       ? (await getPermissionsForSession(session))["ui:validate-delivery-orders"]
       : false;
+  const sp = (await props.searchParams) ?? {};
+  const lookupNoRaw = Array.isArray(sp.no) ? sp.no[0] : sp.no;
+  const initialLookupNo = typeof lookupNoRaw === "string" ? lookupNoRaw : "";
   const productWhere = productWhereForScope(scope, {
     productCat: { isBottled: false },
   });
@@ -69,6 +75,7 @@ export default async function DeliveryOrdersPage() {
 
   return (
     <DeliveryOrdersClient
+      initialLookupNo={initialLookupNo}
       customers={customers.map((c) => ({
         id: c.id,
         name: c.name,
@@ -81,6 +88,7 @@ export default async function DeliveryOrdersPage() {
       saveDeliveryOrder={saveDeliveryOrder}
       deleteDeliveryOrder={deleteDeliveryOrder}
       validateDeliveryOrder={validateDeliveryOrder}
+      cancelValidatedDeliveryOrder={cancelValidatedDeliveryOrder}
       previewProductUnitPriceAction={previewProductUnitPrice}
       previewStockOnHandAction={previewStockOnHandForDeliveryOrder}
       listPendingDeliveryOrdersAction={listPendingDeliveryOrders}

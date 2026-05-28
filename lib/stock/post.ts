@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, StockMovementKind } from "@prisma/client";
+import { Prisma, StockCondition, StockMovementKind } from "@prisma/client";
 import { InsufficientStockError } from "@/lib/stock/errors";
 
 type Tx = Prisma.TransactionClient;
@@ -11,6 +11,8 @@ export type StockSourceKind = "RECEIPT" | "TRANSFER" | "SALE" | "ADJUSTMENT";
 export type ApplyMovementInput = {
   salesPointId: number;
   productId: number;
+  storageLocationId: number;
+  condition?: StockCondition;
   /** Positive magnitude; sign is decided from `kind`. */
   qty: Prisma.Decimal | number | string;
   kind: StockMovementKind;
@@ -38,17 +40,27 @@ async function lookupLabels(
   tx: Tx,
   salesPointId: number,
   productId: number,
-): Promise<{ salesPointLabel: string; productLabel: string }> {
-  const [sp, product] = await Promise.all([
+  storageLocationId: number,
+): Promise<{
+  salesPointLabel: string;
+  productLabel: string;
+  storageLocationLabel: string;
+}> {
+  const [sp, product, location] = await Promise.all([
     tx.salesPoint.findUnique({ where: { id: salesPointId }, select: { name: true } }),
     tx.product.findUnique({
       where: { productId },
       select: { productName: true },
     }),
+    tx.storageLocation.findUnique({
+      where: { id: storageLocationId },
+      select: { name: true },
+    }),
   ]);
   return {
     salesPointLabel: sp?.name ?? `Sales point ${salesPointId}`,
     productLabel: product?.productName ?? `Product ${productId}`,
+    storageLocationLabel: location?.name ?? `Location ${storageLocationId}`,
   };
 }
 
@@ -61,6 +73,7 @@ async function lookupLabels(
  */
 export async function applyMovement(tx: Tx, input: ApplyMovementInput): Promise<void> {
   const qty = toDecimal(input.qty);
+  const condition = input.condition ?? StockCondition.SELLABLE;
 
   if (input.kind === StockMovementKind.ADJUSTMENT) {
     if (qty.eq(0)) return;
@@ -74,7 +87,9 @@ export async function applyMovement(tx: Tx, input: ApplyMovementInput): Promise<
     data: {
       salesPointId: input.salesPointId,
       productId: input.productId,
+      storageLocationId: input.storageLocationId,
       kind: input.kind,
+      condition,
       qty: qty.abs(),
       occurredAt: input.occurredAt,
       userId: input.userId,
@@ -84,17 +99,23 @@ export async function applyMovement(tx: Tx, input: ApplyMovementInput): Promise<
     },
   });
 
+  const balanceWhere = {
+    salesPointId_productId_storageLocationId_condition: {
+      salesPointId: input.salesPointId,
+      productId: input.productId,
+      storageLocationId: input.storageLocationId,
+      condition,
+    },
+  };
+
   if (INCREMENT_KINDS.has(input.kind) || (input.kind === StockMovementKind.ADJUSTMENT && qty.gt(0))) {
     await tx.stockBalance.upsert({
-      where: {
-        salesPointId_productId: {
-          salesPointId: input.salesPointId,
-          productId: input.productId,
-        },
-      },
+      where: balanceWhere,
       create: {
         salesPointId: input.salesPointId,
         productId: input.productId,
+        storageLocationId: input.storageLocationId,
+        condition,
         qty: qty.abs(),
       },
       update: { qty: { increment: qty.abs() } },
@@ -107,6 +128,8 @@ export async function applyMovement(tx: Tx, input: ApplyMovementInput): Promise<
     where: {
       salesPointId: input.salesPointId,
       productId: input.productId,
+      storageLocationId: input.storageLocationId,
+      condition,
       qty: { gte: delta },
     },
     data: { qty: { decrement: delta } },
@@ -114,24 +137,22 @@ export async function applyMovement(tx: Tx, input: ApplyMovementInput): Promise<
 
   if (updated.count === 0) {
     const balance = await tx.stockBalance.findUnique({
-      where: {
-        salesPointId_productId: {
-          salesPointId: input.salesPointId,
-          productId: input.productId,
-        },
-      },
+      where: balanceWhere,
       select: { qty: true },
     });
-    const { salesPointLabel, productLabel } = await lookupLabels(
+    const { salesPointLabel, productLabel, storageLocationLabel } = await lookupLabels(
       tx,
       input.salesPointId,
       input.productId,
+      input.storageLocationId,
     );
     throw new InsufficientStockError({
       salesPointId: input.salesPointId,
       productId: input.productId,
       productLabel,
       salesPointLabel,
+      storageLocationLabel,
+      condition,
       requested: delta.toString(),
       available: (balance?.qty ?? new Prisma.Decimal(0)).toString(),
     });
@@ -174,6 +195,8 @@ export async function reverseMovementsBySource(
       id: true,
       salesPointId: true,
       productId: true,
+      storageLocationId: true,
+      condition: true,
       kind: true,
       qty: true,
     },
@@ -209,6 +232,8 @@ export async function reverseMovementsBySource(
     await applyMovement(tx, {
       salesPointId: m.salesPointId,
       productId: m.productId,
+      storageLocationId: m.storageLocationId,
+      condition: m.condition,
       qty: reversalQty,
       kind: reversalKind,
       occurredAt: input.occurredAt,

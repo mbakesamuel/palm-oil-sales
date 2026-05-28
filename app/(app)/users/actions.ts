@@ -147,7 +147,7 @@ export async function saveUser(formData: FormData) {
       select: { legacyRole: true },
     });
     if (!globalDef) throw new Error("Global role not found or inactive.");
-    role = globalDef.legacyRole ?? UserRole.MANAGER;
+    role = globalDef.legacyRole ?? UserRole.DIRECTOR;
     resolvedGlobalRoleId = globalRoleDefinitionId;
     resolvedCommercialServiceId = null;
     resolvedLineRoleId = null;

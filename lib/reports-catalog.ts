@@ -3,6 +3,7 @@ import type { PermissionKey } from "@/lib/access-control-keys";
 export type ReportGroupId =
   | "sales"
   | "delivery"
+  | "stock"
   | "budget"
   | "pricing"
   | "bpo";
@@ -19,6 +20,7 @@ export type ReportDefinition = {
 export const REPORT_GROUP_ORDER: { id: ReportGroupId; label: string }[] = [
   { id: "sales", label: "Sales" },
   { id: "delivery", label: "Delivery orders" },
+  { id: "stock", label: "Stock" },
   { id: "budget", label: "Budget phasing" },
   { id: "pricing", label: "Pricing" },
   { id: "bpo", label: "Bottled Palm Oil" },
@@ -76,6 +78,15 @@ export const REPORTS: ReportDefinition[] = [
     description:
       "Customer × product × sales points: outstanding ordered vs invoiced quantity, with row and column totals (validated DOs and sales).",
     permissionKey: "route:/reports/do-commitment-crosstab",
+  },
+  {
+    group: "stock",
+    groupLabel: "Stock",
+    href: "/reports/stock-on-hand",
+    label: "Stock on hand (by sales point)",
+    description:
+      "Current stock balances aggregated by sales point and storage location (kg products only).",
+    permissionKey: "route:/reports/stock-on-hand",
   },
   {
     group: "budget",

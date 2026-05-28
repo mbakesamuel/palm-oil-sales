@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { getPrismaClient } from "@/lib/prisma";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
-import { PrintButton } from "@/components/PrintButton";
-import { ReportSignatory } from "@/components/ReportSignatory";
+import { OpenReportButton } from "@/components/OpenReportButton";
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
@@ -71,9 +70,6 @@ export default async function SalesReportPage() {
         <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200">
           {scopedServiceErr}
         </div>
-        <div className="hidden print:block">
-          <ReportSignatory />
-        </div>
       </div>
     );
   }
@@ -86,9 +82,6 @@ export default async function SalesReportPage() {
           Your role is tied to a sales point, but no sales point is assigned to
           your account. Ask an administrator to assign one before you can view
           this report.
-        </div>
-        <div className="hidden print:block">
-          <ReportSignatory />
         </div>
       </div>
     );
@@ -163,8 +156,8 @@ export default async function SalesReportPage() {
   const generated = new Date();
 
   return (
-    <div className="space-y-6 w-full min-w-0 max-w-none px-1 py-2 sm:px-2 sm:py-4 lg:px-3 lg:py-6 print:px-2">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between print:block">
+    <div className="space-y-6 w-full min-w-0 max-w-none px-1 py-2 sm:px-2 sm:py-4 lg:px-3 lg:py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Sales register</h1>
           <p className="text-sm opacity-80 mt-1">{settings.companyName}</p>
@@ -206,8 +199,8 @@ export default async function SalesReportPage() {
             {scopedToSalesPoint ? ", this sales point" : ""})
           </p>
         </div>
-        <div className="print:hidden">
-          <PrintButton label="Print report" />
+        <div>
+          <OpenReportButton href="/reports/sales/print" label="Print report" />
         </div>
       </div>
 
@@ -324,10 +317,6 @@ export default async function SalesReportPage() {
           month filter is applied).
         </p>
       ) : null}
-
-      <div className="hidden print:block">
-        <ReportSignatory />
-      </div>
     </div>
   );
 }

@@ -12,7 +12,10 @@ import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
-import type { ConsignmentNotePrintModel, DoContextDto } from "@/lib/consignment-note-types";
+import type {
+  ConsignmentNotePrintModel,
+  DoContextDto,
+} from "@/lib/consignment-note-types";
 import { Prisma, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getOrInitCompanySettings } from "@/lib/settings";
@@ -207,10 +210,14 @@ async function toFormView(
           receiverName: note.receiverName,
           receiverNicNo: note.receiverNicNo,
           receiverNicPlaceOfIssue: note.receiverNicPlaceOfIssue,
-          receivedDate: note.receivedDate ? note.receivedDate.toISOString().slice(0, 10) : null,
+          receivedDate: note.receivedDate
+            ? note.receivedDate.toISOString().slice(0, 10)
+            : null,
           status: note.status,
           validatedByName: note.validatedBy?.name ?? null,
-          validatedAtIso: note.validatedAt ? note.validatedAt.toISOString() : null,
+          validatedAtIso: note.validatedAt
+            ? note.validatedAt.toISOString()
+            : null,
         }
       : null,
     doContext,
@@ -252,7 +259,9 @@ export async function loadSaleForConsignmentByInvoice(
   return toFormView(prisma, actor, sale);
 }
 
-export async function loadConsignmentByVcnNo(rawNo: string): Promise<LoadedConsignmentFormView | null> {
+export async function loadConsignmentByVcnNo(
+  rawNo: string,
+): Promise<LoadedConsignmentFormView | null> {
   const consignmentNoteNo = String(rawNo ?? "").trim();
   if (!consignmentNoteNo) return null;
 
@@ -278,7 +287,9 @@ export async function loadConsignmentByVcnNo(rawNo: string): Promise<LoadedConsi
 }
 
 /** Exposed for client refresh of DO totals after sale changes (same as embedded in load). */
-export async function loadDoContextForSale(saleId: string): Promise<DoContextDto | null> {
+export async function loadDoContextForSale(
+  saleId: string,
+): Promise<DoContextDto | null> {
   const id = String(saleId ?? "").trim();
   if (!id) return null;
 
@@ -299,7 +310,9 @@ export async function loadDoContextForSale(saleId: string): Promise<DoContextDto
   return computeDoContext(prisma, sale.deliveryOrderNo);
 }
 
-export async function saveConsignmentNote(formData: FormData): Promise<SaveConsignmentNoteResult> {
+export async function saveConsignmentNote(
+  formData: FormData,
+): Promise<SaveConsignmentNoteResult> {
   const prisma = getPrismaClient();
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
@@ -307,13 +320,17 @@ export async function saveConsignmentNote(formData: FormData): Promise<SaveConsi
     await assertPermissionKey("route:/consignment-notes");
     ({ session, actor } = await requireActor(prisma));
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Login required.",
+    };
   }
 
   if (!canCreateOrEditConsignmentNoteDraft(actor.role)) {
     return {
       ok: false,
-      error: "Only clerks can create or edit a pending vehicle consignment note.",
+      error:
+        "Only clerks can create or edit a pending vehicle consignment note.",
     };
   }
 
@@ -323,27 +340,44 @@ export async function saveConsignmentNote(formData: FormData): Promise<SaveConsi
   const dateOfLiftingRaw = String(formData.get("dateOfLifting") ?? "").trim();
   const vehicleNumber = String(formData.get("vehicleNumber") ?? "").trim();
   const consignerName = String(formData.get("consignerName") ?? "").trim();
-  const consignerDesignation = String(formData.get("consignerDesignation") ?? "").trim();
-  const dateOfConsignmentRaw = String(formData.get("dateOfConsignment") ?? "").trim();
+  const consignerDesignation = String(
+    formData.get("consignerDesignation") ?? "",
+  ).trim();
+  const dateOfConsignmentRaw = String(
+    formData.get("dateOfConsignment") ?? "",
+  ).trim();
   const receiverName = String(formData.get("receiverName") ?? "").trim();
   const receiverNicNo = String(formData.get("receiverNicNo") ?? "").trim();
-  const receiverNicPlaceOfIssue = String(formData.get("receiverNicPlaceOfIssue") ?? "").trim();
+  const receiverNicPlaceOfIssue = String(
+    formData.get("receiverNicPlaceOfIssue") ?? "",
+  ).trim();
   const receivedDateRaw = String(formData.get("receivedDate") ?? "").trim();
 
   if (!saleId) return { ok: false, error: "Sale is required." };
-  if (!destination) return { ok: false, error: "Destination (To) is required." };
-  if (!dateOfLiftingRaw) return { ok: false, error: "Date of lifting is required." };
-  if (!vehicleNumber) return { ok: false, error: "Vehicle number is required." };
-  if (!consignerName) return { ok: false, error: "Consigner name is required." };
-  if (!consignerDesignation) return { ok: false, error: "Consigner designation is required." };
-  if (!dateOfConsignmentRaw) return { ok: false, error: "Date of consignment is required." };
+  if (!destination)
+    return { ok: false, error: "Destination (To) is required." };
+  if (!dateOfLiftingRaw)
+    return { ok: false, error: "Date of lifting is required." };
+  if (!vehicleNumber)
+    return { ok: false, error: "Vehicle number is required." };
+  if (!consignerName)
+    return { ok: false, error: "Consigner name is required." };
+  if (!consignerDesignation)
+    return { ok: false, error: "Consigner designation is required." };
+  if (!dateOfConsignmentRaw)
+    return { ok: false, error: "Date of consignment is required." };
   if (!receiverName) return { ok: false, error: "Receiver name is required." };
-  if (!receiverNicNo) return { ok: false, error: "Receiver NIC number is required." };
-  if (!receiverNicPlaceOfIssue) return { ok: false, error: "Place of issue (NIC) is required." };
+  if (!receiverNicNo)
+    return { ok: false, error: "Receiver NIC number is required." };
+  if (!receiverNicPlaceOfIssue)
+    return { ok: false, error: "Place of issue (NIC) is required." };
 
   const dateOfLifting = noonUtcFromIsoDate(dateOfLiftingRaw);
   const dateOfConsignment = noonUtcFromIsoDate(dateOfConsignmentRaw);
-  if (Number.isNaN(dateOfLifting.getTime()) || Number.isNaN(dateOfConsignment.getTime())) {
+  if (
+    Number.isNaN(dateOfLifting.getTime()) ||
+    Number.isNaN(dateOfConsignment.getTime())
+  ) {
     return { ok: false, error: "Invalid date." };
   }
 
@@ -366,7 +400,11 @@ export async function saveConsignmentNote(formData: FormData): Promise<SaveConsi
   });
   if (!sale) return { ok: false, error: "Sale not found." };
   if (sale.status !== ValidationStatus.VALIDATED) {
-    return { ok: false, error: "The sale must be validated before a consignment note can be saved." };
+    return {
+      ok: false,
+      error:
+        "The sale must be validated before a consignment note can be saved.",
+    };
   }
 
   const accessErr = salesPointErrorForResource(actor, sale.salesPointId);
@@ -381,10 +419,16 @@ export async function saveConsignmentNote(formData: FormData): Promise<SaveConsi
         select: { id: true, saleId: true, status: true },
       });
       if (!existing || existing.saleId !== saleId) {
-        return { ok: false, error: "Consignment note not found for this sale." };
+        return {
+          ok: false,
+          error: "Consignment note not found for this sale.",
+        };
       }
       if (existing.status === ValidationStatus.VALIDATED) {
-        return { ok: false, error: "Validated consignment notes cannot be edited." };
+        return {
+          ok: false,
+          error: "Validated consignment notes cannot be edited.",
+        };
       }
 
       const updated = await prisma.vehicleConsignmentNote.update({
@@ -404,17 +448,23 @@ export async function saveConsignmentNote(formData: FormData): Promise<SaveConsi
         select: { id: true, consignmentNoteNo: true },
       });
       revalidateConsignmentPaths(updated.id);
-      return { ok: true, id: updated.id, consignmentNoteNo: updated.consignmentNoteNo };
+      return {
+        ok: true,
+        id: updated.id,
+        consignmentNoteNo: updated.consignmentNoteNo,
+      };
     }
 
     if (sale.consignmentNote) {
       return {
         ok: false,
-        error: "This sale already has a consignment note. Load it by VCN number to edit.",
+        error:
+          "This sale already has a consignment note. Load it by VCN number to edit.",
       };
     }
 
-    const consignmentNoteNo = await allocateConsignmentNoteNo(dateOfConsignment);
+    const consignmentNoteNo =
+      await allocateConsignmentNoteNo(dateOfConsignment);
     const created = await prisma.vehicleConsignmentNote.create({
       data: {
         consignmentNoteNo,
@@ -435,25 +485,38 @@ export async function saveConsignmentNote(formData: FormData): Promise<SaveConsi
       select: { id: true, consignmentNoteNo: true },
     });
     revalidateConsignmentPaths(created.id);
-    return { ok: true, id: created.id, consignmentNoteNo: created.consignmentNoteNo };
+    return {
+      ok: true,
+      id: created.id,
+      consignmentNoteNo: created.consignmentNoteNo,
+    };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Could not save consignment note.";
+    const msg =
+      e instanceof Error ? e.message : "Could not save consignment note.";
     return { ok: false, error: msg };
   }
 }
 
-export async function deleteConsignmentNote(formData: FormData): Promise<MutationResult> {
+export async function deleteConsignmentNote(
+  formData: FormData,
+): Promise<MutationResult> {
   const prisma = getPrismaClient();
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
     await assertPermissionKey("route:/consignment-notes");
     ({ actor } = await requireActor(prisma));
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Login required.",
+    };
   }
 
   if (!canCreateOrEditConsignmentNoteDraft(actor.role)) {
-    return { ok: false, error: "Only clerks can delete a pending consignment note." };
+    return {
+      ok: false,
+      error: "Only clerks can delete a pending consignment note.",
+    };
   }
 
   const id = String(formData.get("id") ?? "").trim();
@@ -465,9 +528,15 @@ export async function deleteConsignmentNote(formData: FormData): Promise<Mutatio
   });
   if (!existing) return { ok: false, error: "Consignment note not found." };
   if (existing.status === ValidationStatus.VALIDATED) {
-    return { ok: false, error: "Validated consignment notes cannot be deleted." };
+    return {
+      ok: false,
+      error: "Validated consignment notes cannot be deleted.",
+    };
   }
-  const accessErr = salesPointErrorForResource(actor, existing.sale.salesPointId);
+  const accessErr = salesPointErrorForResource(
+    actor,
+    existing.sale.salesPointId,
+  );
   if (accessErr) return { ok: false, error: accessErr };
 
   await prisma.vehicleConsignmentNote.delete({ where: { id } });
@@ -475,7 +544,9 @@ export async function deleteConsignmentNote(formData: FormData): Promise<Mutatio
   return { ok: true };
 }
 
-export async function validateConsignmentNote(formData: FormData): Promise<MutationResult> {
+export async function validateConsignmentNote(
+  formData: FormData,
+): Promise<MutationResult> {
   const prisma = getPrismaClient();
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
@@ -483,11 +554,17 @@ export async function validateConsignmentNote(formData: FormData): Promise<Mutat
     await assertPermissionKey("route:/consignment-notes");
     ({ session, actor } = await requireActor(prisma));
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Login required.",
+    };
   }
 
   if (!canValidateConsignmentNote(actor.role)) {
-    return { ok: false, error: "Only supervisors can validate a vehicle consignment note." };
+    return {
+      ok: false,
+      error: "Only supervisors can validate a vehicle consignment note.",
+    };
   }
 
   const id = String(formData.get("id") ?? "").trim();
@@ -498,7 +575,10 @@ export async function validateConsignmentNote(formData: FormData): Promise<Mutat
     include: { sale: { select: { salesPointId: true } } },
   });
   if (!existing) return { ok: false, error: "Consignment note not found." };
-  const accessErr = salesPointErrorForResource(actor, existing.sale.salesPointId);
+  const accessErr = salesPointErrorForResource(
+    actor,
+    existing.sale.salesPointId,
+  );
   if (accessErr) return { ok: false, error: accessErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
@@ -525,7 +605,10 @@ export type ConsignmentPrintPayload = {
 
 export async function loadConsignmentPrintById(
   id: string,
-): Promise<{ ok: true; data: ConsignmentPrintPayload } | { ok: false; reason: "auth" | "missing" }> {
+): Promise<
+  | { ok: true; data: ConsignmentPrintPayload }
+  | { ok: false; reason: "auth" | "missing" }
+> {
   const prisma = getPrismaClient();
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   let settings: Awaited<ReturnType<typeof getOrInitCompanySettings>>;
@@ -593,7 +676,7 @@ export async function loadConsignmentPrintById(
   const logoSrc =
     settings.logoUrl && settings.logoUrl.trim() !== ""
       ? settings.logoUrl.trim()
-      : "/cdc-logo-svg.svg";
+      : "/logo.svg";
 
   const deptParts = [
     settings.department?.trim(),

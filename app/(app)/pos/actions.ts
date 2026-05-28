@@ -23,7 +23,7 @@ import {
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
 import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
-import { roleSeesOnlyValidatedDeliveryOrders } from "@/lib/auth-roles";
+import { canPickPendingPosSales, roleRequiresSalesPoint, roleSeesOnlyValidatedDeliveryOrders } from "@/lib/auth-roles";
 import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
 import {
@@ -38,15 +38,26 @@ import {
 import {
   commercialServiceErrorForOperations,
   commercialServiceErrorForResource,
+  deliveryOrderWhereForScope,
+  mergeWhereWithServiceScope,
   resolveServiceScope,
+  saleWhereForScope,
 } from "@/lib/service-scope";
 import type { SalePrintModel } from "@/components/SalePrint";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import { isInsufficientStockError } from "@/lib/stock/errors";
+import {
+  assertPosLocationSellable,
+  assertPosSellableQtyAvailable,
+  getLocationStockBreakdown,
+  isPosLocationBlockedByUnsellableStock,
+} from "@/lib/stock/pos-location";
 import { applyMovement } from "@/lib/stock/post";
+import { resolveDefaultStorageLocationId } from "@/lib/stock/storage-location";
 import {
   PaymentMethod,
   Prisma,
+  StockCondition,
   StockMovementKind,
   ValidationStatus,
   UserRole,
@@ -59,6 +70,7 @@ type PosLineInput = {
   qtyUnits?: string;
   unitPricePerKg: string;
   unitPricePerUnit?: string;
+  storageLocationId: string;
 };
 
 type PosPaymentInput = {
@@ -107,6 +119,7 @@ export type LoadedSaleView = {
     productId: number;
     productName: string;
     productCat: string;
+    storageLocationId: number | null;
     qtyKg: string;
     qtyUnits: string | null;
     unitPricePerKg: string;
@@ -207,6 +220,12 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const effectiveSalesPointId = session.salesPoint?.id ?? salesPointId;
   const spErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
   if (spErr) return { ok: false, error: spErr };
+  if (effectiveSalesPointId == null) {
+    return { ok: false, error: "Sales point is required." };
+  }
+  if (!deliveryOrderNo) {
+    return { ok: false, error: "Delivery Order number is required." };
+  }
 
   const scope = resolveServiceScope(session);
   const csOpErr = commercialServiceErrorForOperations(scope);
@@ -272,6 +291,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   let net = d(0);
   let preparedLines: Array<{
     productId: number;
+    storageLocationId: number;
     qtyKg: Prisma.Decimal;
     qtyUnits: Prisma.Decimal | null;
     unitPrice: Prisma.Decimal;
@@ -283,6 +303,14 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       if (!l.productId) throw new Error("Each line must have a product.");
       const productId = Number.parseInt(l.productId, 10);
       if (!Number.isFinite(productId)) throw new Error("Invalid product selected.");
+      const storageLocationId = Number.parseInt(String(l.storageLocationId ?? ""), 10);
+      if (!Number.isFinite(storageLocationId)) throw new Error("Storage location is required on each line.");
+      if (effectiveSalesPointId == null) throw new Error("Sales point is required.");
+      const locOk = await prisma.storageLocation.findFirst({
+        where: { id: storageLocationId, salesPointId: effectiveSalesPointId },
+        select: { id: true },
+      });
+      if (!locOk) throw new Error("One or more storage locations do not belong to the selected sales point.");
       const product = await prisma.product.findUnique({
         where: { productId },
         select: {
@@ -314,6 +342,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
 
       preparedLines.push({
         productId,
+        storageLocationId,
         qtyKg,
         qtyUnits: null,
         unitPrice: price,
@@ -352,6 +381,43 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     if (!check.ok) return { ok: false, error: check.error };
   }
 
+  try {
+    const stockByLocation = new Map<
+      string,
+      {
+        productId: number;
+        storageLocationId: number;
+        qtyKg: Prisma.Decimal;
+      }
+    >();
+    for (const l of preparedLines) {
+      const key = `${l.productId}:${l.storageLocationId}`;
+      const existing = stockByLocation.get(key);
+      if (existing) {
+        existing.qtyKg = existing.qtyKg.add(l.qtyKg);
+      } else {
+        stockByLocation.set(key, {
+          productId: l.productId,
+          storageLocationId: l.storageLocationId,
+          qtyKg: l.qtyKg,
+        });
+      }
+    }
+    for (const group of stockByLocation.values()) {
+      await assertPosSellableQtyAvailable(prisma, {
+        salesPointId: effectiveSalesPointId,
+        storageLocationId: group.storageLocationId,
+        productId: group.productId,
+        qty: group.qtyKg,
+      });
+    }
+  } catch (e) {
+    if (isInsufficientStockError(e)) {
+      return { ok: false, error: e.message };
+    }
+    return { ok: false, error: e instanceof Error ? e.message : "Invalid storage location." };
+  }
+
   const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
   if (!resolved.ok) return { ok: false, error: resolved.error };
 
@@ -384,6 +450,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     }
     return {
       productId: l.productId,
+      storageLocationId: l.storageLocationId,
       qtyKg: l.qtyKg,
       qtyUnits: l.qtyUnits,
       unitPricePerKg: l.unitPrice,
@@ -600,6 +667,162 @@ export async function previewPosTaxes(
   };
 }
 
+export type PosLineStockPreview =
+  | {
+      ok: true;
+      sellableQty: string;
+      unsellableQty: string;
+      salesBlocked: boolean;
+      message: string | null;
+    }
+  | { ok: false; error: string };
+
+export async function previewPosLineStock(
+  salesPointIdRaw: string,
+  storageLocationIdRaw: string,
+  productIdRaw: string,
+): Promise<PosLineStockPreview> {
+  const prisma = getPrismaClient();
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    await assertPermissionKey("route:/pos");
+    ({ actor } = await requireActor(prisma));
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Login required." };
+  }
+
+  const salesPointId = Number.parseInt(String(salesPointIdRaw ?? "").trim(), 10);
+  const storageLocationId = Number.parseInt(String(storageLocationIdRaw ?? "").trim(), 10);
+  const productId = Number.parseInt(String(productIdRaw ?? "").trim(), 10);
+  if (!Number.isFinite(salesPointId) || salesPointId <= 0) {
+    return { ok: false, error: "Sales point is required." };
+  }
+  if (!Number.isFinite(storageLocationId) || storageLocationId <= 0) {
+    return { ok: false, error: "Storage location is required." };
+  }
+  if (!Number.isFinite(productId) || productId <= 0) {
+    return { ok: false, error: "Product is required." };
+  }
+
+  const spErr = salesPointErrorForSubmitted(actor, salesPointId);
+  if (spErr) return { ok: false, error: spErr };
+
+  const locOk = await prisma.storageLocation.findFirst({
+    where: { id: storageLocationId, salesPointId },
+    select: { name: true },
+  });
+  if (!locOk) {
+    return { ok: false, error: "Storage location does not belong to the selected sales point." };
+  }
+
+  const breakdown = await getLocationStockBreakdown(
+    prisma,
+    salesPointId,
+    storageLocationId,
+    productId,
+  );
+  const salesBlocked = isPosLocationBlockedByUnsellableStock(breakdown);
+  let message: string | null = null;
+  if (salesBlocked) {
+    message = `This location holds ${breakdown.unsellableQty.toString()} kg unsellable stock for this product. Sales from this location are not allowed.`;
+  }
+
+  return {
+    ok: true,
+    sellableQty: breakdown.sellableQty.toString(),
+    unsellableQty: breakdown.unsellableQty.toString(),
+    salesBlocked,
+    message,
+  };
+}
+
+function money2Print(value: Prisma.Decimal) {
+  return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+}
+
+export type PendingSaleRow = {
+  invoiceNo: string;
+  soldAtIso: string;
+  customerName: string;
+  totalLabel: string;
+  salesPointName: string | null;
+};
+
+/**
+ * Lightweight listing of PENDING palm-oil sales for the supervisor lookup
+ * combo (typed input + popover picker). Scope- and sales-point-aware.
+ */
+export async function listPendingSales(): Promise<PendingSaleRow[]> {
+  const prisma = getPrismaClient();
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  try {
+    await assertPermissionKey("route:/pos");
+    ({ session, actor } = await requireActor(prisma));
+  } catch {
+    return [];
+  }
+
+  const perms = await getPermissionsForSession(session);
+  if (
+    !canPickPendingPosSales({
+      validateDocuments: perms["ui:validate-documents"],
+      role: actor.role as AppUserRole,
+      commercialServiceRoleCode: session.commercialServiceRole?.code,
+    })
+  ) {
+    return [];
+  }
+
+  const scope = resolveServiceScope(session);
+  if (commercialServiceErrorForOperations(scope)) return [];
+
+  const salesPointFilter =
+    actor.salesPointId != null && roleRequiresSalesPoint(actor.role as AppUserRole)
+      ? { salesPointId: actor.salesPointId }
+      : {};
+
+  const rows = await prisma.sale.findMany({
+    where: mergeWhereWithServiceScope(
+      {
+        status: ValidationStatus.PENDING,
+        ...salesPointFilter,
+        lines: {
+          some: { product: { productCat: { isBottled: false } } },
+        },
+      },
+      scope,
+      saleWhereForScope,
+    ),
+    orderBy: [{ soldAt: "desc" }, { invoiceNo: "desc" }],
+    take: 200,
+    select: {
+      invoiceNo: true,
+      soldAt: true,
+      grossAmount: true,
+      customerNameSnapshot: true,
+      salesPoint: { select: { name: true } },
+    },
+  });
+
+  return rows.map((r) => {
+    const gross = money2Print(r.grossAmount);
+    const fmt = gross.gt(0)
+      ? `${gross.toNumber().toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} XAF`
+      : "";
+    return {
+      invoiceNo: r.invoiceNo,
+      soldAtIso: r.soldAt.toISOString().slice(0, 10),
+      customerName: r.customerNameSnapshot,
+      totalLabel: fmt,
+      salesPointName: r.salesPoint?.name ?? null,
+    };
+  });
+}
+
 export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView | null> {
   const invoiceNo = String(rawNo ?? "").trim();
   if (!invoiceNo) return null;
@@ -677,6 +900,7 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       productId: l.productId,
       productName: l.product.productName,
       productCat: l.product.productCat.productCat,
+      storageLocationId: l.storageLocationId ?? null,
       qtyKg: l.qtyKg.toString(),
       qtyUnits: l.qtyUnits?.toString() ?? null,
       unitPricePerKg: l.unitPricePerKg.toString(),
@@ -702,6 +926,74 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       amount: t.amount.toString(),
     })),
   };
+}
+
+export type AvailableDeliveryOrderRow = {
+  deliveryOrderNo: string;
+  dateIssued: string;
+  customerName: string;
+  balanceKg: string;
+};
+
+/**
+ * Validated delivery orders at a sales point that still have qty balance
+ * (for the POS D.O. combo picker).
+ */
+export async function listAvailableDeliveryOrdersForSale(
+  salesPointIdRaw: string,
+): Promise<AvailableDeliveryOrderRow[]> {
+  const salesPointId = Number.parseInt(String(salesPointIdRaw ?? "").trim(), 10);
+  if (!Number.isFinite(salesPointId)) return [];
+
+  const prisma = getPrismaClient();
+  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
+  try {
+    await assertPermissionKey("route:/pos");
+    ({ session, actor } = await requireActor(prisma));
+  } catch {
+    return [];
+  }
+
+  const scope = resolveServiceScope(session);
+  if (commercialServiceErrorForOperations(scope)) return [];
+
+  const spErr = salesPointErrorForSubmitted(actor, salesPointId);
+  if (spErr) return [];
+
+  const scopeWhere = deliveryOrderWhereForScope(scope) ?? {};
+
+  const orders = await prisma.deliveryOrder.findMany({
+    where: {
+      ...scopeWhere,
+      salesPointId,
+      status: ValidationStatus.VALIDATED,
+    },
+    orderBy: [{ dateIssued: "desc" }, { deliveryOrderNo: "desc" }],
+    take: 200,
+    select: {
+      deliveryOrderNo: true,
+      dateIssued: true,
+      customer: { select: { name: true } },
+    },
+  });
+
+  const rows = await Promise.all(
+    orders.map(async (o) => {
+      const ctx = await loadDeliveryOrderControl(o.deliveryOrderNo);
+      if (!ctx) return null;
+      const balance = new Prisma.Decimal(ctx.totalBalanceKg);
+      if (balance.lte(0)) return null;
+      return {
+        deliveryOrderNo: o.deliveryOrderNo,
+        dateIssued: o.dateIssued.toISOString().slice(0, 10),
+        customerName: o.customer.name,
+        balanceKg: ctx.totalBalanceKg,
+      };
+    }),
+  );
+
+  return rows.filter((r): r is AvailableDeliveryOrderRow => r != null);
 }
 
 export async function lookupDeliveryOrderForSale(
@@ -832,10 +1124,12 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
       status: true,
       salesPointId: true,
       commercialServiceId: true,
+      deliveryOrderNo: true,
       soldAt: true,
       lines: {
         select: {
           productId: true,
+          storageLocationId: true,
           qtyKg: true,
           qtyUnits: true,
           product: {
@@ -858,11 +1152,22 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
     };
   }
   const stockSalesPointId: number = existing.salesPointId;
+  if (!existing.deliveryOrderNo) {
+    return { ok: false, error: "Delivery Order number is required." };
+  }
 
   try {
     await prisma.$transaction(
       async (tx) => {
         for (const line of existing.lines) {
+          const storageLocationId =
+            line.storageLocationId ??
+            (await resolveDefaultStorageLocationId(tx, stockSalesPointId));
+          await assertPosLocationSellable(tx, {
+            salesPointId: stockSalesPointId,
+            storageLocationId,
+            productId: line.productId,
+          });
           const qty = line.product.productCat?.isBottled
             ? (line.qtyUnits ?? line.qtyKg)
             : line.qtyKg;
@@ -870,6 +1175,8 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
           await applyMovement(tx, {
             salesPointId: stockSalesPointId,
             productId: line.productId,
+            storageLocationId,
+            condition: StockCondition.SELLABLE,
             qty,
             kind: StockMovementKind.SALE,
             occurredAt: existing.soldAt,
@@ -909,6 +1216,7 @@ export type SalePrintPayload = {
   department: string | null;
   companyPhone: string | null;
   companyAddress: string | null;
+  logoSrc: string;
   sale: SalePrintModel;
 };
 
@@ -1031,6 +1339,11 @@ export async function loadSalePrintById(
   );
   const departmentLine = deptParts.length > 0 ? deptParts.join(" · ") : null;
 
+  const logoSrc =
+    settings.logoUrl && settings.logoUrl.trim() !== ""
+      ? settings.logoUrl.trim()
+      : "/logo.svg";
+
   return {
     ok: true,
     data: {
@@ -1038,6 +1351,7 @@ export async function loadSalePrintById(
       department: departmentLine,
       companyPhone: sale.issuerPhoneSnapshot ?? null,
       companyAddress: sale.issuerAddressSnapshot ?? null,
+      logoSrc,
       sale: saleModel,
     },
   };

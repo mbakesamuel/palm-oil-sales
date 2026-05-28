@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DashboardSessionCard } from "./DashboardSessionCard";
 import { DashboardStats } from "./DashboardStats";
+import { DashboardIncomingTransfers } from "./DashboardIncomingTransfers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,6 +17,8 @@ export default function DashboardPage() {
       <DashboardSessionCard />
 
       <DashboardStats />
+
+      <DashboardIncomingTransfers />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Link

@@ -44,7 +44,6 @@ export function canValidateDocuments(role: UserRole): boolean {
   return (
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
-    role === UserRole.MANAGER ||
     role === UserRole.SUPERVISOR
   );
 }
@@ -65,7 +64,23 @@ export function canCreateOrEditDeliveryOrderDraft(role: UserRole): boolean {
 
 /** Validate a pending delivery order after a senior supervisor has prepared it. */
 export function canValidateDeliveryOrder(role: UserRole): boolean {
-  return role === UserRole.MANAGER || role === UserRole.ADMIN;
+  return (
+    role === UserRole.DIRECTOR ||
+    role === UserRole.ADMIN ||
+    role === UserRole.MANAGER
+  );
+}
+
+/** Open the POS pending-invoice picker (supervisors validate; senior supervisors review). */
+export function canPickPendingPosSales(params: {
+  validateDocuments: boolean;
+  role: UserRole;
+  commercialServiceRoleCode?: string | null;
+}): boolean {
+  if (params.validateDocuments) return true;
+  if (params.role === UserRole.SENIOR_SUPERVISOR) return true;
+  const c = (params.commercialServiceRoleCode ?? "").toLowerCase();
+  return c.includes("senior") && c.includes("supervisor");
 }
 
 /** Draft vehicle consignment notes (1:1 with Sale): clerks prepare; supervisors validate. */

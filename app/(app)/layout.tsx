@@ -40,8 +40,9 @@ const setupNav = [
 const operationsNav = [
   { href: "/rubber", label: "Rubber sales" },
   { href: "/delivery-orders", label: "Delivery orders" },
-  { href: "/consignment-notes", label: "VehicleConsignment notes" },
-  { href: "/pos", label: "Sales" },
+  { href: "/delivery-orders/list", label: "Delivery orders list" },
+  { href: "/consignment-notes", label: "Vehicle Consignment" },
+  { href: "/pos", label: "Sales Invoice" },
   { href: "/bpo-sales", label: "Bottled Palm Oil sales" },
   { href: "/stock", label: "Stock" },
 ] as const;
@@ -62,10 +63,11 @@ export default async function AppLayout({
     h.get("x-matched-path") ??
     ""
   ).trim();
-  if (!pathname) {
-    redirect("/forbidden");
+  // `proxy.ts` already enforced `route:*` on `request.nextUrl.pathname`. The invoke-path
+  // header is missing on some RSC sub-requests; do not treat that as forbidden here.
+  if (pathname) {
+    await assertRouteAllowedForPath(pathname, session);
   }
-  await assertRouteAllowedForPath(pathname, session);
 
   const [settings, openPeriod, invoicePrefix] = await Promise.all([
     getOrInitCompanySettings(),

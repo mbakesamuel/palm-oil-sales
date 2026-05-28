@@ -40,6 +40,7 @@ export default async function StockReceiptPrintPage(props: {
     lines: detail.lines.map((l, idx) => ({
       lineNo: idx + 1,
       productName: l.productName,
+      storageLocationName: l.storageLocationName,
       uom: l.uom,
       qty: l.qty,
     })),

@@ -26,6 +26,8 @@ export function ConsignmentNotesClient(props: {
   deleteConsignmentNote: (formData: FormData) => Promise<MutationResult>;
   validateConsignmentNote: (formData: FormData) => Promise<MutationResult>;
 }) {
+
+  //destructuring the props
   const {
     loadSaleForConsignmentByInvoice,
     loadConsignmentByVcnNo,
@@ -34,9 +36,12 @@ export function ConsignmentNotesClient(props: {
     validateConsignmentNote,
   } = props;
 
+  //useAuth hook to get the authentication status and session
   const { status: authStatus, session } = useAuth();
+  //useRouter hook to get the router
   const router = useRouter();
 
+  //state variables
   const [saleId, setSaleId] = React.useState<string | null>(null);
   const [noteId, setNoteId] = React.useState<string | null>(null);
   const [consignmentNoteNo, setConsignmentNoteNo] = React.useState("");

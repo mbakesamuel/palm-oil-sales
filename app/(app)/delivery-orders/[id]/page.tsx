@@ -22,7 +22,7 @@ export default async function DeliveryOrderDetailPage(props: { params: Promise<{
 
   const { data } = payload;
   return (
-    <div className="bg-white text-black -m-4 sm:-m-6 p-4 sm:p-6 rounded-2xl min-h-full space-y-6 print:m-0 print:p-0 print:rounded-none print:min-h-0">
+    <div className="bg-white text-black -m-4 sm:-m-6 p-4 sm:p-6 rounded-2xl min-h-[calc(100%+2rem)] sm:min-h-[calc(100%+3rem)] space-y-6 print:m-0 print:p-0 print:rounded-none print:min-h-0">
       <div className="print:hidden flex flex-wrap justify-between items-center gap-3">
         <Link
           href="/delivery-orders"

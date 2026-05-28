@@ -2,6 +2,7 @@
 
 import type { ConsignmentNotePrintModel } from "@/lib/consignment-note-types";
 import { ValidationStatus } from "@/lib/domain";
+import { ReportHeader } from "@/components/ReportHeader";
 
 function formatDisplayDate(iso: string) {
   try {
@@ -33,29 +34,22 @@ export function ConsignmentNotePrint(props: {
       className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0"
     >
       <header className="border-b border-black/20 pb-4 mb-6">
-        <div className="w-full">
-          <div className="relative flex min-h-8 items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to arbitrary http(s) URLs */}
-            <img
-              src={logoSrc}
-              alt=""
-              className="absolute left-0 top-1/2 h-8 max-h-8 w-auto max-w-[72px] -translate-y-1/2 object-contain"
-            />
-            <h1 className="w-full px-22 text-center text-2xl font-semibold leading-tight sm:px-24">
-              {companyName}
-            </h1>
-          </div>
-          {department ? <p className="mt-1 text-center text-sm opacity-80">{department}</p> : null}
+        <ReportHeader
+          companyName={companyName}
+          department={department}
+          logoSrc={logoSrc}
+          title="Vehicle consignment note"
+        />
+        {(companyAddress || companyPhone) ? (
           <div className="mt-2 text-center text-sm opacity-90 space-y-0.5">
             {companyAddress ? <p>{companyAddress}</p> : null}
             {companyPhone ? <p>Tel: {companyPhone}</p> : null}
           </div>
-        </div>
+        ) : null}
       </header>
 
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-lg font-bold uppercase tracking-wide">Vehicle consignment note</h2>
           <p className="text-sm mt-1">
             <span className="opacity-70">VCN no.</span>{" "}
             <span className="font-semibold tabular-nums">{note.consignmentNoteNo}</span>

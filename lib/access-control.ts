@@ -6,8 +6,15 @@ import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@/lib/domain";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/access-control-keys";
-import { permissionKeysForModules } from "@/lib/commercial-modules";
-import { isRouteEnabledByProfile, resolveCommercialProfile } from "@/lib/commercial-profile";
+import {
+  permissionKeysForModules,
+  type CommercialModuleKey,
+} from "@/lib/commercial-modules";
+import {
+  isRouteEnabledByProfile,
+  loadCommercialProfileForSession,
+  type CommercialProfile,
+} from "@/lib/commercial-profile";
 import { resolveRoutePermissionKey } from "@/lib/resolve-route-permission";
 import { roleSeesAllCommercialServices } from "@/lib/service-scope";
 import { redirect } from "next/navigation";
@@ -15,6 +22,28 @@ import { redirect } from "next/navigation";
 export { PERMISSION_KEYS, type PermissionKey };
 
 export type RolePermissionMap = Record<PermissionKey, boolean>;
+
+/** Palm-oil report routes (`palm_reports` module), aligned with `defaultPermissionsForRole`. */
+function grantPalmOilReportRoutes(base: RolePermissionMap) {
+  const mod: CommercialModuleKey = "palm_reports";
+  for (const key of permissionKeysForModules([mod])) {
+    base[key] = true;
+  }
+}
+
+/** DB rows seeded before palm report defaults must not block keys that are true in code defaults. */
+function mergeStoredPermissions(
+  defaults: RolePermissionMap,
+  rows: Array<{ key: string; allowed: boolean }>,
+): RolePermissionMap {
+  const out: RolePermissionMap = { ...defaults };
+  for (const r of rows) {
+    if (!(PERMISSION_KEYS as readonly string[]).includes(r.key)) continue;
+    const key = r.key as PermissionKey;
+    out[key] = r.allowed || defaults[key];
+  }
+  return out;
+}
 
 export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   const base: RolePermissionMap = Object.fromEntries(
@@ -24,6 +53,8 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   // Keep existing UX: operations are available to everyone by default.
   base["route:/dashboard"] = true;
   base["route:/delivery-orders"] = true;
+  base["route:/delivery-orders/list"] = true;
+  base["route:/delivery-orders/validation-queue"] = role === UserRole.MANAGER;
   base["route:/pos"] = true;
   base["route:/bpo-sales"] = true;
   base["route:/stock"] = true;
@@ -52,13 +83,23 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     // outbound transfers in place of the sales-point supervisor.
     base["ui:receive-stock-transfer"] = true;
   }
+  if (role === UserRole.MANAGER) {
+    // Line managers roam across sales points; validate DOs and adjust stock, but do not
+    // post receipts or dispatch transfers in place of the sales-point supervisor.
+    base["ui:receive-stock-transfer"] = true;
+    base["ui:post-stock-adjustment"] = true;
+    base["ui:reclassify-stock-condition"] = true;
+    base["ui:validate-delivery-orders"] = true;
+  }
   if (
     role === UserRole.SUPERVISOR ||
     role === UserRole.SENIOR_SUPERVISOR ||
-    role === UserRole.MANAGER ||
     role === UserRole.DIRECTOR
   ) {
     base["ui:post-stock-adjustment"] = true;
+  }
+  if (role === UserRole.DIRECTOR) {
+    base["ui:reclassify-stock-condition"] = true;
   }
 
   // Vehicle consignment notes: clerks draft, supervisors validate (admin gets all keys below).
@@ -72,27 +113,17 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     base["route:/reports/bpo"] = true;
   }
 
-  if (role === UserRole.DIRECTOR || role === UserRole.MANAGER) {
+  if (role === UserRole.DIRECTOR) {
     base["route:/setup/sales-budget"] = true;
   }
 
-  // Reports default on.
-  base["route:/reports"] = true;
-  base["route:/reports/sales"] = true;
-  base["route:/reports/daily-sales-summary"] = true;
-  base["route:/reports/delivery-orders"] = true;
-  base["route:/reports/delivery-order-monitor"] = true;
-  base["route:/reports/customer-delivery-monitor"] = true;
-  base["route:/reports/do-commitment-crosstab"] = true;
-  base["route:/reports/sales-budget-monthly-crosstab"] = true;
-  base["route:/reports/sales-budget-weekly-crosstab"] = true;
-  base["route:/reports/pricing"] = true;
+  // Reports default on (palm_reports + shared BPO report entry points).
+  grantPalmOilReportRoutes(base);
   base["route:/reports/bpo-pricing"] = true;
   base["route:/reports/bpo"] = true;
   base["route:/reports/bpo-sales-crosstab"] =
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
-    role === UserRole.MANAGER ||
     role === UserRole.SENIOR_SUPERVISOR ||
     role === UserRole.CLERK_IN_CHARGE_BPO;
 
@@ -100,10 +131,9 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["ui:validate-documents"] =
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
-    role === UserRole.MANAGER ||
     role === UserRole.SUPERVISOR;
 
-  base["ui:validate-delivery-orders"] = role === UserRole.MANAGER;
+  base["ui:validate-delivery-orders"] = role === UserRole.DIRECTOR;
 
   // Setup defaults: admin only.
   const isAdmin = role === UserRole.ADMIN;
@@ -154,6 +184,7 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
     if (c.includes("manager")) {
       base["ui:validate-delivery-orders"] = true;
       base["ui:post-stock-adjustment"] = true;
+      base["ui:reclassify-stock-condition"] = true;
     } else if (c.includes("supervisor")) {
       base["ui:validate-documents"] = true;
       base["ui:post-stock-adjustment"] = true;
@@ -163,6 +194,8 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
 
   // Palm-style service roles (fallback).
   base["route:/delivery-orders"] = true;
+  base["route:/delivery-orders/list"] = true;
+  base["route:/delivery-orders/validation-queue"] = c.includes("manager");
   base["route:/pos"] = true;
   base["route:/stock"] = true;
   base["ui:receive-stock-transfer"] = true;
@@ -172,9 +205,11 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
   }
   base["route:/reports"] = true;
   base["route:/reports/sales"] = true;
+  grantPalmOilReportRoutes(base);
   if (c.includes("bpo")) {
     base["route:/bpo-sales"] = true;
     base["route:/reports/bpo"] = true;
+    base["route:/reports/bpo-pricing"] = true;
   }
   if (c.includes("supervisor") || c.includes("manager")) {
     base["route:/consignment-notes"] = true;
@@ -184,6 +219,9 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
     // senior duties only — no sales invoice validation
   } else if (c.includes("supervisor")) {
     base["ui:validate-documents"] = true;
+  }
+  if (c.includes("manager") || c.includes("director")) {
+    base["ui:reclassify-stock-condition"] = true;
   }
   if (c.includes("manager")) {
     base["ui:validate-delivery-orders"] = true;
@@ -211,14 +249,13 @@ export function defaultPermissionsForGlobalRoleCode(
     for (const k of PERMISSION_KEYS) base[k] = true;
     return base;
   }
-  if (c.includes("director") || c.includes("manager") || c.includes("officer")) {
+  if (c.includes("director")) {
     base["route:/setup/sales-budget"] = true;
     base["ui:validate-documents"] = true;
+    base["ui:validate-delivery-orders"] = true;
+    base["ui:reclassify-stock-condition"] = true;
   } else if (c.includes("supervisor") && !c.includes("senior")) {
     base["ui:validate-documents"] = true;
-  }
-  if (c.includes("manager")) {
-    base["ui:validate-delivery-orders"] = true;
   }
   return base;
 }
@@ -272,13 +309,7 @@ export async function getPermissionsForGlobalRoleDefinition(
     return defaults;
   }
 
-  const out: RolePermissionMap = { ...defaults };
-  for (const r of rows) {
-    if ((PERMISSION_KEYS as readonly string[]).includes(r.key)) {
-      out[r.key as PermissionKey] = r.allowed;
-    }
-  }
-  return out;
+  return mergeStoredPermissions(defaults, rows);
 }
 
 export async function getPermissionsForServiceRole(
@@ -315,23 +346,13 @@ export async function getPermissionsForServiceRole(
     return defaults;
   }
 
-  const out: RolePermissionMap = { ...defaults };
-  for (const r of rows) {
-    if ((PERMISSION_KEYS as readonly string[]).includes(r.key)) {
-      out[r.key as PermissionKey] = r.allowed;
-    }
-  }
-  return out;
+  return mergeStoredPermissions(defaults, rows);
 }
 
 function applyCommercialModuleFilter(
   perms: RolePermissionMap,
-  session: AuthSession,
+  profile: CommercialProfile | null,
 ): RolePermissionMap {
-  if (roleSeesAllCommercialServices(session.role) || session.globalRole) {
-    return perms;
-  }
-  const profile = resolveCommercialProfile(session);
   if (!profile) return perms;
   const allowed = permissionKeysForModules(profile.enabledModules);
   const out = { ...perms };
@@ -354,7 +375,12 @@ export async function getPermissionsForSession(
           session.commercialServiceRole.code,
         )
       : await getPermissionsForRole(session.role);
-  return applyCommercialModuleFilter(perms, session);
+
+  if (roleSeesAllCommercialServices(session.role) || session.globalRole) {
+    return perms;
+  }
+  const profile = await loadCommercialProfileForSession(session);
+  return applyCommercialModuleFilter(perms, profile);
 }
 
 export async function getPermissionsForRole(role: UserRole): Promise<RolePermissionMap> {
@@ -389,13 +415,7 @@ export async function getPermissionsForRole(role: UserRole): Promise<RolePermiss
     return defaults;
   }
 
-  const out: RolePermissionMap = { ...defaults };
-  for (const r of rows) {
-    if ((PERMISSION_KEYS as readonly string[]).includes(r.key)) {
-      out[r.key as PermissionKey] = r.allowed;
-    }
-  }
-  return out;
+  return mergeStoredPermissions(defaults, rows);
 }
 
 export async function assertActorIsAdmin() {
@@ -415,8 +435,8 @@ export async function isRouteAllowedForPath(
 ): Promise<boolean> {
   const key = resolveRoutePermissionKey(pathname);
   if (!key) return true;
-  if (!roleSeesAllCommercialServices(session.role)) {
-    const profile = resolveCommercialProfile(session);
+  if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
+    const profile = await loadCommercialProfileForSession(session);
     if (!isRouteEnabledByProfile(profile, pathname)) return false;
   }
   const perms = await getPermissionsForSession(session);
@@ -439,8 +459,8 @@ export async function assertPermissionKey(key: PermissionKey): Promise<void> {
   if (!session?.userId) {
     throw new Error("Login required.");
   }
-  if (!roleSeesAllCommercialServices(session.role)) {
-    const profile = resolveCommercialProfile(session);
+  if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
+    const profile = await loadCommercialProfileForSession(session);
     if (!isRouteEnabledByProfile(profile, key)) {
       throw new Error("This feature is not enabled for your commercial line.");
     }

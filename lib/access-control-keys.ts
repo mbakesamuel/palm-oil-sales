@@ -23,16 +23,22 @@ export const PERMISSION_KEYS = [
   "route:/product-categories",
   "route:/products",
   "route:/delivery-orders",
+  "route:/delivery-orders/list",
+  "route:/delivery-orders/validation-queue",
   "route:/consignment-notes",
   "route:/pos",
   "route:/bpo-sales",
   "route:/reports",
   "route:/reports/sales",
   "route:/reports/daily-sales-summary",
+  "route:/reports/daily-sales-summary/print",
   "route:/reports/delivery-orders",
   "route:/reports/delivery-order-monitor",
   "route:/reports/customer-delivery-monitor",
   "route:/reports/do-commitment-crosstab",
+  "route:/reports/do-commitment-crosstab/print",
+  "route:/reports/stock-on-hand",
+  "route:/reports/stock-on-hand/print",
   "route:/reports/sales-budget-monthly-crosstab",
   "route:/reports/sales-budget-weekly-crosstab",
   "route:/reports/pricing",
@@ -47,6 +53,7 @@ export const PERMISSION_KEYS = [
   "ui:dispatch-stock-transfer",
   "ui:receive-stock-transfer",
   "ui:post-stock-adjustment",
+  "ui:reclassify-stock-condition",
   "ui:cancel-stock-document",
 ] as const;
 
@@ -60,6 +67,8 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   "ui:dispatch-stock-transfer": "Dispatch stock transfers from a sales point",
   "ui:receive-stock-transfer": "Receive stock transfers at a sales point",
   "ui:post-stock-adjustment": "Post stock adjustments (manual gain / loss)",
+  "ui:reclassify-stock-condition":
+    "Reclassify stock between sellable and unsellable (manager only)",
   "ui:cancel-stock-document": "Cancel posted stock documents (reverse movements)",
 };
 

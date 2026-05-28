@@ -15,7 +15,7 @@ import {
   type PermissionKey,
 } from "@/lib/access-control";
 import { parseEnabledModulesJson } from "@/lib/commercial-modules";
-import { ensureGlobalRoleDefinitions } from "@/lib/global-role-definitions";
+import { ensureGlobalRoleDefinitions, isRetiredGlobalLegacyRole } from "@/lib/global-role-definitions";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -159,7 +159,9 @@ export async function getGlobalRolesCatalogAction(): Promise<GlobalRolesCatalog>
   );
 
   return {
-    roles: definitions.map((d) => ({
+    roles: definitions
+      .filter((d) => !isRetiredGlobalLegacyRole(d.legacyRole))
+      .map((d) => ({
       id: d.id,
       code: d.code,
       displayName: d.displayName,

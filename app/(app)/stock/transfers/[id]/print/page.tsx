@@ -41,6 +41,8 @@ export default async function StockTransferPrintPage(props: {
     lines: detail.lines.map((l, idx) => ({
       lineNo: idx + 1,
       productName: l.productName,
+      fromStorageLocationName: l.fromStorageLocationName,
+      toStorageLocationName: l.toStorageLocationName,
       uom: l.uom,
       qty: l.qty,
     })),

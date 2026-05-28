@@ -25,6 +25,20 @@ const prisma = new PrismaClient({
 
 type Tx = Prisma.TransactionClient;
 
+async function resolveDefaultStorageLocationId(
+  tx: Tx,
+  salesPointId: number,
+): Promise<number> {
+  const loc = await tx.storageLocation.findFirst({
+    where: { salesPointId, isDefault: true },
+    select: { id: true },
+  });
+  if (!loc) {
+    throw new Error(`No default storage location for sales point ${salesPointId}.`);
+  }
+  return loc.id;
+}
+
 async function applySaleMovement(
   tx: Tx,
   input: {
@@ -39,10 +53,13 @@ async function applySaleMovement(
   const delta = input.qty.abs();
   if (delta.lte(0)) return;
 
+  const storageLocationId = await resolveDefaultStorageLocationId(tx, input.salesPointId);
+
   await tx.stockMovement.create({
     data: {
       salesPointId: input.salesPointId,
       productId: input.productId,
+      storageLocationId,
       kind: "SALE",
       qty: delta,
       occurredAt: input.occurredAt,
@@ -57,6 +74,8 @@ async function applySaleMovement(
     where: {
       salesPointId: input.salesPointId,
       productId: input.productId,
+      storageLocationId,
+      condition: "SELLABLE",
       qty: { gte: delta },
     },
     data: { qty: { decrement: delta } },
@@ -65,9 +84,11 @@ async function applySaleMovement(
   if (updated.count === 0) {
     const balance = await tx.stockBalance.findUnique({
       where: {
-        salesPointId_productId: {
+        salesPointId_productId_storageLocationId_condition: {
           salesPointId: input.salesPointId,
           productId: input.productId,
+          storageLocationId,
+          condition: "SELLABLE",
         },
       },
       select: { qty: true },

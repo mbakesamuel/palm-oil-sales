@@ -54,6 +54,7 @@ function parseDec(s: string) {
 }
 
 export function DeliveryOrdersClient(props: {
+  initialLookupNo?: string;
   customers: Customer[];
   products: Product[];
   salesPoints: SalesPointOpt[];
@@ -70,6 +71,7 @@ export function DeliveryOrdersClient(props: {
   saveDeliveryOrder: (formData: FormData) => Promise<SaveHeaderResult>;
   deleteDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
+  cancelValidatedDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   canValidateDeliveryOrder: boolean;
   previewProductUnitPriceAction: (
     customerId: string,
@@ -85,6 +87,7 @@ export function DeliveryOrdersClient(props: {
   listPendingDeliveryOrdersAction: () => Promise<PendingDeliveryOrderRow[]>;
 }) {
   const {
+    initialLookupNo,
     customers,
     products,
     salesPoints,
@@ -93,6 +96,7 @@ export function DeliveryOrdersClient(props: {
     saveDeliveryOrder,
     deleteDeliveryOrder,
     validateDeliveryOrder,
+    cancelValidatedDeliveryOrder,
     canValidateDeliveryOrder: canValidateDeliveryOrderProp,
     previewProductUnitPriceAction,
     previewStockOnHandAction,
@@ -115,18 +119,24 @@ export function DeliveryOrdersClient(props: {
   const [dateIssued, setDateIssued] = React.useState(todayIsoDate);
   const [orderRef, setOrderRef] = React.useState("");
   const [salesPointId, setSalesPointId] = React.useState<string>("");
-  const [lookupNo, setLookupNo] = React.useState("");
+  const [lookupNo, setLookupNo] = React.useState(() =>
+    String(props.initialLookupNo ?? "").trim(),
+  );
   const [docStatus, setDocStatus] = React.useState<ValidationStatus | null>(
     null,
   );
   const [validatedByName, setValidatedByName] = React.useState("");
   const [validatedAtIso, setValidatedAtIso] = React.useState("");
+  const [cancelledReason, setCancelledReason] = React.useState("");
+  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
+  const [cancelReasonDraft, setCancelReasonDraft] = React.useState("");
+  const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false);
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [lines, setLines] = React.useState<LineRow[]>(() =>
     products.length > 0
       ? [
           {
-            productId: String(products[0].productId),
+            productId: "",
             orderQty: "0",
             orderUnit: "kg",
             unitPrice: "",
@@ -159,7 +169,7 @@ export function DeliveryOrdersClient(props: {
     {},
   );
   /**
-   * Manager-only: pre-fetched list of PENDING delivery orders that this user is
+   * Director-only: pre-fetched list of PENDING delivery orders that this user is
    * allowed to see. Powers the combo picker on the "Open existing order" card
    * so the lookup input doubles as a "pick from awaiting-validation" combo.
    * Empty for non-managers.
@@ -172,7 +182,7 @@ export function DeliveryOrdersClient(props: {
 
   function emptyLine(): LineRow {
     return {
-      productId: String(products[0]?.productId ?? ""),
+      productId: "",
       orderQty: "0",
       orderUnit: "kg",
       unitPrice: "",
@@ -252,7 +262,7 @@ export function DeliveryOrdersClient(props: {
     previewProductUnitPriceAction,
   ]);
 
-  // Manager combo: fetch the (scope-respecting) list of PENDING DOs once the
+  // Director combo: fetch the (scope-respecting) list of PENDING DOs once the
   // session is ready and the user is allowed to validate. The server action
   // returns [] for anyone who can't validate, so this also covers the
   // not-a-manager case without an extra client-side guard.
@@ -361,6 +371,7 @@ export function DeliveryOrdersClient(props: {
     setDocStatus(data.status);
     setValidatedByName(data.validatedByName ?? "");
     setValidatedAtIso(data.validatedAtIso ?? "");
+    setCancelledReason("");
     setAllowAutoUnitPrice(false);
     setLinePriceErrors({});
     setLines(
@@ -405,6 +416,7 @@ export function DeliveryOrdersClient(props: {
     setDocStatus(null);
     setValidatedByName("");
     setValidatedAtIso("");
+    setCancelledReason("");
     setAllowAutoUnitPrice(true);
     setLinePriceErrors({});
     setLines(products.length > 0 ? [emptyLine()] : []);
@@ -437,6 +449,15 @@ export function DeliveryOrdersClient(props: {
     }
   }
 
+  // Optional deep-link: /delivery-orders?no=DO-2026-000001
+  React.useEffect(() => {
+    const no = String(initialLookupNo ?? "").trim();
+    if (!no) return;
+    setLookupNo(no);
+    void onLoadByNo(no);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLookupNo]);
+
   async function onSave() {
     setBusy("save");
     setBanner(null);
@@ -459,6 +480,14 @@ export function DeliveryOrdersClient(props: {
       }
       if (lines.length === 0) {
         setBanner({ type: "error", text: "Add at least one line item." });
+        return;
+      }
+      const missingProductIdx = lines.findIndex((l) => !l.productId.trim());
+      if (missingProductIdx !== -1) {
+        setBanner({
+          type: "error",
+          text: `Select a product on line ${missingProductIdx + 1}.`,
+        });
         return;
       }
       const fd = new FormData();
@@ -538,6 +567,74 @@ export function DeliveryOrdersClient(props: {
     }
   }
 
+  async function onCancelValidatedOrder() {
+    if (orderId == null) return;
+    if (authStatus !== "ready" || !session?.userId) {
+      setBanner({ type: "error", text: "Login required." });
+      return;
+    }
+    if (session.role !== "MANAGER") {
+      setBanner({
+        type: "error",
+        text: "Only managers can cancel a validated delivery order.",
+      });
+      return;
+    }
+    setCancelReasonDraft(cancelledReason || "");
+    setCancelDialogOpen(true);
+  }
+
+  async function confirmCancelValidatedOrder() {
+    if (orderId == null) return;
+    const trimmed = cancelReasonDraft.trim();
+    if (!trimmed) {
+      setBanner({ type: "error", text: "Cancellation reason is required." });
+      return;
+    }
+    setCancelledReason(trimmed);
+    setBusy("validate");
+    setBanner(null);
+    try {
+      const fd = new FormData();
+      fd.set("id", String(orderId));
+      fd.set("reason", trimmed);
+      const r = await cancelValidatedDeliveryOrder(fd);
+      if (r.ok) {
+        setDocStatus(ValidationStatus.REJECTED);
+        setBanner({ type: "ok", text: "Delivery order cancelled." });
+        router.refresh();
+      } else {
+        setBanner({ type: "error", text: r.error });
+      }
+    } finally {
+      setBusy(null);
+      setCancelDialogOpen(false);
+    }
+  }
+
+  function applyStartCorrectionFromCurrent() {
+    if (!deliveryOrderNo || !orderId) return;
+    const originalNo = deliveryOrderNo;
+    const originalRef = orderRef;
+
+    // Turn the current in-memory document into a new draft by clearing identity/status,
+    // while keeping the editable fields prefilled for quick correction.
+    setOrderId(null);
+    setDeliveryOrderNo("");
+    setLookupNo("");
+    setDocStatus(null);
+    setValidatedByName("");
+    setValidatedAtIso("");
+    setCancelledReason("");
+    setAllowAutoUnitPrice(true);
+    setBanner({
+      type: "ok",
+      text: `New correction draft started. Update fields then Save. Refers to ${originalNo}.`,
+    });
+    setOrderRef(originalRef?.trim() ? `${originalRef} (Correction for ${originalNo})` : `Correction for ${originalNo}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   const vatRateNum = taxPreview ? parseDec(taxPreview.vatRate) : 0;
   const otherRateNum = taxPreview ? parseDec(taxPreview.otherRate) : 0;
 
@@ -590,11 +687,21 @@ export function DeliveryOrdersClient(props: {
           ) : (
             <>
               Senior sales supervisors prepare drafts (header, lines, payments).
-              Managers validate pending orders. Open an order by number to view
+              Directors validate pending orders. Open an order by number to view
               or print.
             </>
           )}
         </p>
+        {session?.role === "MANAGER" ? (
+          <div className="pt-2">
+            <Link
+              href="/delivery-orders/validation-queue"
+              className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent/25"
+            >
+              Open validation queue (bulk)
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       {banner ? (
@@ -826,18 +933,28 @@ export function DeliveryOrdersClient(props: {
             )}
 
             {docStatus ? (
-              <p className="text-xs opacity-75">
+              <p
+                className={`text-xs rounded-md border px-2 py-1 ${
+                  docStatus === ValidationStatus.VALIDATED
+                    ? "bg-emerald-600/10 border-emerald-600/30 text-emerald-900 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-200"
+                    : docStatus === ValidationStatus.REJECTED
+                      ? "bg-red-600/10 border-red-600/30 text-red-900 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-200"
+                      : "bg-amber-500/15 border-amber-500/30 text-amber-900 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-200"
+                }`}
+              >
                 <span className="opacity-70">Status</span>{" "}
-                <span className="font-medium">{docStatus}</span>
+                <span className="font-semibold uppercase tracking-wide">
+                  {docStatus}
+                </span>
                 {docStatus === ValidationStatus.VALIDATED ? (
-                  <span className="opacity-70">
+                  <span className="opacity-80">
                     {" "}
                     · Validated by{" "}
                     <span className="font-medium">
                       {validatedByName || "—"}
                     </span>
                     {validatedAtIso ? (
-                      <span className="opacity-70">
+                      <span className="opacity-80">
                         {" "}
                         (
                         {new Date(validatedAtIso)
@@ -850,6 +967,79 @@ export function DeliveryOrdersClient(props: {
                   </span>
                 ) : null}
               </p>
+            ) : null}
+
+            {orderId != null &&
+            docStatus === ValidationStatus.VALIDATED &&
+            session?.role === "MANAGER" &&
+            canValidateDO ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void onCancelValidatedOrder()}
+                  className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-4 py-2 text-sm font-medium hover:bg-red-600/10 disabled:opacity-50"
+                >
+                  Cancel validated DO (correction)
+                </button>
+              </div>
+            ) : null}
+
+            {orderId != null &&
+            docStatus === ValidationStatus.REJECTED &&
+            canDraftDO ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => setCorrectionDialogOpen(true)}
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
+                >
+                  Start correction (new DO)
+                </button>
+              </div>
+            ) : null}
+
+            {cancelDialogOpen && orderId != null ? (
+              <ConfirmDialog
+                title="Cancel validated delivery order?"
+                description={`This will mark “${deliveryOrderNo || `ID ${orderId}`}” as cancelled (REJECTED) and preserve it for audit. Then create a new correction DO.`}
+                confirmLabel="Cancel validated DO"
+                confirmTone="danger"
+                cancelLabel="Back"
+                onCancel={() => setCancelDialogOpen(false)}
+                onConfirm={confirmCancelValidatedOrder}
+              >
+                <div className="space-y-1">
+                  <label className="text-xs font-medium opacity-70">
+                    Cancellation reason
+                  </label>
+                  <textarea
+                    className="min-h-24 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                    value={cancelReasonDraft}
+                    onChange={(e) => setCancelReasonDraft(e.target.value)}
+                    placeholder="Describe the error and why this DO is being cancelled…"
+                  />
+                  <div className="text-[11px] opacity-70">
+                    This reason is stored on the cancelled DO for audit.
+                  </div>
+                </div>
+              </ConfirmDialog>
+            ) : null}
+
+            {correctionDialogOpen && orderId != null ? (
+              <ConfirmDialog
+                title="Start a correction delivery order?"
+                description={`This will create a NEW draft (the cancelled DO remains unchanged). The new draft will reference “${deliveryOrderNo || `ID ${orderId}`}”.`}
+                confirmLabel="Start correction"
+                confirmTone="neutral"
+                cancelLabel="Back"
+                onCancel={() => setCorrectionDialogOpen(false)}
+                onConfirm={() => {
+                  setCorrectionDialogOpen(false);
+                  applyStartCorrectionFromCurrent();
+                }}
+              />
             ) : null}
 
             {orderId != null ? (
@@ -1079,6 +1269,9 @@ export function DeliveryOrdersClient(props: {
                           );
                         }}
                       >
+                        <option value="" disabled>
+                          Select product
+                        </option>
                         {products.map((g) => (
                           <option key={g.productId} value={String(g.productId)}>
                             {g.productName}
@@ -1155,7 +1348,7 @@ export function DeliveryOrdersClient(props: {
                           Unit price (ex VAT)
                         </label>
                         <input
-                          className="w-full min-w-0 rounded-md border border-border bg-foreground/[0.06] px-2 py-2 text-sm"
+                          className="w-full min-w-0 rounded-md border border-border bg-foreground/6 px-2 py-2 text-sm"
                           inputMode="decimal"
                           value={l.unitPrice}
                           placeholder="—"
@@ -1174,7 +1367,7 @@ export function DeliveryOrdersClient(props: {
                           Net (ex VAT)
                         </label>
                         <input
-                          className="w-full min-w-0 rounded-md border border-border bg-foreground/[0.06] px-2 py-2 text-sm text-right tabular-nums font-medium"
+                          className="w-full min-w-0 rounded-md border border-border bg-foreground/6 px-2 py-2 text-sm text-right tabular-nums font-medium"
                           inputMode="decimal"
                           value={s.net.toFixed(2)}
                           readOnly

@@ -92,19 +92,24 @@ function mapUserToAuthSession(user: {
   }
 
   const globalRoleDef = user.globalRoleDefinition;
+  // Line staff must not inherit a stale org-wide global role (e.g. Senior sales supervisor)
+  // that was assigned before line roles were exclusive. Org-wide metadata only when there
+  // is no active commercial line role.
   const globalRole: AuthSession["globalRole"] =
-    globalRoleDef?.isActive === true
-      ? {
+    commercialServiceRole || !globalRoleDef?.isActive
+      ? null
+      : {
           id: globalRoleDef.id,
           code: globalRoleDef.code,
           displayName: globalRoleDef.displayName,
-        }
-      : null;
+        };
 
   const role: UserRole =
-    globalRoleDef?.isActive === true && globalRoleDef.legacyRole
-      ? (globalRoleDef.legacyRole as UserRole)
-      : (user.role as UserRole);
+    commercialServiceRole != null
+      ? (user.role as UserRole)
+      : globalRoleDef?.isActive === true && globalRoleDef.legacyRole
+        ? (globalRoleDef.legacyRole as UserRole)
+        : (user.role as UserRole);
 
   if (!validateUserAssignment(role, commercialService, commercialServiceRole, salesPoint, factory)) {
     return null;

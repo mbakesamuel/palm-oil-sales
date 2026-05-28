@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleLabel } from "@/lib/auth-display";
+import { sessionRoleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
 import { getPermissionsForSessionAction } from "@/app/(app)/setup/permissions/actions";
 import { navIconForGroup, navIconForHref } from "@/lib/nav-icons";
@@ -475,7 +475,7 @@ export function Sidebar(props: {
           <>
             <div
               className="flex flex-row gap-1 items-center shrink-0 lg:hidden"
-              title={`${session.displayName} · ${roleLabel(session.role)}`}
+              title={`${session.displayName} · ${sessionRoleLabel(session)}`}
             >
               <div className={[RAIL_LINK, "border border-transparent"].join(" ")} aria-hidden>
                 <UserRound className="size-5 shrink-0 opacity-90" />
@@ -514,9 +514,9 @@ export function Sidebar(props: {
               </div>
               <div
                 className="opacity-70 truncate"
-                title={roleLabel(session.role)}
+                title={sessionRoleLabel(session)}
               >
-                {roleLabel(session.role)}
+                {sessionRoleLabel(session)}
               </div>
               {session.salesPoint ? (
                 <div
