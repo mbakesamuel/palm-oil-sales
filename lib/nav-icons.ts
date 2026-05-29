@@ -59,6 +59,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/reports": BarChart3,
   "/reports/sales": BookOpen,
   "/reports/daily-sales-summary": Calendar,
+  "/reports/sales-summary-by-customer": TableProperties,
   "/reports/delivery-orders": ClipboardList,
   "/reports/delivery-order-monitor": Search,
   "/reports/customer-delivery-monitor": Users2,

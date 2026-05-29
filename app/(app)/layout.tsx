@@ -42,6 +42,7 @@ const operationsNav = [
   { href: "/delivery-orders/list", label: "Delivery orders list" },
   { href: "/consignment-notes", label: "Vehicle Consignment" },
   { href: "/pos", label: "Sales Invoice" },
+  { href: "/pos/list", label: "Sales list" },
   { href: "/bpo-sales", label: "Bottled Palm Oil sales" },
   { href: "/stock", label: "Stock" },
 ] as const;

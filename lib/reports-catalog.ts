@@ -45,6 +45,15 @@ export const REPORTS: ReportDefinition[] = [
     permissionKey: "route:/reports/daily-sales-summary",
   },
   {
+    group: "sales",
+    groupLabel: "Sales",
+    href: "/reports/sales-summary-by-customer",
+    label: "Sales summary by customer",
+    description:
+      "Daily, weekly, monthly, or yearly validated sales — quantity and net revenue by product and customer type (Industry, Whole sale, Retail, Worker).",
+    permissionKey: "route:/reports/sales-summary-by-customer",
+  },
+  {
     group: "delivery",
     groupLabel: "Delivery orders",
     href: "/reports/delivery-orders",

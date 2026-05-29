@@ -12,7 +12,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:seed:sales-demo": "tsx scripts/seed-sales-dummy-data.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
