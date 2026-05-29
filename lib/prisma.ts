@@ -3,7 +3,8 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 /** Bump when a migration changes the DB shape so dev hot-reload drops a stale Prisma singleton. */
-const PRISMA_CLIENT_CACHE_KEY = "20260526120000_drop_product_form_use_category_bottled";
+const PRISMA_CLIENT_CACHE_KEY =
+  "20260526120000_drop_product_form_use_category_bottled";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -29,21 +30,6 @@ function prismaDatamodelFieldTag(): string {
     return "";
   }
 }
-
-/* function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error(
-      "DATABASE_URL is missing. Create a .env file (or use .env.example) with your Postgres connection string.",
-    );
-  }
-
-  const adapter = new PrismaPg({ connectionString });
-  return new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  });
-} */
 
 function resolveDatabaseUrl(): string | undefined {
   const dev = process.env.DATABASE_URL?.trim();
@@ -116,7 +102,9 @@ function clientHasProductUnitPriceSchedule(client: PrismaClient): boolean {
  * clients would still try to read the removed column, so we refuse to use them.
  */
 function clientMatchesCurrentProductModel(): boolean {
-  const product = Prisma.dmmf.datamodel.models.find((m) => m.name === "Product");
+  const product = Prisma.dmmf.datamodel.models.find(
+    (m) => m.name === "Product",
+  );
   const productCat = Prisma.dmmf.datamodel.models.find(
     (m) => m.name === "ProductCat",
   );
@@ -138,7 +126,8 @@ export function getPrismaClient() {
   // Lazy init so `next build` can run without DATABASE_URL.
   if (globalForPrisma.prisma) {
     const tagMatches = globalForPrisma.prismaSchemaTag === schemaTag;
-    const cacheKeyMatches = globalForPrisma.prismaCacheKey === PRISMA_CLIENT_CACHE_KEY;
+    const cacheKeyMatches =
+      globalForPrisma.prismaCacheKey === PRISMA_CLIENT_CACHE_KEY;
     if (
       tagMatches &&
       cacheKeyMatches &&
