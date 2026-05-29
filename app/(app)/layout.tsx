@@ -14,11 +14,10 @@ import { prismaDateToIso } from "@/lib/posting-calendar";
 import { resolveCompanyLogoSrc } from "@/lib/company-logo";
 import { getDefaultCommercialInvoicePrefix } from "@/lib/commercial-service";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { resolveHomeDashboardPath } from "@/lib/dashboard-routing";
 import { redirect } from "next/navigation";
 import { reportNavItems, reportNavSections } from "@/lib/reports-catalog";
 import { Sidebar } from "./Sidebar";
-
-const dashboardNav = [{ href: "/dashboard", label: "Dashboard" }] as const;
 
 const setupNav = [
   { href: "/setup", label: "General Parameters" },
@@ -79,6 +78,9 @@ export default async function AppLayout({
     .toDecimalPlaces(2)
     .toString();
   const subtitle = `Currency: XAF · VAT: ${vatPct}% · Invoice prefix: ${invoicePrefix}`;
+  const dashboardNav = [
+    { href: resolveHomeDashboardPath(session), label: "Dashboard" },
+  ] as const;
 
   return (
     <BrandingProvider

@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
+import type { ServiceScope } from "@/lib/service-scope";
 import {
   commercialServiceErrorForOperations,
   deliveryOrderWhereForScope,
@@ -12,11 +13,13 @@ import {
 } from "@/lib/service-scope";
 import { ValidationStatus } from "@prisma/client";
 
-export async function DashboardStats() {
+export async function DashboardStats(props: { commercialServiceId?: string } = {}) {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const scope = resolveServiceScope(session);
+  const scope: ServiceScope = props.commercialServiceId
+    ? { mode: "single", commercialServiceId: props.commercialServiceId }
+    : resolveServiceScope(session);
   const scopeErr = commercialServiceErrorForOperations(scope);
   if (scopeErr) {
     return (

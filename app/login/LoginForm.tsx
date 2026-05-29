@@ -32,7 +32,7 @@ export function LoginForm(props: {
         return;
       }
       signIn(r.session);
-      router.push("/dashboard");
+      router.push(r.homePath);
     } catch {
       setError("Something went wrong. Please try again.");
       setBusy(false);

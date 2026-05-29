@@ -34,6 +34,7 @@ import {
 
 const HREF_ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
+  "/dashboard/executive": LayoutDashboard,
   "/setup": Settings,
   "/setup/sales-budget": Target,
   "/setup/product-pricing": Tags,

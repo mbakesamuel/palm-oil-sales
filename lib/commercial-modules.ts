@@ -72,7 +72,7 @@ export const RUBBER_MODULE_KEYS: CommercialModuleKey[] = [
 ];
 
 const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> = {
-  dashboard: ["route:/dashboard"],
+  dashboard: ["route:/dashboard", "route:/dashboard/executive"],
   setup: [
     "route:/setup",
     "route:/setup/commercial-services",
