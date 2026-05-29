@@ -45,11 +45,17 @@ function prismaDatamodelFieldTag(): string {
   });
 } */
 
+function resolveDatabaseUrl(): string | undefined {
+  const dev = process.env.DATABASE_URL?.trim();
+  const prod = process.env.DATABASE_URL_PROD?.trim();
+  if (process.env.NODE_ENV === "production") {
+    return prod || dev;
+  }
+  return dev || prod;
+}
+
 function createPrismaClient() {
-  const connectionString =
-    process.env.NODE_ENV === "production"
-      ? process.env.DATABASE_URL_PROD
-      : process.env.DATABASE_URL;
+  const connectionString = resolveDatabaseUrl();
   if (!connectionString) {
     throw new Error(
       "DATABASE_URL is missing. Create a .env file (or use .env.example) with your Postgres connection string.",

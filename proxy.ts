@@ -1,6 +1,10 @@
 import NextAuth from "next-auth";
 import authConfig, { INVOKE_PATH_HEADER } from "@/auth.config";
-import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
+import {
+  NextResponse,
+  type NextRequest,
+  type NextFetchEvent,
+} from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
@@ -19,7 +23,12 @@ function shouldSkipRouteCheck(pathname: string): boolean {
   if (pathname.startsWith("/manifest")) return true;
   if (pathname.startsWith("/icons")) return true;
   if (pathname.startsWith("/images")) return true;
-  if (/\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|map|css|js)$/.test(pathname)) return true;
+  if (
+    /\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json|map|css|js)$/.test(
+      pathname,
+    )
+  )
+    return true;
   return false;
 }
 
@@ -32,7 +41,10 @@ function shouldSkipRouteCheck(pathname: string): boolean {
  * navigation including client-side RSC requests. The `(app)` layout only sees `x-invoke-path`
  * intermittently; skipping checks when that header is missing would fail open.
  */
-export default async function proxy(request: NextRequest, event: NextFetchEvent) {
+export default async function proxy(
+  request: NextRequest,
+  event: NextFetchEvent,
+) {
   const pathname = request.nextUrl.pathname;
 
   // IMPORTANT: avoid wrapping the logout route with Auth.js middleware.
@@ -91,4 +103,3 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
-
