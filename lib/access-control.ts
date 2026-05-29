@@ -52,6 +52,8 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
 
   // Keep existing UX: operations are available to everyone by default.
   base["route:/dashboard"] = true;
+  base["route:/dashboard/executive"] =
+    role === UserRole.ADMIN || role === UserRole.DIRECTOR;
   base["route:/delivery-orders"] = true;
   base["route:/delivery-orders/list"] = true;
   base["route:/delivery-orders/validation-queue"] = role === UserRole.MANAGER;
@@ -250,6 +252,7 @@ export function defaultPermissionsForGlobalRoleCode(
     return base;
   }
   if (c.includes("director")) {
+    base["route:/dashboard/executive"] = true;
     base["route:/setup/sales-budget"] = true;
     base["ui:validate-documents"] = true;
     base["ui:validate-delivery-orders"] = true;

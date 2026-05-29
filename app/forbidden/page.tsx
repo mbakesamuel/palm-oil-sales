@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { roleLabel } from "@/lib/auth-display";
 import { getServerSession } from "@/lib/auth-server";
+import { resolveHomeDashboardPath } from "@/lib/dashboard-routing";
 import { SignOutButton } from "./SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,10 @@ export default async function ForbiddenPage() {
       <div className="flex flex-col gap-3 text-sm items-center">
         {session ? (
           <>
-            <Link className="underline underline-offset-4" href="/dashboard">
+            <Link
+              className="underline underline-offset-4"
+              href={resolveHomeDashboardPath(session)}
+            >
               Dashboard
             </Link>
             <SignOutButton />

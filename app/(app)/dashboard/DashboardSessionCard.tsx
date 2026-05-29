@@ -34,10 +34,12 @@ export function DashboardSessionCard() {
     <div className="rounded-lg border border-border p-4 text-sm space-y-1">
       <div className="font-medium">Signed in as {session.username}</div>
       <div className="opacity-80">{roleLabel(session.role)}</div>
-      {session.salesPoint ? (
+      {session.factory ? (
+        <div className="opacity-80">Factory: {session.factory.name}</div>
+      ) : session.salesPoint ? (
         <div className="opacity-80">Sales point: {session.salesPoint.name}</div>
       ) : (
-        <div className="opacity-80">All sales points</div>
+        <div className="opacity-80">All sites</div>
       )}
       {session.commercialService ? (
         <div className="opacity-80">Commercial line: {session.commercialService.name}</div>

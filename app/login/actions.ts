@@ -3,10 +3,11 @@
 import { CredentialsSignin } from "next-auth";
 import { signIn } from "@/auth";
 import type { AuthSession } from "@/lib/auth-session";
+import { resolveHomeDashboardPath } from "@/lib/dashboard-routing";
 import { loadAuthSessionByUsername } from "@/lib/load-auth-session";
 
 export type LoginResult =
-  | { ok: true; session: AuthSession }
+  | { ok: true; session: AuthSession; homePath: string }
   | { ok: false; error: string };
 
 export async function loginWithCredentials(
@@ -40,5 +41,5 @@ export async function loginWithCredentials(
     };
   }
 
-  return { ok: true, session };
+  return { ok: true, session, homePath: resolveHomeDashboardPath(session) };
 }
