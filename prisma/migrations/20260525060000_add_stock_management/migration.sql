@@ -2,6 +2,15 @@
 -- Models: StockBalance, StockMovement, StockReceipt(+Line), StockTransfer(+Line),
 -- StockAdjustment(+Line), and yearly sequence tables.
 
+-- Retire lot/voucher stock (20260521180000_unified_stock) before ledger tables with the same names.
+DROP TABLE IF EXISTS "StockAllocation" CASCADE;
+DROP TABLE IF EXISTS "StockMovementLine" CASCADE;
+DROP TABLE IF EXISTS "StockLot" CASCADE;
+DROP TABLE IF EXISTS "StockMovement" CASCADE;
+DROP TYPE IF EXISTS "StockMovementStatus";
+DROP TYPE IF EXISTS "StockMovementType";
+DROP TYPE IF EXISTS "StockUom";
+
 -- Enums
 CREATE TYPE "StockMovementKind" AS ENUM (
   'RECEIPT',
