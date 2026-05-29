@@ -212,6 +212,7 @@ export function SalesClient(props: {
   ) => Promise<
     { ok: true; unitPriceExTax: string } | { ok: false; error: string }
   >;
+  initialLookupNo?: string;
 }) {
   const {
     customers,
@@ -229,6 +230,7 @@ export function SalesClient(props: {
     listPendingSalesAction,
     deleteSaleAction,
     previewProductUnitPriceAction,
+    initialLookupNo = "",
   } = props;
 
   const wp = useWorkingPeriod();
@@ -964,6 +966,15 @@ export function SalesClient(props: {
       setBusy(null);
     }
   }
+
+  // Optional deep-link: /pos?no=INV-2026-000001
+  React.useEffect(() => {
+    const no = String(initialLookupNo ?? "").trim();
+    if (!no) return;
+    setLookupNo(no);
+    void onLoadByNo(no);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLookupNo]);
 
   async function onSaveSale() {
     setBusy("save");

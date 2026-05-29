@@ -28,10 +28,15 @@ import { canPickPendingPosSales } from "@/lib/auth-roles";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function PosPage() {
+export default async function PosPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const settings = await getOrInitCompanySettings();
   const prisma = getPrismaClient();
   const session = await getServerSession();
+  const sp = (await props.searchParams) ?? {};
+  const lookupNoRaw = Array.isArray(sp.no) ? sp.no[0] : sp.no;
+  const initialLookupNo = typeof lookupNoRaw === "string" ? lookupNoRaw : "";
   const scope = session
     ? resolveServiceScope(session)
     : { mode: "all" as const };
@@ -132,6 +137,7 @@ export default async function PosPage() {
         </div>
       ) : (
         <SalesClient
+          initialLookupNo={initialLookupNo}
           customers={customers}
           products={grades}
           salesPoints={salesPoints}

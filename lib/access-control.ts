@@ -58,6 +58,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/delivery-orders/list"] = true;
   base["route:/delivery-orders/validation-queue"] = role === UserRole.MANAGER;
   base["route:/pos"] = true;
+  base["route:/pos/list"] = true;
   base["route:/bpo-sales"] = true;
   base["route:/stock"] = true;
 
@@ -199,6 +200,7 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
   base["route:/delivery-orders/list"] = true;
   base["route:/delivery-orders/validation-queue"] = c.includes("manager");
   base["route:/pos"] = true;
+  base["route:/pos/list"] = true;
   base["route:/stock"] = true;
   base["ui:receive-stock-transfer"] = true;
   if (isSupervisorEquivalent) {
