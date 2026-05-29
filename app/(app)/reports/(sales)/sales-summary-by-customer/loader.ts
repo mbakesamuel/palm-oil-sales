@@ -1,7 +1,11 @@
 import { CustomerType, Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
 import { roleRequiresSalesPoint } from "@/lib/auth-roles";
-import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
+import { loadPhasedBudgetByProductForRange } from "@/lib/sales-budget-for-period";
+import {
+  getFinancialYearPeriodByYear,
+  getOpenFinancialYearPeriod,
+} from "@/lib/financial-year";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import {
@@ -19,6 +23,7 @@ import {
   resolveServiceScope,
 } from "@/lib/service-scope";
 import { utcIsoWeekYearAndWeek } from "@/lib/sales-budget-phase";
+import { getOrInitCompanySettings } from "@/lib/settings";
 import {
   DAILY_SALES_CUSTOMER_TYPE_LABELS,
   DAILY_SALES_TYPE_ORDER,
@@ -48,11 +53,28 @@ export type CustomerTypeCell = {
   revenueNet: Prisma.Decimal;
 };
 
+export type BudgetVsActualSlice = {
+  budgetQtyKg: Prisma.Decimal;
+  budgetRevenue: Prisma.Decimal;
+  actualQtyKg: Prisma.Decimal;
+  actualRevenue: Prisma.Decimal;
+};
+
 export type ProductSummaryBlock = {
   productId: number;
   productName: string;
   byType: Record<CustomerType, CustomerTypeCell>;
   total: CustomerTypeCell;
+  budgetVsActual: BudgetVsActualSlice | null;
+};
+
+export type IsoWeekOption = {
+  value: string;
+  label: string;
+  weekYear: number;
+  week: number;
+  from: IsoDate;
+  to: IsoDate;
 };
 
 export type SalesSummaryByCustomerData = {
@@ -67,6 +89,8 @@ export type SalesSummaryByCustomerData = {
   monthLastIso: string | null;
   hasOpenFy: boolean;
   openFinancialYear: number | null;
+  isoWeekOptions: IsoWeekOption[];
+  selectedIsoWeek: string | null;
   dateFromIso: string | null;
   dateToIso: string | null;
   dateInvalid: boolean;
@@ -74,6 +98,7 @@ export type SalesSummaryByCustomerData = {
   products: ProductSummaryBlock[];
   grandTotal: CustomerTypeCell;
   grandByType: Record<CustomerType, CustomerTypeCell>;
+  grandBudgetVsActual: BudgetVsActualSlice | null;
 };
 
 const z = new Prisma.Decimal(0);
@@ -121,6 +146,51 @@ function clipRange(
   return { from, to };
 }
 
+function isoWeekKey(weekYear: number, week: number): string {
+  return `${weekYear}-W${String(week).padStart(2, "0")}`;
+}
+
+function parseIsoWeekParam(
+  raw: string | null | undefined,
+): { weekYear: number; week: number } | null {
+  const s = String(raw ?? "").trim();
+  const m = /^(\d{4})-W(\d{1,2})$/i.exec(s);
+  if (!m) return null;
+  const weekYear = Number.parseInt(m[1]!, 10);
+  const week = Number.parseInt(m[2]!, 10);
+  if (week < 1 || week > 53) return null;
+  return { weekYear, week };
+}
+
+/** ISO weeks that intersect a calendar month, clipped to month bounds. */
+export function enumerateIsoWeeksInCalendarMonth(
+  monthFirstIso: IsoDate,
+  monthLastIso: IsoDate,
+): IsoWeekOption[] {
+  const [ys, ms] = monthFirstIso.split("-").map((x) => Number.parseInt(x, 10));
+  const lastDay = Number.parseInt(monthLastIso.split("-")[2]!, 10);
+  const seen = new Map<string, IsoWeekOption>();
+
+  for (let day = 1; day <= lastDay; day++) {
+    const iso = `${ys!}-${String(ms!).padStart(2, "0")}-${String(day).padStart(2, "0")}` as IsoDate;
+    const week = utcIsoWeekBounds(iso);
+    const key = isoWeekKey(week.weekYear, week.week);
+    if (seen.has(key)) continue;
+    const clipped = clipRange(week.from, week.to, monthFirstIso, monthLastIso);
+    if (!clipped) continue;
+    seen.set(key, {
+      value: key,
+      label: `Week ${week.week} · ${clipped.from} – ${clipped.to}`,
+      weekYear: week.weekYear,
+      week: week.week,
+      from: clipped.from,
+      to: clipped.to,
+    });
+  }
+
+  return [...seen.values()].sort((a, b) => a.value.localeCompare(b.value));
+}
+
 /** Monday (ISO) through Sunday for the ISO week containing `isoDate`. */
 function utcIsoWeekBounds(isoDate: IsoDate): { from: IsoDate; to: IsoDate; week: number; weekYear: number } {
   const { weekYear, week } = utcIsoWeekYearAndWeek(isoDate);
@@ -152,11 +222,14 @@ function resolvePeriod(
   monthLastIso: string | null,
   openFy: Awaited<ReturnType<typeof getOpenFinancialYearPeriod>>,
   dateRaw: string | null | undefined,
+  weekRaw: string | null | undefined,
+  isoWeekOptions: IsoWeekOption[],
 ): {
   dateFromIso: string | null;
   dateToIso: string | null;
   dateInvalid: boolean;
   periodLabel: string;
+  selectedIsoWeek: string | null;
   monthWhere: Prisma.SaleWhereInput;
 } {
   if (interval === "yearly") {
@@ -166,6 +239,7 @@ function resolvePeriod(
         dateToIso: null,
         dateInvalid: false,
         periodLabel: "",
+        selectedIsoWeek: null,
         monthWhere: {},
       };
     }
@@ -176,6 +250,7 @@ function resolvePeriod(
       dateToIso: to,
       dateInvalid: false,
       periodLabel: `Financial year ${openFy.financialYear} (${from} – ${to})`,
+      selectedIsoWeek: null,
       monthWhere: { financialYear: openFy.financialYear },
     };
   }
@@ -184,8 +259,9 @@ function resolvePeriod(
     return {
       dateFromIso: null,
       dateToIso: null,
-      dateInvalid: Boolean(dateRaw),
+      dateInvalid: Boolean(dateRaw || weekRaw),
       periodLabel: "",
+      selectedIsoWeek: null,
       monthWhere: monthFilter
         ? {
             financialYear: monthFilter.financialYear,
@@ -208,29 +284,55 @@ function resolvePeriod(
       dateToIso: monthLastIso,
       dateInvalid: false,
       periodLabel: `${monthFilter.label} (FY ${monthFilter.financialYear})`,
+      selectedIsoWeek: null,
       monthWhere,
     };
   }
 
   if (interval === "weekly") {
-    const today = utcIsoDateToday();
-    const anchor = isoInRange(today, monthFirstIso, monthLastIso) ? today : monthLastIso;
-    const week = utcIsoWeekBounds(anchor);
-    const clipped = clipRange(week.from, week.to, monthFirstIso, monthLastIso);
-    if (!clipped) {
+    const parsed = parseIsoWeekParam(weekRaw);
+    let selected: IsoWeekOption | undefined;
+
+    if (parsed) {
+      const key = isoWeekKey(parsed.weekYear, parsed.week);
+      selected = isoWeekOptions.find((o) => o.value === key);
+      if (!selected) {
+        return {
+          dateFromIso: null,
+          dateToIso: null,
+          dateInvalid: true,
+          periodLabel: "",
+          selectedIsoWeek: key,
+          monthWhere,
+        };
+      }
+    } else if (isoWeekOptions.length > 0) {
+      const today = utcIsoDateToday();
+      const anchor = isoInRange(today, monthFirstIso, monthLastIso) ? today : monthLastIso;
+      const week = utcIsoWeekBounds(anchor);
+      const key = isoWeekKey(week.weekYear, week.week);
+      selected =
+        isoWeekOptions.find((o) => o.value === key) ??
+        isoWeekOptions[isoWeekOptions.length - 1];
+    }
+
+    if (!selected) {
       return {
         dateFromIso: null,
         dateToIso: null,
         dateInvalid: true,
         periodLabel: "",
+        selectedIsoWeek: null,
         monthWhere,
       };
     }
+
     return {
-      dateFromIso: clipped.from,
-      dateToIso: clipped.to,
+      dateFromIso: selected.from,
+      dateToIso: selected.to,
       dateInvalid: false,
-      periodLabel: `ISO week ${week.week} · ${clipped.from} – ${clipped.to}`,
+      periodLabel: `Week ${selected.week} · ${selected.from} – ${selected.to}`,
+      selectedIsoWeek: selected.value,
       monthWhere,
     };
   }
@@ -248,6 +350,7 @@ function resolvePeriod(
     dateToIso: dateInvalid ? null : dayIso,
     dateInvalid,
     periodLabel: dateInvalid ? "" : dayIso,
+    selectedIsoWeek: null,
     monthWhere,
   };
 }
@@ -263,17 +366,18 @@ export function fmtXaf(d: Prisma.Decimal): string {
 
 export async function loadSalesSummaryByCustomer(
   session: AuthSession,
-  rawParams?: { interval?: string | null; date?: string | null },
+  rawParams?: { interval?: string | null; date?: string | null; week?: string | null },
 ): Promise<SalesSummaryByCustomerData> {
   const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const assignedSalesPointName = session.salesPoint?.name ?? null;
   const interval = parseInterval(rawParams?.interval);
 
-  const [{ monthFilter, hasOpenFy }, openFy, prisma] = await Promise.all([
+  const [{ monthFilter, hasOpenFy }, openFy, prisma, settings] = await Promise.all([
     resolveReportWorkingMonthFilter(),
     getOpenFinancialYearPeriod(),
     getPrismaClient(),
+    getOrInitCompanySettings(),
   ]);
 
   const monthFirstIso = monthFilter
@@ -289,7 +393,12 @@ export async function loadSalesSummaryByCustomer(
       )
     : null;
 
-  const { dateFromIso, dateToIso, dateInvalid, periodLabel, monthWhere } =
+  const isoWeekOptions =
+    monthFirstIso && monthLastIso
+      ? enumerateIsoWeeksInCalendarMonth(monthFirstIso, monthLastIso)
+      : [];
+
+  const { dateFromIso, dateToIso, dateInvalid, periodLabel, selectedIsoWeek, monthWhere } =
     resolvePeriod(
       interval,
       monthFilter,
@@ -297,6 +406,8 @@ export async function loadSalesSummaryByCustomer(
       monthLastIso,
       openFy,
       rawParams?.date,
+      rawParams?.week,
+      isoWeekOptions,
     );
 
   const scope = resolveServiceScope(session);
@@ -318,6 +429,8 @@ export async function loadSalesSummaryByCustomer(
     monthLastIso,
     hasOpenFy,
     openFinancialYear: openFy?.financialYear ?? null,
+    isoWeekOptions,
+    selectedIsoWeek,
     dateFromIso,
     dateToIso,
     dateInvalid,
@@ -325,6 +438,7 @@ export async function loadSalesSummaryByCustomer(
     products: [],
     grandTotal: emptyCell(),
     grandByType: emptyByType(),
+    grandBudgetVsActual: null,
   });
 
   if (!dateFromIso || !dateToIso || dateInvalid) {
@@ -387,7 +501,7 @@ export async function loadSalesSummaryByCustomer(
     }
   }
 
-  const products: ProductSummaryBlock[] = [...byProduct.entries()]
+  const productRows = [...byProduct.entries()]
     .map(([productId, row]) => {
       let total = emptyCell();
       for (const t of DAILY_SALES_TYPE_ORDER) {
@@ -403,6 +517,64 @@ export async function loadSalesSummaryByCustomer(
     .filter((p) => !p.total.qtyKg.eq(0) || !p.total.revenueNet.eq(0))
     .sort((a, b) => a.productName.localeCompare(b.productName));
 
+  const budgetFinancialYear =
+    interval === "yearly" ? openFy?.financialYear : monthFilter?.financialYear;
+  const fyPeriodForBudget =
+    budgetFinancialYear != null
+      ? await getFinancialYearPeriodByYear(budgetFinancialYear)
+      : null;
+
+  let budgetByProduct = new Map<
+    number,
+    { qtyKg: Prisma.Decimal; revenue: Prisma.Decimal }
+  >();
+
+  if (
+    fyPeriodForBudget &&
+    budgetFinancialYear != null &&
+    dateFromIso &&
+    dateToIso
+  ) {
+    const productIds = productRows.map((p) => p.productId);
+    const budgets = await prismaRetry(() =>
+      prisma.productSalesBudget.findMany({
+        where: {
+          financialYear: budgetFinancialYear,
+          productId: { in: productIds },
+        },
+        select: {
+          productId: true,
+          annualQtyKg: true,
+          budgetUnitPricePerKg: true,
+        },
+      }),
+    );
+
+    budgetByProduct = await loadPhasedBudgetByProductForRange({
+      financialYear: budgetFinancialYear,
+      fiscalYearStartMonth: settings.fiscalYearStartMonth,
+      fyStartIso: prismaDateToIso(fyPeriodForBudget.startDate),
+      fyEndIso: prismaDateToIso(fyPeriodForBudget.endDate),
+      dateFromIso,
+      dateToIso,
+      productIds,
+      budgets,
+    });
+  }
+
+  const products: ProductSummaryBlock[] = productRows.map((row) => {
+    const periodBudget = budgetByProduct.get(row.productId);
+    const budgetVsActual: BudgetVsActualSlice | null = periodBudget
+      ? {
+          budgetQtyKg: periodBudget.qtyKg,
+          budgetRevenue: periodBudget.revenue,
+          actualQtyKg: row.total.qtyKg,
+          actualRevenue: row.total.revenueNet,
+        }
+      : null;
+    return { ...row, budgetVsActual };
+  });
+
   const grandByType = emptyByType();
   let grandTotal = emptyCell();
   for (const p of products) {
@@ -411,6 +583,28 @@ export async function loadSalesSummaryByCustomer(
     }
     grandTotal = addCell(grandTotal, p.total);
   }
+
+  let grandBudgetQty = z;
+  let grandBudgetRev = z;
+  let grandActualQty = z;
+  let grandActualRev = z;
+  let hasGrandBudget = false;
+  for (const p of products) {
+    if (!p.budgetVsActual) continue;
+    hasGrandBudget = true;
+    grandBudgetQty = grandBudgetQty.add(p.budgetVsActual.budgetQtyKg);
+    grandBudgetRev = grandBudgetRev.add(p.budgetVsActual.budgetRevenue);
+    grandActualQty = grandActualQty.add(p.budgetVsActual.actualQtyKg);
+    grandActualRev = grandActualRev.add(p.budgetVsActual.actualRevenue);
+  }
+  const grandBudgetVsActual: BudgetVsActualSlice | null = hasGrandBudget
+    ? {
+        budgetQtyKg: grandBudgetQty,
+        budgetRevenue: grandBudgetRev,
+        actualQtyKg: grandActualQty,
+        actualRevenue: grandActualRev,
+      }
+    : null;
 
   return {
     interval,
@@ -422,6 +616,8 @@ export async function loadSalesSummaryByCustomer(
     monthLastIso,
     hasOpenFy,
     openFinancialYear: openFy?.financialYear ?? null,
+    isoWeekOptions,
+    selectedIsoWeek,
     dateFromIso,
     dateToIso,
     dateInvalid,
@@ -429,5 +625,6 @@ export async function loadSalesSummaryByCustomer(
     products,
     grandTotal,
     grandByType,
+    grandBudgetVsActual,
   };
 }

@@ -75,6 +75,13 @@ export default async function proxy(
         redirect: "manual",
       });
 
+      if (probe.status === 401) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/login";
+        url.searchParams.set("callbackUrl", req.nextUrl.href);
+        return NextResponse.redirect(url);
+      }
+
       if (!probe.ok) {
         const url = req.nextUrl.clone();
         url.pathname = "/forbidden";
