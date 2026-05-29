@@ -60,10 +60,7 @@ function parseDec(s: string) {
 
 function trimQtyDisplay(n: number): string {
   if (!Number.isFinite(n)) return "0";
-  return n
-    .toFixed(3)
-    .replace(/0+$/, "")
-    .replace(/\.$/, "") || "0";
+  return n.toFixed(3).replace(/0+$/, "").replace(/\.$/, "") || "0";
 }
 
 type LineStockHintState = {
@@ -165,7 +162,12 @@ export function SalesClient(props: {
   customers: Customer[];
   products: Product[];
   salesPoints: Array<{ id: number; name: string }>;
-  storageLocations: Array<{ id: number; salesPointId: number; name: string; isDefault: boolean }>;
+  storageLocations: Array<{
+    id: number;
+    salesPointId: number;
+    name: string;
+    isDefault: boolean;
+  }>;
   previewPosTaxesAction: (
     customerId: string,
     transactionIso: string,
@@ -243,9 +245,9 @@ export function SalesClient(props: {
   const [referenceNumber, setReferenceNumber] = React.useState<string>("");
   const [vehicleNumber, setVehicleNumber] = React.useState("");
   const [deliveryOrderNo, setDeliveryOrderNo] = React.useState("");
-  const [availableDos, setAvailableDos] = React.useState<AvailableDeliveryOrderRow[]>(
-    [],
-  );
+  const [availableDos, setAvailableDos] = React.useState<
+    AvailableDeliveryOrderRow[]
+  >([]);
   const [doPickerOpen, setDoPickerOpen] = React.useState(false);
   const doPickerRef = React.useRef<HTMLDivElement>(null);
   const [doLookupData, setDoLookupData] = React.useState<
@@ -255,9 +257,13 @@ export function SalesClient(props: {
   const [doLookupBusy, setDoLookupBusy] = React.useState(false);
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const effectiveSalesPointId =
-    session?.salesPoint?.id != null ? String(session.salesPoint.id) : salesPointId;
+    session?.salesPoint?.id != null
+      ? String(session.salesPoint.id)
+      : salesPointId;
 
-  function locationsForSalesPoint(spId: string): Array<{ id: number; name: string; isDefault: boolean }> {
+  function locationsForSalesPoint(
+    spId: string,
+  ): Array<{ id: number; name: string; isDefault: boolean }> {
     const n = Number.parseInt(spId, 10);
     if (!Number.isFinite(n)) return [];
     return props.storageLocations
@@ -495,12 +501,7 @@ export function SalesClient(props: {
     return () => {
       alive = false;
     };
-  }, [
-    authStatus,
-    session,
-    canPickPendingSalesProp,
-    listPendingSalesAction,
-  ]);
+  }, [authStatus, session, canPickPendingSalesProp, listPendingSalesAction]);
 
   React.useEffect(() => {
     if (!pendingPickerOpen) return;
@@ -562,9 +563,7 @@ export function SalesClient(props: {
     let alive = true;
     if (saleId != null) return;
     const productIdByIdx = lineProductKey.split(",");
-    const hasAnyProductPicked = productIdByIdx.some(
-      (id) => id.trim() !== "",
-    );
+    const hasAnyProductPicked = productIdByIdx.some((id) => id.trim() !== "");
     if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
       window.queueMicrotask(() => {
         if (!alive) return;
@@ -669,7 +668,11 @@ export function SalesClient(props: {
       await Promise.all(
         productIds.flatMap((pid) =>
           locs.map(async (loc) => {
-            const r = await previewPosLineStockAction(spid, String(loc.id), pid);
+            const r = await previewPosLineStockAction(
+              spid,
+              String(loc.id),
+              pid,
+            );
             if (!alive || !r.ok) return;
             next[`${pid}:${loc.id}`] = {
               salesBlocked: r.salesBlocked,
@@ -742,7 +745,8 @@ export function SalesClient(props: {
     saleId == null && deliveryOrderNo.trim() !== "" && doLookupData != null;
 
   const stockSaveBlock = (() => {
-    if (saleId != null) return { block: false as boolean, hint: null as string | null };
+    if (saleId != null)
+      return { block: false as boolean, hint: null as string | null };
     const totalsByLocation = new Map<string, number>();
     for (const l of lines) {
       const pid = l.productId.trim();
@@ -758,7 +762,10 @@ export function SalesClient(props: {
         };
       }
       const key = `${pid}:${locId}`;
-      totalsByLocation.set(key, (totalsByLocation.get(key) ?? 0) + parseDec(l.qtyKg));
+      totalsByLocation.set(
+        key,
+        (totalsByLocation.get(key) ?? 0) + parseDec(l.qtyKg),
+      );
     }
     for (const [key, totalQty] of totalsByLocation) {
       const hint = lineStockHints[key];
@@ -842,7 +849,9 @@ export function SalesClient(props: {
         productId: "",
         qtyKg: "0",
         unitPricePerKg: "0",
-        storageLocationId: defaultLocationId(session?.salesPoint ? String(session.salesPoint.id) : ""),
+        storageLocationId: defaultLocationId(
+          session?.salesPoint ? String(session.salesPoint.id) : "",
+        ),
       },
     ]);
     setPayments([{ method: "CASH", amount: "0" }]);
@@ -885,14 +894,18 @@ export function SalesClient(props: {
             unitPricePerKg: l.unitPricePerKg,
             unitPricePerUnit: l.unitPricePerUnit ?? l.unitPricePerKg,
             storageLocationId:
-              l.storageLocationId != null ? String(l.storageLocationId) : defaultLocationId(String(s.salesPointId ?? "")),
+              l.storageLocationId != null
+                ? String(l.storageLocationId)
+                : defaultLocationId(String(s.salesPointId ?? "")),
           }))
         : [
             {
               productId: "",
               qtyKg: "0",
               unitPricePerKg: "0",
-              storageLocationId: defaultLocationId(String(s.salesPointId ?? "")),
+              storageLocationId: defaultLocationId(
+                String(s.salesPointId ?? ""),
+              ),
             },
           ],
     );
@@ -972,7 +985,10 @@ export function SalesClient(props: {
         return;
       }
       if (!deliveryOrderNo.trim()) {
-        setBanner({ type: "error", text: "Delivery Order number is required." });
+        setBanner({
+          type: "error",
+          text: "Delivery Order number is required.",
+        });
         return;
       }
       if (deliveryOrderSaveBlock.block) {
@@ -987,9 +1003,7 @@ export function SalesClient(props: {
       if (stockSaveBlock.block) {
         setBanner({
           type: "error",
-          text:
-            stockSaveBlock.hint ??
-            "Fix stock availability before saving.",
+          text: stockSaveBlock.hint ?? "Fix stock availability before saving.",
         });
         return;
       }
@@ -1209,7 +1223,9 @@ export function SalesClient(props: {
                               {s.customerName}
                               {" \u00b7 "}
                               {s.soldAtIso}
-                              {s.salesPointName ? ` \u00b7 ${s.salesPointName}` : ""}
+                              {s.salesPointName
+                                ? ` \u00b7 ${s.salesPointName}`
+                                : ""}
                               {s.totalLabel ? ` \u00b7 ${s.totalLabel}` : ""}
                             </div>
                           </button>
@@ -1252,7 +1268,7 @@ export function SalesClient(props: {
       <section className="rounded-lg border border-border p-3 sm:p-4 space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
-            <h2 className="text-lg font-semibold">Sale (invoice)</h2>
+            <h2 className="text-lg font-semibold">Invoice Details</h2>
             <span className="text-xs opacity-75">
               <span className="opacity-70">FY</span>{" "}
               <span className="font-medium tabular-nums">{wp.fyLabel}</span>
@@ -1369,7 +1385,9 @@ export function SalesClient(props: {
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs font-medium opacity-80">Sales point</label>
+            <label className="text-xs font-medium opacity-80">
+              Sales point
+            </label>
             {session?.salesPoint ? (
               <>
                 <input
@@ -1731,7 +1749,9 @@ export function SalesClient(props: {
                     onChange={(e) =>
                       setLines((prev) =>
                         prev.map((x, i) =>
-                          i === idx ? { ...x, storageLocationId: e.target.value } : x,
+                          i === idx
+                            ? { ...x, storageLocationId: e.target.value }
+                            : x,
                         ),
                       )
                     }
@@ -1740,28 +1760,32 @@ export function SalesClient(props: {
                     <option value="" disabled>
                       Select location
                     </option>
-                    {locationsForSalesPoint(effectiveSalesPointId).map((loc) => {
-                      const blocked =
-                        l.productId.trim() !== "" &&
-                        lineStockHints[`${l.productId}:${loc.id}`]?.salesBlocked ===
-                          true;
-                      return (
-                        <option
-                          key={loc.id}
-                          value={String(loc.id)}
-                          disabled={blocked}
-                        >
-                          {loc.name}
-                          {blocked ? " — unsellable" : ""}
-                          {loc.isDefault ? " (default)" : ""}
-                        </option>
-                      );
-                    })}
+                    {locationsForSalesPoint(effectiveSalesPointId).map(
+                      (loc) => {
+                        const blocked =
+                          l.productId.trim() !== "" &&
+                          lineStockHints[`${l.productId}:${loc.id}`]
+                            ?.salesBlocked === true;
+                        return (
+                          <option
+                            key={loc.id}
+                            value={String(loc.id)}
+                            disabled={blocked}
+                          >
+                            {loc.name}
+                            {blocked ? " — unsellable" : ""}
+                            {loc.isDefault ? " (default)" : ""}
+                          </option>
+                        );
+                      },
+                    )}
                   </select>
                   {(() => {
                     const stockHint =
                       l.productId.trim() && l.storageLocationId.trim()
-                        ? lineStockHints[`${l.productId}:${l.storageLocationId}`]
+                        ? lineStockHints[
+                            `${l.productId}:${l.storageLocationId}`
+                          ]
                         : null;
                     if (!stockHint?.message) return null;
                     return (
@@ -1790,7 +1814,10 @@ export function SalesClient(props: {
                       lines,
                       lineStockHints,
                     );
-                    if (!qtyFeedback.availableLabel && !qtyFeedback.exceedMessage) {
+                    if (
+                      !qtyFeedback.availableLabel &&
+                      !qtyFeedback.exceedMessage
+                    ) {
                       return null;
                     }
                     return (
@@ -1968,7 +1995,9 @@ export function SalesClient(props: {
                         onChange={(e) =>
                           setPayments((prev) =>
                             prev.map((x, i) =>
-                              i === idx ? { ...x, chequeNo: e.target.value } : x,
+                              i === idx
+                                ? { ...x, chequeNo: e.target.value }
+                                : x,
                             ),
                           )
                         }
@@ -2006,7 +2035,9 @@ export function SalesClient(props: {
                         onChange={(e) =>
                           setPayments((prev) =>
                             prev.map((x, i) =>
-                              i === idx ? { ...x, traiteNo: e.target.value } : x,
+                              i === idx
+                                ? { ...x, traiteNo: e.target.value }
+                                : x,
                             ),
                           )
                         }

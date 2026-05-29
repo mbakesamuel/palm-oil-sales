@@ -17,13 +17,14 @@ import { VAT_TAX_CODE } from "@/lib/tax/constants";
 import { legacyVatSnapshotFromResolved } from "@/lib/tax/resolve";
 import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import {
+  deliveryOrderPosUsageError,
   loadDeliveryOrderControl,
   toDeliveryOrderLookupDto,
   validateSaleAgainstDeliveryOrder,
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
 import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
-import { canPickPendingPosSales, roleRequiresSalesPoint, roleSeesOnlyValidatedDeliveryOrders } from "@/lib/auth-roles";
+import { canPickPendingPosSales, roleRequiresSalesPoint } from "@/lib/auth-roles";
 import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
 import {
@@ -1037,15 +1038,9 @@ export async function lookupDeliveryOrderForSale(
     return { ok: false, error: csErr };
   }
 
-  if (
-    roleSeesOnlyValidatedDeliveryOrders(actor.role as AppUserRole) &&
-    orderSp?.status !== ValidationStatus.VALIDATED
-  ) {
-    return {
-      ok: false,
-      error:
-        "This delivery order is not validated yet. Pending orders are hidden until a manager validates them.",
-    };
+  const statusErr = deliveryOrderPosUsageError(orderSp?.status);
+  if (statusErr) {
+    return { ok: false, error: statusErr };
   }
 
   const data = toDeliveryOrderLookupDto(ctx);
@@ -1154,6 +1149,15 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   const stockSalesPointId: number = existing.salesPointId;
   if (!existing.deliveryOrderNo) {
     return { ok: false, error: "Delivery Order number is required." };
+  }
+
+  const linkedDo = await prisma.deliveryOrder.findUnique({
+    where: { deliveryOrderNo: existing.deliveryOrderNo },
+    select: { status: true },
+  });
+  const doStatusErr = deliveryOrderPosUsageError(linkedDo?.status);
+  if (doStatusErr) {
+    return { ok: false, error: doStatusErr };
   }
 
   try {

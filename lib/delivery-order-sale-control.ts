@@ -27,7 +27,24 @@ type ControlMaps = {
   invoicedByProduct: Map<number, Prisma.Decimal>;
 };
 
-export type DeliveryOrderControlLoaded = DeliveryOrderLookupDto & ControlMaps;
+export type DeliveryOrderControlLoaded = DeliveryOrderLookupDto &
+  ControlMaps & {
+    status: ValidationStatus;
+  };
+
+/** Only validated delivery orders may be linked to POS sales. */
+export function deliveryOrderPosUsageError(
+  status: ValidationStatus | null | undefined,
+): string | null {
+  if (status === ValidationStatus.VALIDATED) return null;
+  if (status === ValidationStatus.REJECTED) {
+    return "This delivery order was cancelled and cannot be used for sales.";
+  }
+  if (status === ValidationStatus.PENDING) {
+    return "This delivery order is not validated yet. Pending orders cannot be used for sales until a manager validates them.";
+  }
+  return "This delivery order cannot be used for sales.";
+}
 
 /**
  * Loads delivery order totals, per-product ordered / invoiced / balance, and maps for validation.
@@ -113,6 +130,7 @@ export async function loadDeliveryOrderControl(
     perProduct,
     orderedByProduct,
     invoicedByProduct,
+    status: order.status,
   };
 }
 
@@ -153,6 +171,10 @@ export async function validateSaleAgainstDeliveryOrder(opts: {
   const ctx = await loadDeliveryOrderControl(opts.deliveryOrderNo);
   if (!ctx) {
     return { ok: false, error: "Delivery order not found." };
+  }
+  const statusErr = deliveryOrderPosUsageError(ctx.status);
+  if (statusErr) {
+    return { ok: false, error: statusErr };
   }
   if (ctx.customerId !== opts.customerId) {
     return {

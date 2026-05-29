@@ -32,7 +32,9 @@ export default async function PosPage() {
   const settings = await getOrInitCompanySettings();
   const prisma = getPrismaClient();
   const session = await getServerSession();
-  const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
+  const scope = session
+    ? resolveServiceScope(session)
+    : { mode: "all" as const };
   const canValidateDocuments =
     session != null
       ? (await getPermissionsForSession(session))["ui:validate-documents"]
@@ -93,12 +95,16 @@ export default async function PosPage() {
 
   return (
     <div className="space-y-6">
-      <ReportHeader
-        companyName={settings.companyName}
-        department={settings.department}
-        logoSrc={settings.logoUrl}
-        title="Sales"
-      />
+      <div className="hidden print:block">
+        <ReportHeader
+          companyName={settings.companyName}
+          department={settings.department}
+          logoSrc={settings.logoUrl}
+          title="Sales"
+        />
+      </div>
+      <div className="print:hidden text-2xl font-bold">Sales Invoce</div>
+
       <p className="text-sm opacity-75">
         Payments: cash, cheque, or bank traite (no credit sales).
       </p>
@@ -107,7 +113,9 @@ export default async function PosPage() {
         <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
-            {customers.length === 0 ? <li>Add at least one customer.</li> : null}
+            {customers.length === 0 ? (
+              <li>Add at least one customer.</li>
+            ) : null}
             {grades.length === 0 ? <li>Add at least one product.</li> : null}
           </ul>
           <div className="mt-3 flex gap-3">
