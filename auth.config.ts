@@ -9,6 +9,8 @@ export const INVOKE_PATH_HEADER = "x-invoke-path";
 export function isPublicOrAssetPath(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/forbidden") return true;
   if (pathname.startsWith("/api/auth")) return true;
+  // Internal route-permission probe (see `proxy.ts`); must not redirect to login HTML.
+  if (pathname === "/api/access/authorize") return true;
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||

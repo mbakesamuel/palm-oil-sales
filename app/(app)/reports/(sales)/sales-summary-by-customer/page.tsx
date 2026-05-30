@@ -16,14 +16,18 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function tabHref(interval: SalesSummaryInterval, date?: string | null) {
+function tabHref(
+  interval: SalesSummaryInterval,
+  opts?: { date?: string | null; week?: string | null },
+) {
   const params = new URLSearchParams({ interval });
-  if (interval === "daily" && date) params.set("date", date);
+  if (interval === "daily" && opts?.date) params.set("date", opts.date);
+  if (interval === "weekly" && opts?.week) params.set("week", opts.week);
   return `/reports/sales-summary-by-customer?${params.toString()}`;
 }
 
 export default async function SalesSummaryByCustomerPage(props: {
-  searchParams: Promise<{ interval?: string; date?: string }>;
+  searchParams: Promise<{ interval?: string; date?: string; week?: string }>;
 }) {
   const session = await getServerSession();
   if (!session) redirect("/login");
@@ -47,6 +51,10 @@ export default async function SalesSummaryByCustomerPage(props: {
   const generated = new Date();
   const dailyDate =
     data.interval === "daily" ? (searchParams.date ?? data.dateFromIso ?? "") : "";
+  const weeklyWeek =
+    data.interval === "weekly"
+      ? (searchParams.week ?? data.selectedIsoWeek ?? "")
+      : "";
 
   return (
     <div className="space-y-6 w-full min-w-0 max-w-none px-1 py-2 sm:px-2 sm:py-4 lg:px-3 lg:py-6">
@@ -81,6 +89,7 @@ export default async function SalesSummaryByCustomerPage(props: {
             params={{
               interval: data.interval,
               ...(data.interval === "daily" && dailyDate ? { date: dailyDate } : {}),
+              ...(data.interval === "weekly" && weeklyWeek ? { week: weeklyWeek } : {}),
             }}
             label="Print"
             disabled={!data.dateFromIso || data.dateInvalid}
@@ -93,7 +102,10 @@ export default async function SalesSummaryByCustomerPage(props: {
         {SALES_SUMMARY_INTERVALS.map((iv) => (
           <Link
             key={iv}
-            href={tabHref(iv, iv === "daily" ? dailyDate : undefined)}
+            href={tabHref(iv, {
+              date: iv === "daily" ? dailyDate : undefined,
+              week: iv === "weekly" ? weeklyWeek : undefined,
+            })}
             className={[
               "rounded-md border px-3 py-1.5 font-medium",
               data.interval === iv
@@ -135,6 +147,41 @@ export default async function SalesSummaryByCustomerPage(props: {
         </form>
       ) : null}
 
+      {data.interval === "weekly" && data.monthFilter && data.isoWeekOptions.length > 0 ? (
+        <form method="GET" className="flex flex-col gap-2 max-w-xl">
+          <input type="hidden" name="interval" value="weekly" />
+          <div className="flex flex-row flex-wrap gap-3 items-end">
+            <div className="grid gap-1 min-w-[14rem] flex-1">
+              <label htmlFor="week" className="text-sm font-medium">
+                Week
+              </label>
+              <select
+                id="week"
+                name="week"
+                defaultValue={weeklyWeek}
+                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+              >
+                {data.isoWeekOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="rounded-md border border-border bg-foreground/[0.08] px-4 py-2 text-sm font-medium hover:bg-accent/35 shrink-0"
+            >
+              Apply
+            </button>
+          </div>
+          <p className="text-xs opacity-70">
+            Weeks in {data.monthFilter.label} (FY {data.monthFilter.financialYear}
+            ).
+          </p>
+        </form>
+      ) : null}
+
       {!data.hasOpenFy && data.interval === "yearly" ? (
         <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200 max-w-xl">
           No financial year is open. Open a year under Financial years to use the
@@ -153,10 +200,24 @@ export default async function SalesSummaryByCustomerPage(props: {
 
       {data.dateInvalid ? (
         <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-200 max-w-xl">
-          The selected date is outside the current working calendar month.
-          {data.monthFirstIso && data.monthLastIso
-            ? ` Pick a date between ${data.monthFirstIso} and ${data.monthLastIso}.`
-            : null}
+          {data.interval === "daily" ? (
+            <>
+              The selected date is outside the current working calendar month.
+              {data.monthFirstIso && data.monthLastIso
+                ? ` Pick a date between ${data.monthFirstIso} and ${data.monthLastIso}.`
+                : null}
+            </>
+          ) : data.interval === "weekly" ? (
+            <>
+              The selected week is not part of the current working calendar
+              month.
+              {data.monthFirstIso && data.monthLastIso
+                ? ` Choose a week that falls within ${data.monthFirstIso} and ${data.monthLastIso}.`
+                : null}
+            </>
+          ) : (
+            <>The selected period is invalid.</>
+          )}
         </div>
       ) : null}
 
@@ -178,6 +239,7 @@ export default async function SalesSummaryByCustomerPage(props: {
         <GrandCustomerSummaryTable
           grandByType={data.grandByType}
           grandTotal={data.grandTotal}
+          grandBudgetVsActual={data.grandBudgetVsActual}
         />
       ) : null}
     </div>

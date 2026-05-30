@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function SalesSummaryByCustomerPrintPage(props: {
-  searchParams: Promise<{ interval?: string; date?: string }>;
+  searchParams: Promise<{ interval?: string; date?: string; week?: string }>;
 }) {
   const session = await getServerSession();
   if (!session) redirect("/login");
@@ -37,6 +37,11 @@ export default async function SalesSummaryByCustomerPrintPage(props: {
     ...(data.interval === "daily" && searchParams.date
       ? { date: searchParams.date }
       : {}),
+    ...(data.interval === "weekly" && searchParams.week
+      ? { week: searchParams.week }
+      : data.interval === "weekly" && data.selectedIsoWeek
+        ? { week: data.selectedIsoWeek }
+        : {}),
   });
 
   if (data.scopedToSalesPoint && data.assignedSalesPointId == null) {
@@ -114,6 +119,7 @@ export default async function SalesSummaryByCustomerPrintPage(props: {
             <GrandCustomerSummaryTable
               grandByType={data.grandByType}
               grandTotal={data.grandTotal}
+              grandBudgetVsActual={data.grandBudgetVsActual}
             />
           ) : null}
         </div>

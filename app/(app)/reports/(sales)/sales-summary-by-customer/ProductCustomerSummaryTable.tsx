@@ -4,9 +4,11 @@ import {
   DAILY_SALES_TYPE_ORDER,
   fmtKg,
   fmtXaf,
+  type BudgetVsActualSlice,
   type CustomerTypeCell,
   type ProductSummaryBlock,
 } from "./loader";
+import { ProductBudgetVsActual } from "./ProductBudgetVsActual";
 
 const z = new Prisma.Decimal(0);
 
@@ -36,7 +38,13 @@ export function ProductCustomerSummaryTable(props: {
       <div className="rounded-t-md border border-b-0 border-border bg-accent/35 px-3 py-1.5 text-sm font-semibold">
         {block.productName}
       </div>
-      <div className="overflow-x-auto rounded-b-md border border-border">
+      <div
+        className={
+          block.budgetVsActual
+            ? "overflow-x-auto border border-border"
+            : "overflow-x-auto rounded-b-md border border-border"
+        }
+      >
         <table className="w-full min-w-[32rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-foreground/[0.04] text-left">
@@ -75,6 +83,9 @@ export function ProductCustomerSummaryTable(props: {
           </tbody>
         </table>
       </div>
+      {block.budgetVsActual ? (
+        <ProductBudgetVsActual budgetVsActual={block.budgetVsActual} compact={compact} />
+      ) : null}
     </section>
   );
 }
@@ -82,9 +93,15 @@ export function ProductCustomerSummaryTable(props: {
 export function GrandCustomerSummaryTable(props: {
   grandByType: Record<CustomerType, CustomerTypeCell>;
   grandTotal: CustomerTypeCell;
+  grandBudgetVsActual?: BudgetVsActualSlice | null;
   title?: string;
 }) {
-  const { grandByType, grandTotal, title = "Grand total (all products)" } = props;
+  const {
+    grandByType,
+    grandTotal,
+    grandBudgetVsActual = null,
+    title = "Grand total (all products)",
+  } = props;
   if (grandTotal.qtyKg.eq(0) && grandTotal.revenueNet.eq(0)) return null;
 
   return (
@@ -92,7 +109,13 @@ export function GrandCustomerSummaryTable(props: {
       <div className="rounded-t-md border border-b-0 border-border bg-foreground/[0.06] px-3 py-1.5 text-sm font-semibold">
         {title}
       </div>
-      <div className="overflow-x-auto rounded-b-md border border-border">
+      <div
+        className={
+          grandBudgetVsActual
+            ? "overflow-x-auto border border-border"
+            : "overflow-x-auto rounded-b-md border border-border"
+        }
+      >
         <table className="w-full min-w-[32rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-foreground/[0.04] text-left">
@@ -131,6 +154,9 @@ export function GrandCustomerSummaryTable(props: {
           </tbody>
         </table>
       </div>
+      {grandBudgetVsActual ? (
+        <ProductBudgetVsActual budgetVsActual={grandBudgetVsActual} />
+      ) : null}
     </section>
   );
 }
