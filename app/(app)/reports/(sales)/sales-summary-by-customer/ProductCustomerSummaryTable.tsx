@@ -4,6 +4,7 @@ import {
   DAILY_SALES_TYPE_ORDER,
   fmtKg,
   fmtXaf,
+  type BudgetVsActualSlice,
   type CustomerTypeCell,
   type ProductSummaryBlock,
 } from "./loader";
