@@ -79,6 +79,7 @@ export default async function StockOnHandPrintPage() {
               <thead>
                 <tr className="border-b border-border text-left bg-foreground/6 print:bg-transparent print:border-black/25">
                   <th className="px-3 py-2 font-medium">Storage location</th>
+                  <th className="px-3 py-2 font-medium">Product</th>
                   <th className="px-3 py-2 font-medium text-right">Quantity (kg)</th>
                   <th className="px-3 py-2 font-medium">Remarks</th>
                 </tr>
@@ -87,16 +88,17 @@ export default async function StockOnHandPrintPage() {
                 {data.sections.map((sp) => (
                   <React.Fragment key={sp.salesPointId}>
                     <tr className="border-b border-border bg-foreground/4 print:bg-transparent print:border-black/15">
-                      <td className="px-3 py-2 font-semibold" colSpan={3}>
+                      <td className="px-3 py-2 font-semibold" colSpan={4}>
                         {sp.salesPointName}
                       </td>
                     </tr>
                     {sp.rows.map((r) => (
                       <tr
-                        key={`${sp.salesPointId}:${r.storageLocationId}`}
+                        key={`${sp.salesPointId}:${r.storageLocationId}:${r.productId}`}
                         className="border-b border-border print:border-black/15"
                       >
                         <td className="px-3 py-2">{r.storageLocationName}</td>
+                        <td className="px-3 py-2">{r.productName}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {fmtKgOnHand(r.qtyKg)}
                         </td>
@@ -104,7 +106,9 @@ export default async function StockOnHandPrintPage() {
                       </tr>
                     ))}
                     <tr className="font-medium border-b border-border print:border-black/30">
-                      <td className="px-3 py-2 text-right">Total</td>
+                      <td className="px-3 py-2 text-left" colSpan={2}>
+                        Total
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {fmtKgOnHand(sp.totalKg)}
                       </td>
@@ -115,21 +119,27 @@ export default async function StockOnHandPrintPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border font-medium print:border-black/30">
-                  <td className="px-3 py-2 text-right">Sellable total</td>
+                  <td className="px-3 py-2 text-left" colSpan={2}>
+                    Sellable total
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKgOnHand(data.grandSellableKg)}
                   </td>
                   <td className="px-3 py-2" />
                 </tr>
                 <tr className="border-b border-border font-medium print:border-black/25">
-                  <td className="px-3 py-2 text-right">Unsellable total</td>
+                  <td className="px-3 py-2 text-left" colSpan={2}>
+                    Unsellable total
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKgOnHand(data.grandUnsellableKg)}
                   </td>
                   <td className="px-3 py-2" />
                 </tr>
                 <tr className="border-b border-border font-semibold print:border-black/25">
-                  <td className="px-3 py-2 text-right">Grand total</td>
+                  <td className="px-3 py-2 text-left" colSpan={2}>
+                    Grand total
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKgOnHand(data.grandTotalKg)}
                   </td>

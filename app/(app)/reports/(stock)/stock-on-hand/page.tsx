@@ -49,8 +49,8 @@ export default async function StockOnHandReportPage() {
               {data.scopedToSalesPoint && data.assignedSalesPointName
                 ? `Scoped to ${data.assignedSalesPointName}.`
                 : "All sales points (consolidated)."}{" "}
-              Quantities are totals of kg-based products (all storage locations;
-              sellable + unsellable).
+              Quantities are kg-based products by storage location and product
+              (sellable + unsellable).
             </p>
             <p className="mt-1 text-xs tabular-nums opacity-70">
               Generated{" "}
@@ -84,6 +84,7 @@ export default async function StockOnHandReportPage() {
               <thead>
                 <tr className="border-b border-border text-left bg-foreground/6">
                   <th className="px-3 py-2 font-medium">Storage location</th>
+                  <th className="px-3 py-2 font-medium">Product</th>
                   <th className="px-3 py-2 font-medium text-right">
                     Quantity (kg)
                   </th>
@@ -94,16 +95,17 @@ export default async function StockOnHandReportPage() {
                 {data.sections.map((sp) => (
                   <React.Fragment key={sp.salesPointId}>
                     <tr className="border-b border-border bg-foreground/4">
-                      <td className="px-3 py-2 font-semibold" colSpan={3}>
+                      <td className="px-3 py-2 font-semibold" colSpan={4}>
                         {sp.salesPointName}
                       </td>
                     </tr>
                     {sp.rows.map((r) => (
                       <tr
-                        key={`${sp.salesPointId}:${r.storageLocationId}`}
+                        key={`${sp.salesPointId}:${r.storageLocationId}:${r.productId}`}
                         className="border-b border-border"
                       >
                         <td className="px-3 py-2">{r.storageLocationName}</td>
+                        <td className="px-3 py-2">{r.productName}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {fmtKgOnHand(r.qtyKg)}
                         </td>
@@ -111,7 +113,9 @@ export default async function StockOnHandReportPage() {
                       </tr>
                     ))}
                     <tr className="font-medium border-b border-border">
-                      <td className="px-3 py-2 text-left">Total</td>
+                      <td className="px-3 py-2 text-left" colSpan={2}>
+                        Total
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {fmtKgOnHand(sp.totalKg)}
                       </td>
@@ -122,21 +126,27 @@ export default async function StockOnHandReportPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border font-medium">
-                  <td className="px-3 py-2 text-left">Sellable total</td>
+                  <td className="px-3 py-2 text-left" colSpan={2}>
+                    Sellable total
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKgOnHand(data.grandSellableKg)}
                   </td>
                   <td className="px-3 py-2" />
                 </tr>
                 <tr className="border-b border-border font-medium">
-                  <td className="px-3 py-2 text-left">Unsellable total</td>
+                  <td className="px-3 py-2 text-left" colSpan={2}>
+                    Unsellable total
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKgOnHand(data.grandUnsellableKg)}
                   </td>
                   <td className="px-3 py-2" />
                 </tr>
                 <tr className="border-b border-border font-semibold">
-                  <td className="px-3 py-2 text-left">Grand total</td>
+                  <td className="px-3 py-2 text-left" colSpan={2}>
+                    Grand total
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {fmtKgOnHand(data.grandTotalKg)}
                   </td>
