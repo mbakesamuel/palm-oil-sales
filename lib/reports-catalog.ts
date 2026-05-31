@@ -98,6 +98,24 @@ export const REPORTS: ReportDefinition[] = [
     permissionKey: "route:/reports/stock-on-hand",
   },
   {
+    group: "stock",
+    groupLabel: "Stock",
+    href: "/reports/stock-inquiry",
+    label: "Stock inquiry",
+    description:
+      "Dynamic stock balances — filter by product, sales point or storage location (by role), sellable / unsellable condition, and optional as-at date.",
+    permissionKey: "route:/reports/stock-inquiry",
+  },
+  {
+    group: "stock",
+    groupLabel: "Stock",
+    href: "/reports/stock-vs-commitments",
+    label: "Stock vs commitments",
+    description:
+      "Compare on-hand stock to outstanding DO commitments — overall totals (stock, commitment, uncommitted balance) with breakdown by storage location and customer.",
+    permissionKey: "route:/reports/stock-vs-commitments",
+  },
+  {
     group: "budget",
     groupLabel: "Budget phasing",
     href: "/reports/sales-budget-monthly-crosstab",

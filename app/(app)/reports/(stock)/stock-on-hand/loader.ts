@@ -12,6 +12,8 @@ const z = new Prisma.Decimal(0);
 export type StockOnHandByLocationRow = {
   storageLocationId: number;
   storageLocationName: string;
+  productId: number;
+  productName: string;
   qtyKg: Prisma.Decimal;
   remark: "Sellable" | "Unsellable";
   sellableKg: Prisma.Decimal;
@@ -47,8 +49,8 @@ function dec(v: Prisma.Decimal | string | number | null | undefined): Prisma.Dec
  * Current stock on hand by sales point and storage location.
  *
  * Notes:
- * - Aggregates *all* conditions (sellable + unsellable) because the request was “stock on hand”.
- * - Filters to kg-based products only to avoid mixing Units and Kg in one total.
+ * - One row per sales point, storage location, and product (kg-based products only).
+ * - Aggregates sellable + unsellable qty per row; remark reflects condition mix.
  */
 export async function loadStockOnHandReport(
   session: AuthSession,
@@ -71,10 +73,9 @@ export async function loadStockOnHandReport(
       ? { salesPointId: assignedSalesPointId }
       : {};
 
-  // Aggregate in DB by (sales point, storage location, condition) then fold conditions together.
   const grouped = await prismaRetry(() =>
     prisma.stockBalance.groupBy({
-      by: ["salesPointId", "storageLocationId", "condition"],
+      by: ["salesPointId", "storageLocationId", "productId", "condition"],
       where: {
         ...whereSalesPoint,
         qty: { gt: z },
@@ -87,8 +88,9 @@ export async function loadStockOnHandReport(
 
   const salesPointIds = [...new Set(grouped.map((g) => g.salesPointId))];
   const locationIds = [...new Set(grouped.map((g) => g.storageLocationId))];
+  const productIds = [...new Set(grouped.map((g) => g.productId))];
 
-  const [salesPoints, locations] = await Promise.all([
+  const [salesPoints, locations, products] = await Promise.all([
     prismaRetry(() =>
       prisma.salesPoint.findMany({
         where: { id: { in: salesPointIds.length > 0 ? salesPointIds : [-1] } },
@@ -103,42 +105,54 @@ export async function loadStockOnHandReport(
         orderBy: [{ salesPointId: "asc" }, { name: "asc" }],
       }),
     ),
+    prismaRetry(() =>
+      prisma.product.findMany({
+        where: { productId: { in: productIds.length > 0 ? productIds : [-1] } },
+        select: { productId: true, productName: true },
+        orderBy: { productName: "asc" },
+      }),
+    ),
   ]);
 
   const spName = new Map<number, string>(salesPoints.map((s) => [s.id, s.name]));
   const locName = new Map<number, { name: string; salesPointId: number }>(
     locations.map((l) => [l.id, { name: l.name, salesPointId: l.salesPointId }]),
   );
+  const productName = new Map<number, string>(
+    products.map((p) => [p.productId, p.productName]),
+  );
 
-  const qtyBySpLoc = new Map<
+  const qtyBySpLocProduct = new Map<
     string,
     { sellableKg: Prisma.Decimal; unsellableKg: Prisma.Decimal }
   >();
   for (const g of grouped) {
-    const key = `${g.salesPointId}:${g.storageLocationId}`;
-    const ex = qtyBySpLoc.get(key) ?? { sellableKg: z, unsellableKg: z };
+    const key = `${g.salesPointId}:${g.storageLocationId}:${g.productId}`;
+    const ex = qtyBySpLocProduct.get(key) ?? { sellableKg: z, unsellableKg: z };
     const q = dec(g._sum.qty);
     if (g.condition === StockCondition.UNSELLABLE) {
       ex.unsellableKg = ex.unsellableKg.add(q);
     } else {
       ex.sellableKg = ex.sellableKg.add(q);
     }
-    qtyBySpLoc.set(key, ex);
+    qtyBySpLocProduct.set(key, ex);
   }
 
   const rowsBySp = new Map<number, StockOnHandByLocationRow[]>();
-  for (const [key, q] of qtyBySpLoc.entries()) {
-    const [spIdStr, locIdStr] = key.split(":");
+  for (const [key, q] of qtyBySpLocProduct.entries()) {
+    const [spIdStr, locIdStr, productIdStr] = key.split(":");
     const salesPointId = Number(spIdStr);
     const storageLocationId = Number(locIdStr);
+    const productId = Number(productIdStr);
     const loc = locName.get(storageLocationId);
-    // Defensive: ignore mismatched joins.
     if (!loc || loc.salesPointId !== salesPointId) continue;
     const qtyKg = q.sellableKg.add(q.unsellableKg);
     const arr = rowsBySp.get(salesPointId) ?? [];
     arr.push({
       storageLocationId,
       storageLocationName: loc.name,
+      productId,
+      productName: productName.get(productId) ?? `Product ${productId}`,
       qtyKg,
       remark: q.unsellableKg.gt(0) ? "Unsellable" : "Sellable",
       sellableKg: q.sellableKg,
@@ -156,11 +170,13 @@ export async function loadStockOnHandReport(
       sensitivity: "base",
     }),
   )) {
-    const rows = (rowsBySp.get(spId) ?? []).sort((a, b) =>
-      a.storageLocationName.localeCompare(b.storageLocationName, undefined, {
+    const rows = (rowsBySp.get(spId) ?? []).sort((a, b) => {
+      const byLoc = a.storageLocationName.localeCompare(b.storageLocationName, undefined, {
         sensitivity: "base",
-      }),
-    );
+      });
+      if (byLoc !== 0) return byLoc;
+      return a.productName.localeCompare(b.productName, undefined, { sensitivity: "base" });
+    });
     const totalKg = rows.reduce((acc, r) => acc.add(r.qtyKg), z);
     const sellableTotalKg = rows.reduce((acc, r) => acc.add(r.sellableKg), z);
     const unsellableTotalKg = rows.reduce((acc, r) => acc.add(r.unsellableKg), z);

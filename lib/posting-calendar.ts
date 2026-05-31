@@ -115,3 +115,12 @@ export function assertIsoDateWithinWorkingCalendarMonth(
 export function noonUtcFromIsoDate(iso: IsoDate): Date {
   return new Date(`${iso}T12:00:00.000Z`);
 }
+
+/** Start of the UTC calendar day after `iso` (use as exclusive upper bound for “on or before iso”). */
+export function utcInstantAfterIsoDate(iso: IsoDate): Date {
+  const parts = iso.split("-").map((x) => Number.parseInt(x, 10));
+  const y = parts[0]!;
+  const m = parts[1]!;
+  const d = parts[2]!;
+  return new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0, 0));
+}

@@ -374,7 +374,8 @@ model User {
   stockAdjustmentsCreated  StockAdjustment[] @relation("StockAdjustmentsCreatedBy")
   stockAdjustmentsPosted   StockAdjustment[] @relation("StockAdjustmentsPostedBy")
 
-  sessions AuthSession[]
+  sessions             AuthSession[]
+  mobileRefreshTokens  MobileRefreshToken[]
 
   @@index([commercialServiceId])
   @@index([commercialServiceRoleId])
@@ -394,6 +395,21 @@ model AuthSession {
   @@index([userId])
   @@index([expiresAt])
   @@map("AuthSession")
+}
+
+model MobileRefreshToken {
+  id          String   @id @default(cuid())
+  userId      String
+  /// SHA-256 hash of the raw refresh token issued to the mobile client.
+  tokenHash   String   @unique
+  deviceLabel String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Customer {
