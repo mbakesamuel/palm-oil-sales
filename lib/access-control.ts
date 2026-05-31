@@ -71,7 +71,6 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/delivery-orders/validation-queue"] = role === UserRole.MANAGER;
   base["route:/pos"] = true;
   base["route:/pos/list"] = true;
-  base["route:/bpo-sales"] = true;
   base["route:/stock"] = true;
 
   // Stock posting defaults: clerks DRAFT receipts/transfers and confirm receipts at the
@@ -122,14 +121,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     base["route:/setup/sales-budget"] = true;
   }
 
-  // Reports default on (palm_reports + shared BPO report entry points).
   grantPalmOilReportRoutes(base);
-  base["route:/reports/bpo-pricing"] = true;
-  base["route:/reports/bpo"] = true;
-  base["route:/reports/bpo-sales-crosstab"] =
-    role === UserRole.ADMIN ||
-    role === UserRole.DIRECTOR ||
-    role === UserRole.SENIOR_SUPERVISOR;
 
   // Clerks draft; supervisors validate sales invoices. Leadership may override.
   base["ui:validate-documents"] =
@@ -174,8 +166,7 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
     (c.includes("supervisor") ||
       c.includes("manager") ||
       c.includes("director") ||
-      c.includes("in_charge") ||
-      c === "bpo_clerk");
+      c.includes("in_charge"));
 
   if (c.includes("factory")) {
     base["route:/factories"] = true;
@@ -214,12 +205,6 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
   base["route:/reports"] = true;
   base["route:/reports/sales"] = true;
   grantPalmOilReportRoutes(base);
-  if (c.includes("bpo")) {
-    base["route:/bpo-sales"] = true;
-    base["route:/reports/bpo"] = true;
-    base["route:/reports/bpo-pricing"] = true;
-    base["route:/reports/bpo-sales-crosstab"] = true;
-  }
   if (c.includes("supervisor") || c.includes("manager")) {
     base["route:/consignment-notes"] = true;
     base["ui:post-stock-adjustment"] = true;

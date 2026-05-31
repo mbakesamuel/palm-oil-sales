@@ -5,8 +5,7 @@ export type ReportGroupId =
   | "delivery"
   | "stock"
   | "budget"
-  | "pricing"
-  | "bpo";
+  | "pricing";
 
 export type ReportDefinition = {
   group: ReportGroupId;
@@ -23,7 +22,6 @@ export const REPORT_GROUP_ORDER: { id: ReportGroupId; label: string }[] = [
   { id: "stock", label: "Stock" },
   { id: "budget", label: "Budget phasing" },
   { id: "pricing", label: "Pricing" },
-  { id: "bpo", label: "Bottled Palm Oil" },
 ];
 
 export const REPORTS: ReportDefinition[] = [
@@ -148,22 +146,6 @@ export const REPORTS: ReportDefinition[] = [
     description:
       "Bottled product sizes and scheduled unit prices (section of the unified pricing report).",
     permissionKey: "route:/reports/pricing",
-  },
-  {
-    group: "bpo",
-    groupLabel: "Bottled Palm Oil",
-    href: "/reports/bpo",
-    label: "BPO monitor",
-    description: "Validated bottled palm oil sales at Bota and other sales points.",
-    permissionKey: "route:/reports/bpo",
-  },
-  {
-    group: "bpo",
-    groupLabel: "Bottled Palm Oil",
-    href: "/reports/bpo-sales-crosstab",
-    label: "BPO sales crosstab",
-    description: "BPO sales by variant and sales point (crosstab).",
-    permissionKey: "route:/reports/bpo-sales-crosstab",
   },
 ];
 

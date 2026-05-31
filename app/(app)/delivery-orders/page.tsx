@@ -36,9 +36,7 @@ export default async function DeliveryOrdersPage(props: {
   const sp = (await props.searchParams) ?? {};
   const lookupNoRaw = Array.isArray(sp.no) ? sp.no[0] : sp.no;
   const initialLookupNo = typeof lookupNoRaw === "string" ? lookupNoRaw : "";
-  const productWhere = productWhereForScope(scope, {
-    productCat: { isBottled: false },
-  });
+  const productWhere = productWhereForScope(scope);
   const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, products, salesPoints] = await Promise.all([

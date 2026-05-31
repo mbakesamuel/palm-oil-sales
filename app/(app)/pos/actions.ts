@@ -319,14 +319,19 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         },
       });
       if (!product) throw new Error("Product not found.");
-      if (product.productCat?.isBottled === true) {
-        throw new Error(
-          `Bottled product "${product.productName}" is not sold on this page. Use Bottled Palm Oil sales (/bpo-sales).`,
-        );
+      const isBottled = product.productCat?.isBottled === true;
+      let qtyKg: Prisma.Decimal;
+      let qtyUnits: Prisma.Decimal | null;
+      if (isBottled) {
+        const units = d(l.qtyUnits ?? l.qtyKg);
+        if (units.lte(0)) throw new Error("Qty must be > 0.");
+        qtyKg = new Prisma.Decimal(0);
+        qtyUnits = units;
+      } else {
+        qtyKg = d(l.qtyKg);
+        if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
+        qtyUnits = null;
       }
-
-      const qtyKg = d(l.qtyKg);
-      if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
       const priced = await resolveUnitPriceExTax(
         prisma,
         productId,
@@ -337,14 +342,15 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       const price = money2(priced.unitPriceExTax);
 
       if (price.lt(0)) throw new Error("Unit price must be >= 0.");
-      const lineNet = money2(qtyKg.mul(price));
+      const lineQty = isBottled ? qtyUnits! : qtyKg;
+      const lineNet = money2(lineQty.mul(price));
       net = net.add(lineNet);
 
       preparedLines.push({
         productId,
         storageLocationId,
         qtyKg,
-        qtyUnits: null,
+        qtyUnits,
         unitPrice: price,
         lineNet,
       });
@@ -787,9 +793,6 @@ export async function listPendingSales(): Promise<PendingSaleRow[]> {
       {
         status: ValidationStatus.PENDING,
         ...salesPointFilter,
-        lines: {
-          some: { product: { productCat: { isBottled: false } } },
-        },
       },
       scope,
       saleWhereForScope,

@@ -137,9 +137,6 @@ export async function listSalesForOperations(input?: {
       ...scopeWhere,
       ...dateWhere,
       vehicleNumber: { not: "BPO-OUTBOUND" },
-      lines: {
-        some: { product: { productCat: { isBottled: false } } },
-      },
       ...(q ? { invoiceNo: { contains: q, mode: "insensitive" } } : {}),
     },
     orderBy: [{ soldAt: "desc" }, { invoiceNo: "desc" }],

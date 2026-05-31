@@ -238,7 +238,6 @@ export async function ensureDefaultServiceRolesForCommercialService(
     { code: "supervisor", name: "Supervisor", sortOrder: 20 },
     { code: "senior_supervisor", name: "Senior sales supervisor", sortOrder: 30 },
     { code: "manager", name: "Manager", sortOrder: 40 },
-    { code: "bpo_clerk", name: "BPO clerk in charge", sortOrder: 50 },
   ];
   for (const r of roles) {
     await prisma.commercialServiceRole.create({

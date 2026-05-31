@@ -102,14 +102,6 @@ body {
   margin-right: 8mm;
 }
 
-@page bpo-sales-crosstab {
-  size: A4 landscape;
-  margin-top: 5mm;
-  margin-bottom: 5mm;
-  margin-left: 10mm;
-  margin-right: 10mm;
-}
-
 @media print {
   /*
    * Slight zoom on the consignment note only (Chromium / Edge print — helps one-page fit).
@@ -126,10 +118,6 @@ body {
 
   [data-print-page="sales-budget-weekly-crosstab"] {
     page: sales-budget-weekly-crosstab;
-  }
-
-  [data-print-page="bpo-sales-crosstab"] {
-    page: bpo-sales-crosstab;
   }
 
   /* Daily sales summary: fit seven columns on A4 portrait without horizontal scroll. */

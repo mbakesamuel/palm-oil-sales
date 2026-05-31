@@ -213,7 +213,7 @@ export function CustomersClient(props: {
         <h1 className="text-2xl font-semibold">Customers</h1>
         <p className="text-sm opacity-75">
           Customers belong to one commercial line. Tax and pricing rules follow each
-          line&apos;s regimes (palm oil, rubber, BPO, etc.).
+          line&apos;s regimes (palm oil, rubber, etc.).
         </p>
       </div>
 

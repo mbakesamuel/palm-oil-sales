@@ -52,11 +52,6 @@ enum ValidationStatus {
   REJECTED
 }
 
-enum BpoEmployeeCollectedProduct {
-  LOOSE_PALM_OIL
-  BOTTLED_PALM_OIL
-}
-
 enum TaxRegimeKind {
   SIMPLIFIED
   REAL
@@ -445,8 +440,6 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bpoCreditSales BpoEmployeeCreditSale[]
-
   @@index([name])
   @@index([estate])
 }
@@ -572,7 +565,6 @@ model Product {
   salesBudgets             ProductSalesBudget[]
   salesBudgetPhaseProfiles ProductSalesBudgetMonthPhaseProfile[]
   unitPriceSchedules       ProductUnitPriceSchedule[]
-  bpoEmployeeCreditSales   BpoEmployeeCreditSale[]
   stockBalances            StockBalance[]
   stockMovements           StockMovement[]
   stockReceiptLines        StockReceiptLine[]
@@ -594,9 +586,8 @@ model ProductCat {
   /// index on the DB side). Other categories use a single direct price per
   /// product (customerType null on schedule).
   isMain       Boolean @default(false)
-  /// When true, products in this category are bottled SKUs sold per unit;
-  /// they are excluded from POS / Delivery Orders and flow through BPO
-  /// outbound instead. Exactly one row is expected to carry this flag
+  /// When true, products in this category are bottled SKUs sold per unit.
+  /// Exactly one row is expected to carry this flag
   /// (enforced by a partial unique index on the DB side). Drives the
   /// product UoM ("Unit" if bottled, "Kg" otherwise).
   isBottled    Boolean @default(false)
@@ -652,7 +643,6 @@ model Sale {
   payments              Payment[]
   appliedTaxes          SaleAppliedTax[]
   consignmentNote       VehicleConsignmentNote?
-  bpoEmployeeCreditSale BpoEmployeeCreditSale?
 
   @@index([soldAt])
   @@index([customerId, soldAt])
@@ -705,28 +695,6 @@ model Payment {
 
   @@index([saleId])
   @@index([method, paidAt])
-}
-
-model BpoEmployeeCreditSale {
-  id                              String                      @id @default(cuid())
-  saleId                          String                      @unique
-  employeeId                      String
-  collectedProduct                BpoEmployeeCollectedProduct
-  productId                       Int?
-  rationPeriodYear                Int?
-  rationPeriodMonth               Int?
-  rationLimitUnitsSnapshot        Decimal?                    @db.Decimal(14, 3)
-  rationUsedBeforeUnitsSnapshot   Decimal?                    @db.Decimal(14, 3)
-  rationBalanceAfterUnitsSnapshot Decimal?                    @db.Decimal(14, 3)
-  createdAt                       DateTime                    @default(now())
-  updatedAt                       DateTime                    @updatedAt
-
-  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  product  Product? @relation(fields: [productId], references: [productId], onDelete: SetNull, onUpdate: Cascade)
-
-  @@index([employeeId, rationPeriodYear, rationPeriodMonth, collectedProduct])
-  @@index([productId])
 }
 
 model SalesPoint {

@@ -24,23 +24,6 @@ export const ValidationStatus = {
 export type ValidationStatus =
   (typeof ValidationStatus)[keyof typeof ValidationStatus];
 
-export const BpoMovementType = {
-  CONSIGNMENT_TRANSFER: "CONSIGNMENT_TRANSFER",
-  GIFT: "GIFT",
-  OTHER_OUT: "OTHER_OUT",
-} as const;
-export type BpoMovementType =
-  (typeof BpoMovementType)[keyof typeof BpoMovementType];
-
-export const BpoMovementStatus = {
-  DRAFT: "DRAFT",
-  SENDER_VALIDATED: "SENDER_VALIDATED",
-  VALIDATED: "VALIDATED",
-  REJECTED: "REJECTED",
-} as const;
-export type BpoMovementStatus =
-  (typeof BpoMovementStatus)[keyof typeof BpoMovementStatus];
-
 export const PaymentMethod = {
   CASH: "CASH",
   CHEQUE: "CHEQUE",

@@ -367,7 +367,7 @@ export function ProductsClient(props: {
                     className={`${fieldControlClass} text-xs opacity-80 py-1.5`}
                   >
                     {selectedCategory
-                      ? `${uomForCategory(selectedCategory)} \u2014 ${selectedCategory.isBottled ? "bottled SKU (BPO outbound only)" : "POS / Delivery Orders"}`
+                      ? `${uomForCategory(selectedCategory)} \u2014 ${selectedCategory.isBottled ? "bottled SKU (sold per unit)" : "bulk SKU (sold per kg)"}`
                       : "Pick a category to derive the UoM"}
                   </p>
                 </div>
