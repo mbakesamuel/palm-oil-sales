@@ -18,8 +18,10 @@ import {
 import { resolveRoutePermissionKey } from "@/lib/resolve-route-permission";
 import { roleSeesAllCommercialServices } from "@/lib/service-scope";
 import {
+  defaultLineRoleCodeForUserRole,
   emptyPermissionMap,
   snapshotForGlobalRole,
+  snapshotForLegacyUserRole,
   snapshotForLineRoleCode,
   type RolePermissionMap,
 } from "@/lib/permission-seed-snapshot";
@@ -84,7 +86,46 @@ export async function getPermissionsForGlobalRoleDefinition(
     return seed;
   }
 
-  return permissionsFromDbRows(rows);
+  const perms = permissionsFromDbRows(rows);
+  // Built-in Admin must never be locked out by partial DB rows (common after permission migrations).
+  if (def.legacyRole === UserRole.ADMIN) {
+    for (const k of PERMISSION_KEYS) perms[k] = true;
+  }
+  return perms;
+}
+
+async function resolveGlobalRoleDefinitionId(
+  session: AuthSession,
+): Promise<string | null> {
+  if (session.globalRole?.id) return session.globalRole.id;
+  if (!roleSeesAllCommercialServices(session.role)) return null;
+  const prisma = getPrismaClient();
+  const def = await prisma.globalRoleDefinition.findFirst({
+    where: { legacyRole: session.role, isActive: true },
+    select: { id: true },
+  });
+  return def?.id ?? null;
+}
+
+async function resolveLineRoleForSession(
+  session: AuthSession,
+): Promise<{ id: string; code: string } | null> {
+  if (session.commercialServiceRole) {
+    return {
+      id: session.commercialServiceRole.id,
+      code: session.commercialServiceRole.code,
+    };
+  }
+  const serviceId = session.commercialService?.id;
+  if (!serviceId) return null;
+  const code = defaultLineRoleCodeForUserRole(session.role);
+  if (!code) return null;
+  const prisma = getPrismaClient();
+  const role = await prisma.commercialServiceRole.findFirst({
+    where: { commercialServiceId: serviceId, code, isActive: true },
+    select: { id: true, code: true },
+  });
+  return role ?? null;
 }
 
 export async function getPermissionsForServiceRole(
@@ -144,21 +185,24 @@ export async function getPermissionsForSession(
 ): Promise<RolePermissionMap> {
   let perms: RolePermissionMap;
 
-  if (session.globalRole) {
-    perms = await getPermissionsForGlobalRoleDefinition(session.globalRole.id);
-  } else if (session.commercialServiceRole) {
-    perms = await getPermissionsForServiceRole(
-      session.commercialServiceRole.id,
-      session.commercialServiceRole.code,
-    );
+  const globalRoleId = await resolveGlobalRoleDefinitionId(session);
+  if (globalRoleId) {
+    perms = await getPermissionsForGlobalRoleDefinition(globalRoleId);
   } else {
-    console.error(
-      `[access-control] User ${session.userId} has no global or line role definition assigned.`,
-    );
-    return emptyPermissionMap();
+    const lineRole = await resolveLineRoleForSession(session);
+    if (lineRole) {
+      perms = await getPermissionsForServiceRole(lineRole.id, lineRole.code);
+    } else if (roleSeesAllCommercialServices(session.role)) {
+      perms = snapshotForLegacyUserRole(session.role);
+    } else {
+      console.error(
+        `[access-control] User ${session.userId} has no global or line role definition assigned.`,
+      );
+      return emptyPermissionMap();
+    }
   }
 
-  if (roleSeesAllCommercialServices(session.role) || session.globalRole) {
+  if (roleSeesAllCommercialServices(session.role) || globalRoleId) {
     return perms;
   }
   const profile = await loadCommercialProfileForSession(session);

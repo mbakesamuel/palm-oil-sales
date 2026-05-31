@@ -10,7 +10,11 @@ import {
   userRequiresFixedPostingSite,
 } from "@/lib/sales-point-assignment";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
-import { snapshotForLineRoleCode } from "@/lib/permission-seed-snapshot";
+import {
+  defaultLineRoleCodeForUserRole,
+  snapshotForLineRoleCode,
+} from "@/lib/permission-seed-snapshot";
+import { roleSeesAllCommercialServices } from "@/lib/service-scope";
 const userSessionInclude = {
   salesPoint: { select: { id: true, name: true } },
   factory: { select: { id: true, name: true } },
@@ -182,28 +186,98 @@ export function mapAuthSessionToToken(session: AuthSession) {
   };
 }
 
-export async function loadAuthSessionByUserId(
-  userId: string,
-): Promise<AuthSession | null> {
+/** Link legacy users to GlobalRoleDefinition / CommercialServiceRole rows when FKs are missing. */
+async function ensureUserRoleDefinitionLinks(userId: string): Promise<void> {
   const prisma = getPrismaClient();
   const user = await prisma.user.findUnique({
     where: { id: userId },
+    select: {
+      id: true,
+      role: true,
+      globalRoleDefinitionId: true,
+      commercialServiceRoleId: true,
+      commercialServiceId: true,
+    },
+  });
+  if (!user) return;
+
+  const updates: {
+    globalRoleDefinitionId?: string;
+    commercialServiceRoleId?: string;
+  } = {};
+
+  if (
+    !user.commercialServiceRoleId &&
+    !user.globalRoleDefinitionId &&
+    roleSeesAllCommercialServices(user.role as UserRole)
+  ) {
+    const def = await prisma.globalRoleDefinition.findFirst({
+      where: { legacyRole: user.role as UserRole, isActive: true },
+      select: { id: true },
+    });
+    if (def) updates.globalRoleDefinitionId = def.id;
+  }
+
+  if (
+    !user.commercialServiceRoleId &&
+    !updates.globalRoleDefinitionId &&
+    user.commercialServiceId
+  ) {
+    const code = defaultLineRoleCodeForUserRole(user.role as UserRole);
+    if (code) {
+      const lineRole = await prisma.commercialServiceRole.findFirst({
+        where: {
+          commercialServiceId: user.commercialServiceId,
+          code,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (lineRole) updates.commercialServiceRoleId = lineRole.id;
+    }
+  }
+
+  if (updates.globalRoleDefinitionId || updates.commercialServiceRoleId) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: updates,
+    });
+  }
+}
+
+async function loadUserForSession(
+  where: { id: string } | { username: string },
+): Promise<AuthSession | null> {
+  const prisma = getPrismaClient();
+  const user = await prisma.user.findUnique({
+    where,
     include: userSessionInclude,
   });
   if (!user) return null;
+
+  if (!user.globalRoleDefinitionId && !user.commercialServiceRoleId) {
+    await ensureUserRoleDefinitionLinks(user.id);
+    const refreshed = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: userSessionInclude,
+    });
+    if (!refreshed) return null;
+    return mapUserToAuthSession(refreshed);
+  }
+
   return mapUserToAuthSession(user);
+}
+
+export async function loadAuthSessionByUserId(
+  userId: string,
+): Promise<AuthSession | null> {
+  return loadUserForSession({ id: userId });
 }
 
 export async function loadAuthSessionByUsername(
   username: string,
 ): Promise<AuthSession | null> {
-  const prisma = getPrismaClient();
-  const user = await prisma.user.findUnique({
-    where: { username },
-    include: userSessionInclude,
-  });
-  if (!user) return null;
-  return mapUserToAuthSession(user);
+  return loadUserForSession({ username });
 }
 
 /** Seed default service roles for a commercial line if none exist. */
