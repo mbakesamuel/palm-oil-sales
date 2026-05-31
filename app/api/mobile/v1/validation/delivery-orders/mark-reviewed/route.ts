@@ -1,0 +1,28 @@
+import { mobileError, mobileJson, withMobileAuth } from "@/lib/api/mobile/with-mobile-auth";
+import { markDeliveryOrdersReviewedForSession } from "@/lib/services/do-validation-queue";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request) {
+  return withMobileAuth(
+    request,
+    "route:/delivery-orders/validation-queue",
+    async ({ session }) => {
+      let body: { ids?: number[] };
+      try {
+        body = (await request.json()) as typeof body;
+      } catch {
+        return mobileError("Invalid JSON body.", 400);
+      }
+
+      const result = await markDeliveryOrdersReviewedForSession(session, {
+        ids: body.ids ?? [],
+      });
+      if (!result.ok) {
+        return mobileError(result.error, 400);
+      }
+      return mobileJson(result);
+    },
+  );
+}

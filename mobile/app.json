@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "POS Monitor",
+    "slug": "pos-monitor",
+    "version": "1.0.0",
+    "scheme": "posmonitor",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
