@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SkeletonTable } from "@/components/SkeletonTable";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 
 type TaxTypeOpt = { id: string; code: string; name: string };
@@ -372,35 +371,30 @@ export function TaxRegimesClient(props: {
           </button>
         </div>
 
-        {regimes.length === 0 ? (
-          <SkeletonTable
-            emptyMessage="No tax regimes yet."
-            columns={[
-              { label: "Name", skeleton: "wide" },
-              { label: "Line" },
-              { label: "Taxes" },
-              { label: "Kind", skeleton: "narrow" },
-              { label: "VAT", skeleton: "narrow" },
-              { label: "Customers", skeleton: "narrow" },
-              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
-            ]}
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="p-2 font-medium">Name</th>
-                  <th className="p-2 font-medium">Line</th>
-                  <th className="p-2 font-medium">Taxes</th>
-                  <th className="p-2 font-medium">Kind</th>
-                  <th className="p-2 font-medium">VAT</th>
-                  <th className="p-2 font-medium">Customers</th>
-                  <th className="p-2 font-medium w-36 text-right">Actions</th>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Name</th>
+                <th className="p-2 font-medium">Line</th>
+                <th className="p-2 font-medium">Taxes</th>
+                <th className="p-2 font-medium">Kind</th>
+                <th className="p-2 font-medium">VAT</th>
+                <th className="p-2 font-medium">Customers</th>
+                <th className="p-2 font-medium w-36 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {regimes.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-10 text-center text-sm text-foreground/70">
+                    No tax regimes yet. Use{" "}
+                    <span className="font-medium text-foreground">Add regime</span> to
+                    create one.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {regimes.map((r) => (
+              ) : (
+                regimes.map((r) => (
                   <tr
                     key={r.id}
                     className={[
@@ -441,14 +435,16 @@ export function TaxRegimesClient(props: {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="text-xs opacity-70">
-          Deleting a regime that is used by customers or sales may fail.
-        </p>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {regimes.length > 0 ? (
+          <p className="text-xs opacity-70">
+            Deleting a regime that is used by customers or sales may fail.
+          </p>
+        ) : null}
       </section>
 
       {pendingDelete ? (

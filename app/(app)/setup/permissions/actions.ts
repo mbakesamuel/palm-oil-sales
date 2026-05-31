@@ -5,15 +5,17 @@ import {
   PERMISSION_KEYS,
   assertActorIsAdmin,
   assertPermissionKey,
-  defaultPermissionsForGlobalRoleCode,
-  defaultPermissionsForRole,
-  defaultPermissionsForServiceRoleCode,
   getPermissionsForGlobalRoleDefinition,
-  getPermissionsForRole,
   getPermissionsForServiceRole,
   getPermissionsForSession,
   type PermissionKey,
 } from "@/lib/access-control";
+import {
+  minimalCustomGlobalSnapshot,
+  minimalLineRoleSnapshot,
+  snapshotForGlobalRole,
+  snapshotForLineRoleCode,
+} from "@/lib/permission-seed-snapshot";
 import { defaultRequiresFixedPostingSiteForRoleCode } from "@/lib/sales-point-assignment";
 import { parseEnabledModulesJson } from "@/lib/commercial-modules";
 import { ensureGlobalRoleDefinitions, isRetiredGlobalLegacyRole } from "@/lib/global-role-definitions";
@@ -21,36 +23,11 @@ import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-export async function getRolePermissionsAction(role: UserRole) {
-  const session = await getServerSession();
-  if (!session?.userId) throw new Error("Login required.");
-  if (role !== session.role) {
-    await assertPermissionKey("route:/setup/permissions");
-  }
-  return getPermissionsForRole(role);
-}
-
 /** Effective permissions for the signed-in user (global role or line role + module filter). */
 export async function getPermissionsForSessionAction() {
   const session = await getServerSession();
   if (!session?.userId) throw new Error("Login required.");
   return getPermissionsForSession(session);
-}
-
-function parseRole(raw: string): UserRole | null {
-  const r = String(raw ?? "").trim() as UserRole;
-  if (
-    r === UserRole.ADMIN ||
-    r === UserRole.DIRECTOR ||
-    r === UserRole.MANAGER ||
-    r === UserRole.OFFICER ||
-    r === UserRole.SENIOR_SUPERVISOR ||
-    r === UserRole.SUPERVISOR ||
-    r === UserRole.CLERK
-  ) {
-    return r;
-  }
-  return null;
 }
 
 function normalizeGlobalRoleCode(raw: string): string | null {
@@ -65,49 +42,6 @@ function normalizeGlobalRoleCode(raw: string): string | null {
 function parsePermissionKey(raw: string): PermissionKey | null {
   const k = String(raw ?? "").trim();
   return (PERMISSION_KEYS as readonly string[]).includes(k) ? (k as PermissionKey) : null;
-}
-
-export async function setRolePermission(formData: FormData) {
-  const prisma = getPrismaClient();
-  await assertPermissionKey("route:/setup/permissions");
-  await assertActorIsAdmin();
-
-  const role = parseRole(String(formData.get("role") ?? ""));
-  const key = parsePermissionKey(String(formData.get("key") ?? ""));
-  const allowed = String(formData.get("allowed") ?? "") === "1";
-  if (!role) throw new Error("Invalid role.");
-  if (!key) throw new Error("Invalid permission key.");
-
-  await prisma.rolePermission.upsert({
-    where: { role_key: { role, key } },
-    create: { role, key, allowed },
-    update: { allowed },
-  });
-
-  revalidatePath("/setup/permissions");
-}
-
-export async function resetRolePermissions(formData: FormData) {
-  const prisma = getPrismaClient();
-  await assertPermissionKey("route:/setup/permissions");
-  await assertActorIsAdmin();
-
-  const role = parseRole(String(formData.get("role") ?? ""));
-  if (!role) throw new Error("Invalid role.");
-
-  const defaults = defaultPermissionsForRole(role);
-  await prisma.$transaction(async (tx) => {
-    await tx.rolePermission.deleteMany({ where: { role } });
-    await tx.rolePermission.createMany({
-      data: PERMISSION_KEYS.map((key) => ({
-        role,
-        key,
-        allowed: defaults[key],
-      })),
-    });
-  });
-
-  revalidatePath("/setup/permissions");
 }
 
 export type GlobalRoleRow = {
@@ -125,7 +59,13 @@ export type GlobalRolesCatalog = {
 };
 
 async function assertCanManageGlobalRoles() {
-  await assertPermissionKey("route:/setup/permissions");
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  try {
+    await assertPermissionKey("route:/setup/permissions");
+  } catch {
+    await assertPermissionKey("route:/setup/role-access");
+  }
   await assertActorIsAdmin();
 }
 
@@ -222,7 +162,7 @@ export async function saveGlobalRoleDefinition(formData: FormData) {
       },
     });
 
-    const defaults = defaultPermissionsForGlobalRoleCode(created.code, null);
+    const defaults = minimalCustomGlobalSnapshot();
     await prisma.globalRolePermission.createMany({
       data: PERMISSION_KEYS.map((key) => ({
         globalRoleDefinitionId: created.id,
@@ -234,6 +174,7 @@ export async function saveGlobalRoleDefinition(formData: FormData) {
   }
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -273,6 +214,7 @@ export async function setGlobalRoleDefinitionActive(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -312,6 +254,7 @@ export async function setGlobalRolePermission(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
 }
 
 export async function resetGlobalRolePermissions(formData: FormData) {
@@ -327,7 +270,7 @@ export async function resetGlobalRolePermissions(formData: FormData) {
   });
   if (!role) throw new Error("Global role not found.");
 
-  const defaults = defaultPermissionsForGlobalRoleCode(
+  const defaults = snapshotForGlobalRole(
     role.code,
     role.legacyRole,
   );
@@ -345,6 +288,7 @@ export async function resetGlobalRolePermissions(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
 }
 
 export type LineRoleRow = {
@@ -379,7 +323,13 @@ function normalizeRoleCode(raw: string): string | null {
 }
 
 async function assertCanManageLineRoles() {
-  await assertPermissionKey("route:/setup/permissions");
+  const session = await getServerSession();
+  if (!session?.userId) throw new Error("Login required.");
+  try {
+    await assertPermissionKey("route:/setup/permissions");
+  } catch {
+    await assertPermissionKey("route:/setup/role-access");
+  }
   await assertActorIsAdmin();
 }
 
@@ -498,7 +448,18 @@ export async function saveCommercialServiceRole(formData: FormData) {
       },
     });
 
-    const defaults = defaultPermissionsForServiceRoleCode(created.code);
+    const knownCodes = new Set([
+      "clerk",
+      "supervisor",
+      "senior_supervisor",
+      "manager",
+      "factory_clerk",
+      "factory_supervisor",
+      "factory_manager",
+    ]);
+    const defaults = knownCodes.has(created.code)
+      ? snapshotForLineRoleCode(created.code)
+      : minimalLineRoleSnapshot();
     await prisma.commercialServiceRolePermission.createMany({
       data: PERMISSION_KEYS.map((key) => ({
         commercialServiceRoleId: created.id,
@@ -510,6 +471,7 @@ export async function saveCommercialServiceRole(formData: FormData) {
   }
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -543,12 +505,12 @@ export async function setCommercialServiceRoleActive(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
 export async function getServiceRolePermissionsAction(serviceRoleId: string) {
-  await assertPermissionKey("route:/setup/permissions");
-  await assertActorIsAdmin();
+  await assertCanManageLineRoles();
   const prisma = getPrismaClient();
   const role = await prisma.commercialServiceRole.findUnique({
     where: { id: serviceRoleId },
@@ -560,8 +522,7 @@ export async function getServiceRolePermissionsAction(serviceRoleId: string) {
 
 export async function setServiceRolePermission(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertPermissionKey("route:/setup/permissions");
-  await assertActorIsAdmin();
+  await assertCanManageLineRoles();
 
   const serviceRoleId = String(formData.get("serviceRoleId") ?? "").trim();
   const key = parsePermissionKey(String(formData.get("key") ?? ""));
@@ -584,12 +545,12 @@ export async function setServiceRolePermission(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
 }
 
 export async function resetServiceRolePermissions(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertPermissionKey("route:/setup/permissions");
-  await assertActorIsAdmin();
+  await assertCanManageLineRoles();
 
   const serviceRoleId = String(formData.get("serviceRoleId") ?? "").trim();
   if (!serviceRoleId) throw new Error("Line role is required.");
@@ -600,7 +561,7 @@ export async function resetServiceRolePermissions(formData: FormData) {
   });
   if (!role) throw new Error("Line role not found.");
 
-  const defaults = defaultPermissionsForServiceRoleCode(role.code);
+  const defaults = snapshotForLineRoleCode(role.code);
   await prisma.$transaction(async (tx) => {
     await tx.commercialServiceRolePermission.deleteMany({
       where: { commercialServiceRoleId: serviceRoleId },
@@ -615,4 +576,5 @@ export async function resetServiceRolePermissions(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
+  revalidatePath("/setup/role-access");
 }

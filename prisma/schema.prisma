@@ -89,6 +89,7 @@ enum StockCondition {
   UNSELLABLE
 }
 
+/// Deprecated: permissions are stored on GlobalRolePermission / CommercialServiceRolePermission.
 model RolePermission {
   id        String   @id @default(cuid())
   role      UserRole

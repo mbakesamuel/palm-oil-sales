@@ -40,6 +40,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/setup/product-pricing": Tags,
   "/setup/product-variants": Layers,
   "/setup/permissions": Shield,
+  "/setup/role-access": Shield,
   "/users": Users,
   "/customers": UserCircle,
   "/financial-years": CalendarRange,

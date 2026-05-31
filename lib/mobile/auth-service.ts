@@ -74,7 +74,7 @@ export async function authenticateMobileUser(
   if (!session) {
     return { ok: false, error: "Account is inactive or misconfigured." };
   }
-  if (!canUseMobileApp(session)) {
+  if (!(await canUseMobileApp(session))) {
     return {
       ok: false,
       error: "Your role is not enabled for the mobile monitoring app.",
@@ -139,7 +139,7 @@ export async function refreshMobileTokens(
   }
 
   const session = await loadAuthSessionByUserId(row.userId);
-  if (!session || !canUseMobileApp(session)) {
+  if (!session || !(await canUseMobileApp(session))) {
     await prismaRetry(() =>
       prisma.mobileRefreshToken.delete({ where: { id: row.id } }),
     );

@@ -17,254 +17,30 @@ import {
 } from "@/lib/commercial-profile";
 import { resolveRoutePermissionKey } from "@/lib/resolve-route-permission";
 import { roleSeesAllCommercialServices } from "@/lib/service-scope";
+import {
+  emptyPermissionMap,
+  snapshotForGlobalRole,
+  snapshotForLineRoleCode,
+  type RolePermissionMap,
+} from "@/lib/permission-seed-snapshot";
 import { redirect } from "next/navigation";
 
 export { PERMISSION_KEYS, type PermissionKey };
+export type { RolePermissionMap };
 
-export type RolePermissionMap = Record<PermissionKey, boolean>;
-
-function grantMobileApiAccess(base: RolePermissionMap, role: UserRole): void {
-  const allowed =
-    role === UserRole.ADMIN ||
-    role === UserRole.DIRECTOR ||
-    role === UserRole.MANAGER ||
-    role === UserRole.SENIOR_SUPERVISOR ||
-    role === UserRole.SUPERVISOR;
-  if (allowed) {
-    base["route:/api/mobile/v1"] = true;
-  }
-}
-
-/** Palm-oil report routes (`palm_reports` module), aligned with `defaultPermissionsForRole`. */
-function grantPalmOilReportRoutes(base: RolePermissionMap) {
-  const mod: CommercialModuleKey = "palm_reports";
-  for (const key of permissionKeysForModules([mod])) {
-    base[key] = true;
-  }
-}
-
-/** DB rows seeded before palm report defaults must not block keys that are true in code defaults. */
-function mergeStoredPermissions(
-  defaults: RolePermissionMap,
+function permissionsFromDbRows(
   rows: Array<{ key: string; allowed: boolean }>,
 ): RolePermissionMap {
-  const out: RolePermissionMap = { ...defaults };
+  const out = emptyPermissionMap();
   for (const r of rows) {
     if (!(PERMISSION_KEYS as readonly string[]).includes(r.key)) continue;
-    const key = r.key as PermissionKey;
-    out[key] = r.allowed || defaults[key];
+    out[r.key as PermissionKey] = r.allowed;
   }
   return out;
 }
 
-export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
-  const base: RolePermissionMap = Object.fromEntries(
-    PERMISSION_KEYS.map((k) => [k, false]),
-  ) as RolePermissionMap;
-
-  // Keep existing UX: operations are available to everyone by default.
-  base["route:/dashboard"] = true;
-  base["route:/dashboard/executive"] =
-    role === UserRole.ADMIN || role === UserRole.DIRECTOR;
-  base["route:/delivery-orders"] = true;
-  base["route:/delivery-orders/list"] = true;
-  base["route:/delivery-orders/validation-queue"] = role === UserRole.MANAGER;
-  base["route:/pos"] = true;
-  base["route:/pos/list"] = true;
-  base["route:/stock"] = true;
-
-  // Stock posting defaults: clerks DRAFT receipts/transfers and confirm receipts at the
-  // destination, but POSTING a receipt and DISPATCHING a transfer is the supervisor-level
-  // validation step (mirrors how sales invoices are drafted by clerks and validated by
-  // supervisors). Only the supervisor responsible for the sales point may post/dispatch
-  // for that point. Senior supervisors roam across sales points and therefore do NOT
-  // post/dispatch themselves — they would defer to the sales-point supervisor.
-  if (role === UserRole.CLERK) {
-    base["ui:receive-stock-transfer"] = true;
-  }
-  if (role === UserRole.SUPERVISOR) {
-    base["ui:post-stock-receipt"] = true;
-    base["ui:dispatch-stock-transfer"] = true;
-    base["ui:receive-stock-transfer"] = true;
-  }
-  if (role === UserRole.SENIOR_SUPERVISOR) {
-    // Senior supervisors still confirm receipt of inbound transfers when
-    // standing in at a destination point, but never post receipts or dispatch
-    // outbound transfers in place of the sales-point supervisor.
-    base["ui:receive-stock-transfer"] = true;
-  }
-  if (role === UserRole.MANAGER) {
-    // Line managers roam across sales points; validate DOs and adjust stock, but do not
-    // post receipts or dispatch transfers in place of the sales-point supervisor.
-    base["ui:receive-stock-transfer"] = true;
-    base["ui:post-stock-adjustment"] = true;
-    base["ui:reclassify-stock-condition"] = true;
-    base["ui:validate-delivery-orders"] = true;
-  }
-  if (
-    role === UserRole.SUPERVISOR ||
-    role === UserRole.SENIOR_SUPERVISOR ||
-    role === UserRole.DIRECTOR
-  ) {
-    base["ui:post-stock-adjustment"] = true;
-  }
-  if (role === UserRole.DIRECTOR) {
-    base["ui:reclassify-stock-condition"] = true;
-  }
-
-  // Vehicle consignment notes: clerks draft, supervisors validate (admin gets all keys below).
-  if (role === UserRole.CLERK || role === UserRole.SUPERVISOR) {
-    base["route:/consignment-notes"] = true;
-  }
-
-  if (role === UserRole.DIRECTOR) {
-    base["route:/setup/sales-budget"] = true;
-  }
-
-  grantPalmOilReportRoutes(base);
-
-  // Clerks draft; supervisors validate sales invoices. Leadership may override.
-  base["ui:validate-documents"] =
-    role === UserRole.ADMIN ||
-    role === UserRole.DIRECTOR ||
-    role === UserRole.SUPERVISOR;
-
-  base["ui:validate-delivery-orders"] =
-    role === UserRole.DIRECTOR || role === UserRole.MANAGER;
-
-  grantMobileApiAccess(base, role);
-
-  // Setup defaults: admin only.
-  const isAdmin = role === UserRole.ADMIN;
-  if (isAdmin) {
-    for (const k of PERMISSION_KEYS) base[k] = true;
-    return base;
-  }
-
-  return base;
-}
-
-export function defaultPermissionsForServiceRoleCode(code: string): RolePermissionMap {
-  const base: RolePermissionMap = Object.fromEntries(
-    PERMISSION_KEYS.map((k) => [k, false]),
-  ) as RolePermissionMap;
-
-  base["route:/dashboard"] = true;
-  base["route:/customers"] = true;
-  base["route:/products"] = true;
-  base["route:/product-categories"] = true;
-
-  const c = code.toLowerCase();
-
-  // Codes that should be treated as supervisor-equivalent for stock posting/dispatch
-  // (i.e. allowed to validate clerk drafts). Sales clerks (`clerk`, `factory_clerk`)
-  // intentionally do NOT match. Roles that include "senior" are also excluded:
-  // senior supervisors roam across multiple sales points and defer post/dispatch to
-  // the supervisor of each sales point itself.
-  const isSupervisorEquivalent =
-    !c.includes("senior") &&
-    (c.includes("supervisor") ||
-      c.includes("manager") ||
-      c.includes("director") ||
-      c.includes("in_charge"));
-
-  if (c.includes("factory")) {
-    base["route:/factories"] = true;
-    base["route:/rubber"] = true;
-    base["route:/stock"] = true;
-    base["ui:receive-stock-transfer"] = true;
-    if (isSupervisorEquivalent) {
-      base["ui:post-stock-receipt"] = true;
-      base["ui:dispatch-stock-transfer"] = true;
-    }
-    base["route:/reports"] = true;
-    base["route:/reports/sales"] = true;
-    if (c.includes("manager")) {
-      base["ui:validate-delivery-orders"] = true;
-      base["ui:post-stock-adjustment"] = true;
-      base["ui:reclassify-stock-condition"] = true;
-    } else if (c.includes("supervisor")) {
-      base["ui:validate-documents"] = true;
-      base["ui:post-stock-adjustment"] = true;
-    }
-    return base;
-  }
-
-  // Palm-style service roles (fallback).
-  base["route:/delivery-orders"] = true;
-  base["route:/delivery-orders/list"] = true;
-  base["route:/delivery-orders/validation-queue"] = c.includes("manager");
-  base["route:/pos"] = true;
-  base["route:/pos/list"] = true;
-  base["route:/stock"] = true;
-  base["ui:receive-stock-transfer"] = true;
-  if (isSupervisorEquivalent) {
-    base["ui:post-stock-receipt"] = true;
-    base["ui:dispatch-stock-transfer"] = true;
-  }
-  base["route:/reports"] = true;
-  base["route:/reports/sales"] = true;
-  grantPalmOilReportRoutes(base);
-  if (c.includes("supervisor") || c.includes("manager")) {
-    base["route:/consignment-notes"] = true;
-    base["ui:post-stock-adjustment"] = true;
-  }
-  if (c.includes("senior") && c.includes("supervisor")) {
-    // senior duties only — no sales invoice validation
-  } else if (c.includes("supervisor")) {
-    base["ui:validate-documents"] = true;
-  }
-  if (c.includes("manager") || c.includes("director")) {
-    base["ui:reclassify-stock-condition"] = true;
-  }
-  if (c.includes("manager")) {
-    base["ui:validate-delivery-orders"] = true;
-  }
-  if (
-    c.includes("supervisor") ||
-    c.includes("manager") ||
-    c.includes("director")
-  ) {
-    base["route:/api/mobile/v1"] = true;
-  }
-  return base;
-}
-
-/** Default route/UI permissions for a global role code (built-in or custom). */
-export function defaultPermissionsForGlobalRoleCode(
-  code: string,
-  legacyRole: UserRole | null,
-): RolePermissionMap {
-  if (legacyRole) {
-    return defaultPermissionsForRole(legacyRole);
-  }
-  const base: RolePermissionMap = Object.fromEntries(
-    PERMISSION_KEYS.map((k) => [k, false]),
-  ) as RolePermissionMap;
-  base["route:/dashboard"] = true;
-  base["route:/reports"] = true;
-  base["route:/reports/sales"] = true;
-
-  const c = code.toLowerCase();
-  if (c === "admin") {
-    for (const k of PERMISSION_KEYS) base[k] = true;
-    return base;
-  }
-  if (c.includes("director")) {
-    base["route:/dashboard/executive"] = true;
-    base["route:/setup/sales-budget"] = true;
-    base["ui:validate-documents"] = true;
-    base["ui:validate-delivery-orders"] = true;
-    base["ui:reclassify-stock-condition"] = true;
-  } else if (c.includes("supervisor") && !c.includes("senior")) {
-    base["ui:validate-documents"] = true;
-  }
-  return base;
-}
-
 export async function getPermissionsForGlobalRoleDefinition(
   globalRoleDefinitionId: string,
-  fallbackRole?: UserRole,
 ): Promise<RolePermissionMap> {
   const prisma = getPrismaClient();
   const def = await prisma.globalRoleDefinition.findUnique({
@@ -272,13 +48,10 @@ export async function getPermissionsForGlobalRoleDefinition(
     select: { id: true, code: true, legacyRole: true, isActive: true },
   });
   if (!def?.isActive) {
-    if (fallbackRole) {
-      return getPermissionsForRole(fallbackRole);
-    }
     throw new Error("Global role not found.");
   }
 
-  const defaults = defaultPermissionsForGlobalRoleCode(
+  const seed = snapshotForGlobalRole(
     def.code,
     def.legacyRole as UserRole | null,
   );
@@ -302,16 +75,16 @@ export async function getPermissionsForGlobalRoleDefinition(
           data: PERMISSION_KEYS.map((key) => ({
             globalRoleDefinitionId,
             key,
-            allowed: defaults[key],
+            allowed: seed[key],
           })),
           skipDuplicates: true,
         }),
       { retries: 6, baseDelayMs: 300 },
     );
-    return defaults;
+    return seed;
   }
 
-  return mergeStoredPermissions(defaults, rows);
+  return permissionsFromDbRows(rows);
 }
 
 export async function getPermissionsForServiceRole(
@@ -319,7 +92,7 @@ export async function getPermissionsForServiceRole(
   roleCode: string,
 ): Promise<RolePermissionMap> {
   const prisma = getPrismaClient();
-  const defaults = defaultPermissionsForServiceRoleCode(roleCode);
+  const seed = snapshotForLineRoleCode(roleCode);
   const rows = await prismaRetry(
     () =>
       prisma.commercialServiceRolePermission.findMany({
@@ -339,16 +112,16 @@ export async function getPermissionsForServiceRole(
           data: PERMISSION_KEYS.map((key) => ({
             commercialServiceRoleId,
             key,
-            allowed: defaults[key],
+            allowed: seed[key],
           })),
           skipDuplicates: true,
         }),
       { retries: 6, baseDelayMs: 300 },
     );
-    return defaults;
+    return seed;
   }
 
-  return mergeStoredPermissions(defaults, rows);
+  return permissionsFromDbRows(rows);
 }
 
 function applyCommercialModuleFilter(
@@ -369,55 +142,27 @@ function applyCommercialModuleFilter(
 export async function getPermissionsForSession(
   session: AuthSession,
 ): Promise<RolePermissionMap> {
-  const perms = session.globalRole
-    ? await getPermissionsForGlobalRoleDefinition(session.globalRole.id, session.role)
-    : session.commercialServiceRole
-      ? await getPermissionsForServiceRole(
-          session.commercialServiceRole.id,
-          session.commercialServiceRole.code,
-        )
-      : await getPermissionsForRole(session.role);
+  let perms: RolePermissionMap;
+
+  if (session.globalRole) {
+    perms = await getPermissionsForGlobalRoleDefinition(session.globalRole.id);
+  } else if (session.commercialServiceRole) {
+    perms = await getPermissionsForServiceRole(
+      session.commercialServiceRole.id,
+      session.commercialServiceRole.code,
+    );
+  } else {
+    console.error(
+      `[access-control] User ${session.userId} has no global or line role definition assigned.`,
+    );
+    return emptyPermissionMap();
+  }
 
   if (roleSeesAllCommercialServices(session.role) || session.globalRole) {
     return perms;
   }
   const profile = await loadCommercialProfileForSession(session);
   return applyCommercialModuleFilter(perms, profile);
-}
-
-export async function getPermissionsForRole(role: UserRole): Promise<RolePermissionMap> {
-  const prisma = getPrismaClient();
-
-  const defaults = defaultPermissionsForRole(role);
-  // Hot path: runs on every request via the app layout guard.
-  // Neon/pooled TLS can intermittently throw ECONNRESET; retry a bit more than default.
-  const rows = await prismaRetry(
-    () =>
-      prisma.rolePermission.findMany({
-        where: { role, key: { in: [...PERMISSION_KEYS] } },
-        select: { key: true, allowed: true },
-      }),
-    { retries: 6, baseDelayMs: 300 },
-  );
-
-  // If no rows exist yet, lazily seed defaults for this role.
-  if (rows.length === 0) {
-    await prismaRetry(
-      () =>
-        prisma.rolePermission.createMany({
-          data: PERMISSION_KEYS.map((key) => ({
-            role,
-            key,
-            allowed: defaults[key],
-          })),
-          skipDuplicates: true,
-        }),
-      { retries: 6, baseDelayMs: 300 },
-    );
-    return defaults;
-  }
-
-  return mergeStoredPermissions(defaults, rows);
 }
 
 export async function assertActorIsAdmin() {
@@ -480,4 +225,3 @@ export async function assertPermissionKeyForSession(
     throw new Error("You do not have permission to perform this action.");
   }
 }
-

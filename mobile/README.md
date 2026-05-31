@@ -41,7 +41,7 @@ Use this to give a few testers an **installable APK** that talks to your **deplo
 - [Expo account](https://expo.dev) and EAS CLI: `npm i -g eas-cli`
 - Mobile API routes deployed on Vercel (`app/api/mobile/v1`, `lib/mobile`)
 - Vercel env: `AUTH_SECRET`, `DATABASE_URL`, migrations applied (`MobileRefreshToken`)
-- Production test users with mobile-allowed roles
+- Production test users whose **line or global role** has the **Mobile monitoring app** capability enabled in Setup → Role access (`route:/api/mobile/v1` in the database)
 
 ### One-time setup
 

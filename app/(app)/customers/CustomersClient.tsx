@@ -5,7 +5,6 @@ import type { CustomerResidency, CustomerType } from "@/lib/domain";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SkeletonTable } from "@/components/SkeletonTable";
 import { NO_TAX_REGIME_LABEL, NO_TAX_REGIME_VALUE } from "@/lib/customers/constants";
 
 type TaxRegime = {
@@ -549,39 +548,42 @@ export function CustomersClient(props: {
           </button>
         </div>
 
-        {customers.length === 0 ? (
-          <SkeletonTable
-            emptyMessage="No customers yet."
-            columns={[
-              { label: "Name", skeleton: "wide" },
-              ...(scopeMode === "all" ? [{ label: "Line" }] : []),
-              { label: "Phone" },
-              { label: "Type" },
-              { label: "Location" },
-              { label: "Regime" },
-              { label: "Tax ID" },
-              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
-            ]}
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="p-2 font-medium">Name</th>
-                  {scopeMode === "all" ? (
-                    <th className="p-2 font-medium">Line</th>
-                  ) : null}
-                  <th className="p-2 font-medium">Phone</th>
-                  <th className="p-2 font-medium">Type</th>
-                  <th className="p-2 font-medium">Location</th>
-                  <th className="p-2 font-medium">Regime</th>
-                  <th className="p-2 font-medium">Tax ID</th>
-                  <th className="p-2 font-medium w-36 text-right">Actions</th>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Name</th>
+                {scopeMode === "all" ? (
+                  <th className="p-2 font-medium">Line</th>
+                ) : null}
+                <th className="p-2 font-medium">Phone</th>
+                <th className="p-2 font-medium">Type</th>
+                <th className="p-2 font-medium">Location</th>
+                <th className="p-2 font-medium">Regime</th>
+                <th className="p-2 font-medium">Tax ID</th>
+                <th className="p-2 font-medium w-36 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={scopeMode === "all" ? 8 : 7}
+                    className="p-10 text-center text-sm text-foreground/70"
+                  >
+                    No customers yet.
+                    {canManageCustomers ? (
+                      <>
+                        {" "}
+                        Use{" "}
+                        <span className="font-medium text-foreground">Add customer</span>{" "}
+                        to create one.
+                      </>
+                    ) : null}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {customers.map((c) => (
+              ) : (
+                customers.map((c) => (
                   <tr
                     key={c.id}
                     className={[
@@ -627,15 +629,17 @@ export function CustomersClient(props: {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="text-xs opacity-70">
-          Showing {customers.length} customer(s). Dates are stored but not displayed
-          in the table.
-        </p>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {customers.length > 0 ? (
+          <p className="text-xs opacity-70">
+            Showing {customers.length} customer(s). Dates are stored but not displayed
+            in the table.
+          </p>
+        ) : null}
       </section>
 
       {pendingDelete ? (
