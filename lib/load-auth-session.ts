@@ -9,6 +9,8 @@ import {
   defaultRequiresFixedPostingSiteForRoleCode,
   userRequiresFixedPostingSite,
 } from "@/lib/sales-point-assignment";
+import { PERMISSION_KEYS } from "@/lib/access-control-keys";
+import { snapshotForLineRoleCode } from "@/lib/permission-seed-snapshot";
 const userSessionInclude = {
   salesPoint: { select: { id: true, name: true } },
   factory: { select: { id: true, name: true } },
@@ -215,38 +217,36 @@ export async function ensureDefaultServiceRolesForCommercialService(
   });
   if (count > 0) return;
 
-  if (siteKind === "FACTORY") {
-    const roles = [
-      { code: "factory_clerk", name: "Factory clerk", sortOrder: 10 },
-      { code: "factory_supervisor", name: "Factory supervisor", sortOrder: 20 },
-      { code: "factory_manager", name: "Factory manager", sortOrder: 30 },
-    ];
-    for (const r of roles) {
-      await prisma.commercialServiceRole.create({
-        data: {
-          commercialServiceId,
-          ...r,
-          requiresFixedPostingSite: defaultRequiresFixedPostingSiteForRoleCode(r.code),
-        },
-      });
-    }
-    return;
-  }
+  const roleTemplates =
+    siteKind === "FACTORY"
+      ? [
+          { code: "factory_clerk", name: "Factory clerk", sortOrder: 10 },
+          { code: "factory_supervisor", name: "Factory supervisor", sortOrder: 20 },
+          { code: "factory_manager", name: "Factory manager", sortOrder: 30 },
+        ]
+      : [
+          { code: "clerk", name: "Sales clerk", sortOrder: 10 },
+          { code: "supervisor", name: "Supervisor", sortOrder: 20 },
+          { code: "senior_supervisor", name: "Senior sales supervisor", sortOrder: 30 },
+          { code: "manager", name: "Manager", sortOrder: 40 },
+        ];
 
-  const roles = [
-    { code: "clerk", name: "Sales clerk", sortOrder: 10 },
-    { code: "supervisor", name: "Supervisor", sortOrder: 20 },
-    { code: "senior_supervisor", name: "Senior sales supervisor", sortOrder: 30 },
-    { code: "manager", name: "Manager", sortOrder: 40 },
-    { code: "bpo_clerk", name: "BPO clerk in charge", sortOrder: 50 },
-  ];
-  for (const r of roles) {
-    await prisma.commercialServiceRole.create({
+  for (const r of roleTemplates) {
+    const created = await prisma.commercialServiceRole.create({
       data: {
         commercialServiceId,
         ...r,
         requiresFixedPostingSite: defaultRequiresFixedPostingSiteForRoleCode(r.code),
       },
+    });
+    const seed = snapshotForLineRoleCode(created.code);
+    await prisma.commercialServiceRolePermission.createMany({
+      data: PERMISSION_KEYS.map((key) => ({
+        commercialServiceRoleId: created.id,
+        key,
+        allowed: seed[key],
+      })),
+      skipDuplicates: true,
     });
   }
 }

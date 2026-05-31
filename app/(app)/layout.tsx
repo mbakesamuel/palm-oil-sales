@@ -24,6 +24,7 @@ const setupNav = [
   { href: "/setup/commercial-services", label: "Sales Services" },
   { href: "/setup/sales-budget", label: "Sales budget Phasing" },
   { href: "/setup/product-pricing", label: "Product pricing" },
+  { href: "/setup/role-access", label: "Role access" },
   { href: "/setup/permissions", label: "User access control" },
   { href: "/users", label: "Users" },
   { href: "/customers", label: "Customers" },
@@ -43,7 +44,6 @@ const operationsNav = [
   { href: "/consignment-notes", label: "Vehicle Consignment" },
   { href: "/pos", label: "Sales Invoice" },
   { href: "/pos/list", label: "Sales list" },
-  { href: "/bpo-sales", label: "Bottled Palm Oil sales" },
   { href: "/stock", label: "Stock" },
 ] as const;
 

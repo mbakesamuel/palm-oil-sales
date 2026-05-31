@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SkeletonTable } from "@/components/SkeletonTable";
 import { uomForCategory } from "@/lib/product-form";
 
 type ProductCatOption = {
@@ -367,7 +366,7 @@ export function ProductsClient(props: {
                     className={`${fieldControlClass} text-xs opacity-80 py-1.5`}
                   >
                     {selectedCategory
-                      ? `${uomForCategory(selectedCategory)} \u2014 ${selectedCategory.isBottled ? "bottled SKU (BPO outbound only)" : "POS / Delivery Orders"}`
+                      ? `${uomForCategory(selectedCategory)} \u2014 ${selectedCategory.isBottled ? "bottled SKU (sold per unit)" : "bulk SKU (sold per kg)"}`
                       : "Pick a category to derive the UoM"}
                   </p>
                 </div>
@@ -407,33 +406,35 @@ export function ProductsClient(props: {
           ) : null}
         </div>
 
-        {products.length === 0 ? (
-          <SkeletonTable
-            emptyMessage="No products yet."
-            columns={[
-              { label: "Product", skeleton: "wide" },
-              { label: "Category" },
-              { label: "Line" },
-              { label: "Code" },
-              { label: "UoM", skeleton: "narrow" },
-              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
-            ]}
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="p-2 font-medium">Product</th>
-                  <th className="p-2 font-medium">Category</th>
-                  <th className="p-2 font-medium">Line</th>
-                  <th className="p-2 font-medium">Code</th>
-                  <th className="p-2 font-medium w-20">UoM</th>
-                  <th className="p-2 font-medium w-36 text-right">Actions</th>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Product</th>
+                <th className="p-2 font-medium">Category</th>
+                <th className="p-2 font-medium">Line</th>
+                <th className="p-2 font-medium">Code</th>
+                <th className="p-2 font-medium w-20">UoM</th>
+                <th className="p-2 font-medium w-36 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-10 text-center text-sm text-foreground/70">
+                    No products yet.
+                    {canManageProducts && categories.length > 0 ? (
+                      <>
+                        {" "}
+                        Use{" "}
+                        <span className="font-medium text-foreground">Add product</span>{" "}
+                        to create one.
+                      </>
+                    ) : null}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {products.map((p) => (
+              ) : (
+                products.map((p) => (
                   <tr
                     key={p.productId}
                     className={[
@@ -483,14 +484,14 @@ export function ProductsClient(props: {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div className="text-xs opacity-70">
-          Showing {products.length} product(s).
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+        {products.length > 0 ? (
+          <div className="text-xs opacity-70">Showing {products.length} product(s).</div>
+        ) : null}
       </section>
 
       {pendingDelete ? (

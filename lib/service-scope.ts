@@ -134,23 +134,12 @@ export function productWhereForScope(
   };
 }
 
-/** Stable service code keys used for legacy BPO vs bulk product split when SKUs are untagged. */
+/** Optional catalog hint from commercial service code (rubber lines vs palm bulk). */
 export function productCatalogHintWhereForServiceCode(
   code: string,
 ): Prisma.ProductWhereInput | undefined {
   const normalized = code.trim().toLowerCase();
-  if (
-    normalized.includes("bpo") ||
-    normalized === "bottled-palm-oil" ||
-    normalized === "bottled_palm_oil"
-  ) {
-    return { productCat: { isBottled: true } };
-  }
-  if (
-    normalized.includes("rubber") ||
-    normalized === "default" ||
-    normalized.includes("palm")
-  ) {
+  if (normalized.includes("rubber")) {
     return { productCat: { isBottled: false } };
   }
   return undefined;

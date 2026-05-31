@@ -77,7 +77,7 @@ export async function resolveUnitPriceExTax(
   };
 }
 
-/** Bottled BPO sales: tax-inclusive price from direct schedule row. */
+/** Bottled (unit) SKUs: price from direct schedule row (retail segment). */
 export async function resolveBottledUnitPriceExTax(
   prisma: PrismaForPricing,
   productId: number,

@@ -12,17 +12,9 @@ export function resolveRoutePermissionKey(pathname: string): PermissionKey | nul
   }
   if (
     normalized === "/setup/product-variants" ||
-    normalized.startsWith("/setup/product-variants/") ||
-    normalized === "/setup/bpo-variants" ||
-    normalized.startsWith("/setup/bpo-variants/")
+    normalized.startsWith("/setup/product-variants/")
   ) {
-    return "route:/setup/bpo-variants";
-  }
-  if (
-    normalized === "/reports/bpo-pricing" ||
-    normalized.startsWith("/reports/bpo-pricing/")
-  ) {
-    return "route:/reports/pricing";
+    return "route:/setup";
   }
   if (normalized.startsWith("/delivery-orders/") && normalized !== "/delivery-orders") {
     return "route:/delivery-orders";

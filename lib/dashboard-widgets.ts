@@ -21,12 +21,6 @@ export const DASHBOARD_QUICK_LINKS: DashboardQuickLink[] = [
     module: "palm_operations",
   },
   {
-    href: "/bpo-sales",
-    title: "Bottled Palm Oil sales",
-    description: "BPO outbound sales and receipts.",
-    module: "bpo",
-  },
-  {
     href: "/rubber",
     title: "Rubber sales",
     description: "Factory rubber sales hub.",

@@ -517,8 +517,8 @@ export function ProductPricingClient(props: {
         </div>
       ) : null}
 
-      <section className="space-y-2 -mt-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <h2 className="text-lg font-semibold">Scheduled prices</h2>
           {products.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -537,20 +537,29 @@ export function ProductPricingClient(props: {
           ) : null}
         </div>
 
-        {schedules.length === 0 ? (
-          <p className="text-sm opacity-75">No price rows yet.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="p-2 font-medium">Customer type</th>
-                  <th className="p-2 font-medium text-right">Ex-tax unit</th>
-                  <th className="p-2 font-medium w-36 text-right">Actions</th>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Customer type</th>
+                <th className="p-2 font-medium text-right">Ex-tax unit</th>
+                <th className="p-2 font-medium w-36 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedules.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={3}
+                    className="p-10 text-center text-sm text-foreground/70"
+                  >
+                    No price rows yet. Use{" "}
+                    <span className="font-medium text-foreground">Add price row</span>{" "}
+                    to schedule your first price.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {scheduleGroups.map((g) => (
+              ) : (
+                scheduleGroups.map((g) => (
                   <React.Fragment key={g.productId}>
                     <tr className="bg-foreground/6 border-b border-border">
                       <td colSpan={3} className="p-2 font-semibold">
@@ -602,16 +611,18 @@ export function ProductPricingClient(props: {
                       </tr>
                     ))}
                   </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div className="text-xs opacity-70">
-          Showing {schedules.length} price row{schedules.length === 1 ? "" : "s"} across{" "}
-          {scheduleGroups.length} product
-          {scheduleGroups.length === 1 ? "" : "s"}.
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+        {schedules.length > 0 ? (
+          <div className="text-xs opacity-70">
+            Showing {schedules.length} price row{schedules.length === 1 ? "" : "s"} across{" "}
+            {scheduleGroups.length} product
+            {scheduleGroups.length === 1 ? "" : "s"}.
+          </div>
+        ) : null}
       </section>
 
       {pendingDelete ? (

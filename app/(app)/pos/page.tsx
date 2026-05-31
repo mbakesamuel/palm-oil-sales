@@ -52,9 +52,7 @@ export default async function PosPage(props: {
           commercialServiceRoleCode: session.commercialServiceRole?.code,
         })
       : false;
-  const productWhere = productWhereForScope(scope, {
-    productCat: { isBottled: false },
-  });
+  const productWhere = productWhereForScope(scope);
   const customerWhere = customerWhereForScope(scope) ?? {};
 
   const [customers, grades, salesPoints, storageLocations] = await Promise.all([

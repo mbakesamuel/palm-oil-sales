@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { UserRole } from "@/lib/domain";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SkeletonTable } from "@/components/SkeletonTable";
 import { useAuth } from "@/contexts/AuthContext";
 import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 
@@ -668,35 +667,30 @@ export function UsersClient(props: {
             Add user
           </button>
         </div>
-        {users.length === 0 ? (
-          <SkeletonTable
-            emptyMessage="No users yet."
-            columns={[
-              { label: "Username" },
-              { label: "Name", skeleton: "wide" },
-              { label: "Role" },
-              { label: "Site" },
-              { label: "Line" },
-              { label: "Active", skeleton: "narrow" },
-              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
-            ]}
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="p-2 font-medium">Username</th>
-                  <th className="p-2 font-medium">Name</th>
-                  <th className="p-2 font-medium">Role</th>
-                  <th className="p-2 font-medium">Site</th>
-                  <th className="p-2 font-medium">Line</th>
-                  <th className="p-2 font-medium w-20">Active</th>
-                  <th className="p-2 font-medium w-36 text-right">Actions</th>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Username</th>
+                <th className="p-2 font-medium">Name</th>
+                <th className="p-2 font-medium">Role</th>
+                <th className="p-2 font-medium">Site</th>
+                <th className="p-2 font-medium">Line</th>
+                <th className="p-2 font-medium w-20">Active</th>
+                <th className="p-2 font-medium w-36 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-10 text-center text-sm text-foreground/70">
+                    No users yet. Use{" "}
+                    <span className="font-medium text-foreground">Add user</span> to
+                    create one.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
+              ) : (
+                users.map((u) => (
                   <tr
                     key={u.id}
                     className={[
@@ -796,11 +790,11 @@ export function UsersClient(props: {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {pendingDeactivate ? (

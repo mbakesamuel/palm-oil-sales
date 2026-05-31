@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SkeletonTable } from "@/components/SkeletonTable";
+import { EmptyTableNotice } from "@/components/EmptyTableNotice";
 
 type StorageLocationRow = {
   id: number;
@@ -349,14 +349,17 @@ export function SalesPointsClient(props: {
         </div>
 
         {points.length === 0 ? (
-          <SkeletonTable
-            emptyMessage="No sales points yet."
+          <EmptyTableNotice
             columns={[
-              { label: "Name", skeleton: "wide" },
-              { label: "Locations", skeleton: "narrow" },
-              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
+              { label: "Name" },
+              { label: "Locations" },
+              { label: "Actions", className: "w-36 text-right" },
             ]}
-          />
+          >
+            No sales points yet. Use{" "}
+            <span className="font-medium text-foreground">Add sales point</span> to
+            create one.
+          </EmptyTableNotice>
         ) : (
           <div className="space-y-3">
             {points.map((p) => (

@@ -9,8 +9,8 @@ export const PERMISSION_KEYS = [
   "route:/setup",
   "route:/setup/commercial-services",
   "route:/setup/permissions",
+  "route:/setup/role-access",
   "route:/setup/product-pricing",
-  "route:/setup/bpo-variants",
   "route:/setup/product-variants",
   "route:/setup/sales-budget",
   "route:/users",
@@ -29,7 +29,6 @@ export const PERMISSION_KEYS = [
   "route:/consignment-notes",
   "route:/pos",
   "route:/pos/list",
-  "route:/bpo-sales",
   "route:/reports",
   "route:/reports/sales",
   "route:/reports/daily-sales-summary",
@@ -51,9 +50,6 @@ export const PERMISSION_KEYS = [
   "route:/reports/sales-budget-monthly-crosstab",
   "route:/reports/sales-budget-weekly-crosstab",
   "route:/reports/pricing",
-  "route:/reports/bpo-pricing",
-  "route:/reports/bpo",
-  "route:/reports/bpo-sales-crosstab",
   "route:/stock",
   "ui:validate-documents",
   "ui:validate-delivery-orders",
@@ -69,6 +65,8 @@ export const PERMISSION_KEYS = [
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
 const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
+  "route:/api/mobile/v1": "Mobile monitoring app (sign-in and API)",
+  "route:/setup/role-access": "Role access (capability groups)",
   "ui:validate-documents": "Validate sales invoices and similar documents",
   "ui:validate-delivery-orders": "Validate delivery orders",
   "ui:manage-access-control": "Manage access control (Setup → Permissions)",

@@ -38,9 +38,9 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/setup": Settings,
   "/setup/sales-budget": Target,
   "/setup/product-pricing": Tags,
-  "/setup/bpo-variants": Layers,
   "/setup/product-variants": Layers,
   "/setup/permissions": Shield,
+  "/setup/role-access": Shield,
   "/users": Users,
   "/customers": UserCircle,
   "/financial-years": CalendarRange,
@@ -54,7 +54,6 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/delivery-orders": Truck,
   "/consignment-notes": FileText,
   "/pos": ShoppingCart,
-  "/bpo-sales": CircleDollarSign,
   "/stock": Boxes,
   "/reports": BarChart3,
   "/reports/sales": BookOpen,
@@ -70,9 +69,6 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/reports/sales-budget-monthly-crosstab": LayoutGrid,
   "/reports/sales-budget-weekly-crosstab": LayoutGrid,
   "/reports/pricing": CircleDollarSign,
-  "/reports/bpo-pricing": Layers,
-  "/reports/bpo": Factory,
-  "/reports/bpo-sales-crosstab": TableProperties,
 };
 
 export type NavGroupIconId = "setup" | "operations" | "reports";
