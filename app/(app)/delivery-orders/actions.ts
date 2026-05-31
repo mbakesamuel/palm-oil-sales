@@ -19,6 +19,7 @@ import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
   canCreateOrEditDeliveryOrderDraft,
+  effectiveSessionRole,
   roleSeesOnlyValidatedDeliveryOrders,
 } from "@/lib/auth-roles";
 import type { UserRole as AppUserRole } from "@/lib/domain";
@@ -494,7 +495,12 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
   const csOpErr = commercialServiceErrorForOperations(scope);
   if (csOpErr) return { ok: false, error: csOpErr };
 
-  if (!canCreateOrEditDeliveryOrderDraft(session.role)) {
+  if (
+    !canCreateOrEditDeliveryOrderDraft(
+      effectiveSessionRole(session),
+      session.commercialServiceRole?.code,
+    )
+  ) {
     return {
       ok: false,
       error:
@@ -817,7 +823,12 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
   if (existing.status === ValidationStatus.VALIDATED) {
     return { ok: false, error: "Validated delivery orders cannot be deleted." };
   }
-  if (!canCreateOrEditDeliveryOrderDraft(actor.role)) {
+  if (
+    !canCreateOrEditDeliveryOrderDraft(
+      effectiveSessionRole(session),
+      session.commercialServiceRole?.code,
+    )
+  ) {
     return {
       ok: false,
       error: "Only senior sales supervisors can delete a pending delivery order.",

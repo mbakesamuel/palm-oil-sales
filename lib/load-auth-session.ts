@@ -10,6 +10,7 @@ import {
   userRequiresFixedPostingSite,
 } from "@/lib/sales-point-assignment";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
+import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 import {
   defaultLineRoleCodeForUserRole,
   snapshotForLineRoleCode,
@@ -118,7 +119,7 @@ function mapUserToAuthSession(user: {
 
   const role: UserRole =
     commercialServiceRole != null
-      ? (user.role as UserRole)
+      ? userRoleFromLineRoleCode(commercialServiceRole.code)
       : globalRoleDef?.isActive === true && globalRoleDef.legacyRole
         ? (globalRoleDef.legacyRole as UserRole)
         : (user.role as UserRole);
