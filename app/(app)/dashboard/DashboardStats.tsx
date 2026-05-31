@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
 import type { ServiceScope } from "@/lib/service-scope";
 import {
@@ -29,7 +29,7 @@ export async function DashboardStats(props: { commercialServiceId?: string } = {
     );
   }
 
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const [{ monthFilter }, prisma] = await Promise.all([
     resolveReportWorkingMonthFilter(),

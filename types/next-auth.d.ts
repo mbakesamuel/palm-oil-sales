@@ -21,7 +21,12 @@ declare module "next-auth" {
       siteKind: CommercialSiteKind;
       enabledModules: CommercialModuleKey[];
     } | null;
-    commercialServiceRole: { id: string; code: string; name: string } | null;
+    commercialServiceRole: {
+      id: string;
+      code: string;
+      name: string;
+      requiresFixedPostingSite: boolean;
+    } | null;
   }
 }
 
@@ -43,6 +48,11 @@ declare module "next-auth/jwt" {
       siteKind: CommercialSiteKind;
       enabledModules: CommercialModuleKey[];
     } | null;
-    commercialServiceRole?: { id: string; code: string; name: string } | null;
+    commercialServiceRole?: {
+      id: string;
+      code: string;
+      name: string;
+      requiresFixedPostingSite: boolean;
+    } | null;
   }
 }

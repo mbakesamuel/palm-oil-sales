@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-server";
 import { getPrismaClient } from "@/lib/prisma";
 import { getPermissionsForSession } from "@/lib/access-control";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { StockDocStatus } from "@prisma/client";
 
 function formatIsoDate(iso: string | null): string {
@@ -18,7 +18,7 @@ export async function DashboardIncomingTransfers() {
   const perms = await getPermissionsForSession(session);
   if (!perms["route:/stock"]) return null;
 
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const scopedSalesPointId =
     scopedToSalesPoint && assignedSalesPointId != null ? assignedSalesPointId : null;

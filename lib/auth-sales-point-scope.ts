@@ -1,9 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 import type { UserRole } from "@prisma/client";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 
 export type ActorSalesPointRow = {
   role: UserRole;
+  globalRoleDefinitionId?: string | null;
+  requiresFixedPostingSite?: boolean | null;
   salesPointId: number | null;
   isActive: boolean;
 };
@@ -14,10 +16,26 @@ export async function fetchActorSalesPointScope(
 ): Promise<ActorSalesPointRow | null> {
   const id = String(userId ?? "").trim();
   if (!id) return null;
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id },
-    select: { role: true, salesPointId: true, isActive: true },
+    select: {
+      role: true,
+      globalRoleDefinitionId: true,
+      salesPointId: true,
+      isActive: true,
+      commercialServiceRole: {
+        select: { requiresFixedPostingSite: true },
+      },
+    },
   });
+  if (!user) return null;
+  return {
+    role: user.role,
+    globalRoleDefinitionId: user.globalRoleDefinitionId,
+    requiresFixedPostingSite: user.commercialServiceRole?.requiresFixedPostingSite ?? null,
+    salesPointId: user.salesPointId,
+    isActive: user.isActive,
+  };
 }
 
 /** For creates/updates: submitted sales point must match the actor's assignment when their role requires one. */
@@ -26,7 +44,7 @@ export function salesPointErrorForSubmitted(
   submittedSalesPointId: number | null,
 ): string | null {
   if (!actor.isActive) return "Your account is inactive.";
-  if (!roleRequiresSalesPoint(actor.role)) return null;
+  if (!actorRequiresFixedPostingSite(actor)) return null;
   if (actor.salesPointId == null) {
     return "Your account has no sales point assigned. Ask an administrator.";
   }
@@ -45,7 +63,7 @@ export function salesPointErrorForResource(
   resourceSalesPointId: number | null,
 ): string | null {
   if (!actor.isActive) return "Your account is inactive.";
-  if (!roleRequiresSalesPoint(actor.role)) return null;
+  if (!actorRequiresFixedPostingSite(actor)) return null;
   if (actor.salesPointId == null) {
     return "Your account has no sales point assigned. Ask an administrator.";
   }

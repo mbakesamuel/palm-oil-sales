@@ -5,7 +5,6 @@ import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import {
   roleRequiresCommercialServiceAssignment,
-  roleRequiresSalesPoint,
 } from "@/lib/auth-roles";
 import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 import { getServerSession } from "@/lib/auth-server";
@@ -23,11 +22,14 @@ function normalizeUsername(raw: string) {
 async function validateUserFields(
   prisma: ReturnType<typeof getPrismaClient>,
   role: UserRole,
+  globalRoleDefinitionId: string | null,
   commercialServiceId: string | null,
   commercialServiceRoleId: string | null,
   salesPointId: number | null,
   factoryId: string | null,
 ) {
+  let requiresFixedPostingSite = !globalRoleDefinitionId;
+
   if (roleRequiresCommercialServiceAssignment(role)) {
     if (!commercialServiceId) throw new Error("Commercial line is required for this role.");
     const cs = await prisma.commercialService.findUnique({
@@ -42,7 +44,7 @@ async function validateUserFields(
     }
     const sr = await prisma.commercialServiceRole.findUnique({
       where: { id: commercialServiceRoleId },
-      select: { commercialServiceId: true, isActive: true },
+      select: { commercialServiceId: true, isActive: true, requiresFixedPostingSite: true },
     });
     if (!sr) throw new Error("Commercial line role not found.");
     if (!sr.isActive) throw new Error("Selected line role is inactive.");
@@ -50,27 +52,33 @@ async function validateUserFields(
       throw new Error("Role does not belong to the selected commercial line.");
     }
 
+    requiresFixedPostingSite = sr.requiresFixedPostingSite;
+
     if (cs.siteKind === "FACTORY") {
-      if (!factoryId) throw new Error("Factory is required for this commercial line.");
-      const factory = await prisma.factory.findFirst({
-        where: { id: factoryId, commercialServiceId, isActive: true },
-        select: { id: true },
-      });
-      if (!factory) throw new Error("Factory not found for this commercial line.");
-      return { salesPointId: null, factoryId };
+      if (requiresFixedPostingSite && !factoryId) {
+        throw new Error("Factory is required for this commercial line.");
+      }
+      if (factoryId) {
+        const factory = await prisma.factory.findFirst({
+          where: { id: factoryId, commercialServiceId, isActive: true },
+          select: { id: true },
+        });
+        if (!factory) throw new Error("Factory not found for this commercial line.");
+      }
+      return { salesPointId: null, factoryId: requiresFixedPostingSite ? factoryId : null };
     }
 
-    if (roleRequiresSalesPoint(role)) {
+    if (requiresFixedPostingSite) {
       if (!salesPointId || !Number.isFinite(salesPointId)) {
         throw new Error("Sales point is required for this role.");
       }
       const sp = await prisma.salesPoint.findUnique({ where: { id: salesPointId } });
       if (!sp) throw new Error("Sales point not found.");
     }
-    return { salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null, factoryId: null };
+    return { salesPointId: requiresFixedPostingSite ? salesPointId : null, factoryId: null };
   }
 
-  if (roleRequiresSalesPoint(role)) {
+  if (requiresFixedPostingSite) {
     if (!salesPointId || !Number.isFinite(salesPointId)) {
       throw new Error("Sales point is required for this role.");
     }
@@ -79,7 +87,7 @@ async function validateUserFields(
   }
 
   return {
-    salesPointId: roleRequiresSalesPoint(role) ? salesPointId : null,
+    salesPointId: requiresFixedPostingSite ? salesPointId : null,
     factoryId: null as string | null,
   };
 }
@@ -163,6 +171,7 @@ export async function saveUser(formData: FormData) {
   const site = await validateUserFields(
     prisma,
     role,
+    resolvedGlobalRoleId,
     resolvedCommercialServiceId,
     resolvedLineRoleId,
     salesPointId,

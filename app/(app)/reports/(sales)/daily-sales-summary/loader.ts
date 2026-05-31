@@ -1,6 +1,6 @@
 import { CustomerType, Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import {
@@ -169,7 +169,7 @@ export async function loadDailySalesSummary(
   session: AuthSession,
   rawParams?: DailySalesSummaryDateParams | string | null,
 ): Promise<DailySummaryReportData> {
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const assignedSalesPointName = session.salesPoint?.name ?? null;
 

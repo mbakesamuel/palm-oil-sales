@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SkeletonTable } from "@/components/SkeletonTable";
 import { uomForCategory } from "@/lib/product-form";
 
 type ProductCatOption = {
@@ -407,7 +408,17 @@ export function ProductsClient(props: {
         </div>
 
         {products.length === 0 ? (
-          <p className="text-sm opacity-75">No products yet.</p>
+          <SkeletonTable
+            emptyMessage="No products yet."
+            columns={[
+              { label: "Product", skeleton: "wide" },
+              { label: "Category" },
+              { label: "Line" },
+              { label: "Code" },
+              { label: "UoM", skeleton: "narrow" },
+              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
+            ]}
+          />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">

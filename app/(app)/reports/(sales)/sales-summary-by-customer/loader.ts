@@ -1,6 +1,6 @@
 import { CustomerType, Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { loadPhasedBudgetByProductForRange } from "@/lib/sales-budget-for-period";
 import {
   getFinancialYearPeriodByYear,
@@ -368,7 +368,7 @@ export async function loadSalesSummaryByCustomer(
   session: AuthSession,
   rawParams?: { interval?: string | null; date?: string | null; week?: string | null },
 ): Promise<SalesSummaryByCustomerData> {
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const assignedSalesPointName = session.salesPoint?.name ?? null;
   const interval = parseInterval(rawParams?.interval);

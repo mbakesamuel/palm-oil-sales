@@ -21,6 +21,7 @@ export type AuthCommercialServiceRole = {
   id: string;
   code: string;
   name: string;
+  requiresFixedPostingSite: boolean;
 };
 
 export type AuthGlobalRole = {
@@ -135,6 +136,8 @@ export function parseAuthSession(raw: string | null): AuthSession | null {
           id: c.id.trim(),
           code: c.code.trim(),
           name: c.name.trim(),
+          requiresFixedPostingSite:
+            typeof c.requiresFixedPostingSite === "boolean" ? c.requiresFixedPostingSite : true,
         };
       }
     }

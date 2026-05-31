@@ -56,7 +56,13 @@ function parseServiceRole(csr: unknown): AuthCommercialServiceRole | null {
   if (typeof c.id !== "string" || typeof c.code !== "string" || typeof c.name !== "string") {
     return null;
   }
-  return { id: c.id.trim(), code: c.code.trim(), name: c.name.trim() };
+  return {
+    id: c.id.trim(),
+    code: c.code.trim(),
+    name: c.name.trim(),
+    requiresFixedPostingSite:
+      typeof c.requiresFixedPostingSite === "boolean" ? c.requiresFixedPostingSite : true,
+  };
 }
 
 export async function getServerSession(): Promise<ClientSession | null> {

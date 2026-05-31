@@ -5,7 +5,7 @@ import { prismaRetry } from "@/lib/prisma-retry";
 import { OpenReportButton } from "@/components/OpenReportButton";
 import { PaymentMethod, Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
 import {
   commercialServiceErrorForOperations,
@@ -57,7 +57,7 @@ export default async function SalesReportPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const assignedSalesPointName = session.salesPoint?.name ?? null;
   const scope = resolveServiceScope(session);

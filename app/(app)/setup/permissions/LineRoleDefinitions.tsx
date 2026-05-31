@@ -41,6 +41,7 @@ export function LineRoleDefinitions(props: {
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
   const [sortOrder, setSortOrder] = React.useState("10");
+  const [requiresFixedPostingSite, setRequiresFixedPostingSite] = React.useState(true);
   const [banner, setBanner] = React.useState<{ type: "error" | "ok"; text: string } | null>(
     null,
   );
@@ -51,6 +52,7 @@ export function LineRoleDefinitions(props: {
     setCode("");
     setName("");
     setSortOrder("10");
+    setRequiresFixedPostingSite(true);
     if (opts?.clearBanner !== false) setBanner(null);
   }
 
@@ -70,6 +72,7 @@ export function LineRoleDefinitions(props: {
     setCode(row.code);
     setName(row.name);
     setSortOrder(String(row.sortOrder));
+    setRequiresFixedPostingSite(row.requiresFixedPostingSite);
     setBanner(null);
     setIsFormOpen(true);
     onSelectRole(row.id);
@@ -219,6 +222,33 @@ export function LineRoleDefinitions(props: {
               </div>
 
               <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="lineRoleRequiresFixedPostingSite">
+                  Posting site
+                </label>
+                <div className={`${fieldControlClass} flex items-center gap-2 py-1.5`}>
+                  <input
+                    id="lineRoleRequiresFixedPostingSite"
+                    name="requiresFixedPostingSite"
+                    type="checkbox"
+                    value="1"
+                    checked={requiresFixedPostingSite}
+                    onChange={(e) => setRequiresFixedPostingSite(e.target.checked)}
+                    disabled={busy}
+                  />
+                  <span className="text-xs">
+                    Requires a fixed sales point or factory assignment
+                  </span>
+                  {!requiresFixedPostingSite ? (
+                    <input type="hidden" name="requiresFixedPostingSite" value="0" />
+                  ) : null}
+                  <p className={`${hintClass} w-full`}>
+                    Uncheck for senior supervisors, managers, and other roles that roam across
+                    sites. Org-wide global roles are always exempt.
+                  </p>
+                </div>
+              </div>
+
+              <div className={fieldRowClass}>
                 <label className={fieldLabelClass} htmlFor="lineRoleSortOrder">
                   Sort order
                 </label>
@@ -287,6 +317,7 @@ export function LineRoleDefinitions(props: {
                 <tr className="border-b border-border text-left">
                   <th className="p-2 font-medium">Display name</th>
                   <th className="p-2 font-medium">Code</th>
+                  <th className="p-2 font-medium w-28">Posting site</th>
                   <th className="p-2 font-medium w-14">Sort</th>
                   <th className="p-2 font-medium w-16">Users</th>
                   <th className="p-2 font-medium w-20">Status</th>
@@ -314,6 +345,9 @@ export function LineRoleDefinitions(props: {
                   >
                     <td className="p-2 font-medium">{row.name}</td>
                     <td className="p-2 font-mono text-xs">{row.code}</td>
+                    <td className="p-2 text-xs">
+                      {row.requiresFixedPostingSite ? "Fixed site" : "Roams"}
+                    </td>
                     <td className="p-2 tabular-nums">{row.sortOrder}</td>
                     <td className="p-2 tabular-nums">{row.userCount}</td>
                     <td className="p-2">

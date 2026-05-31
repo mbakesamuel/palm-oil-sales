@@ -1,6 +1,10 @@
 import { UserRole } from "@/lib/domain";
 
 export { roleRequiresSalesPoint } from "./auth-roles";
+export {
+  sessionRequiresFixedPostingSite,
+  userRequiresFixedPostingSite,
+} from "./sales-point-assignment";
 
 const LABELS: Record<UserRole, string> = {
   [UserRole.ADMIN]: "Admin",

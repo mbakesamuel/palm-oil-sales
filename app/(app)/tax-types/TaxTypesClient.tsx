@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SkeletonTable } from "@/components/SkeletonTable";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 
 type RateRow = { id: string; rate: string; effectiveFromIso: string; variant: string };
@@ -293,7 +294,16 @@ export function TaxTypesClient(props: {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">All tax types</h2>
         {types.length === 0 ? (
-          <p className="text-sm opacity-75">No tax types yet.</p>
+          <SkeletonTable
+            emptyMessage="No tax types yet."
+            columns={[
+              { label: "Code", skeleton: "narrow" },
+              { label: "Name", skeleton: "wide" },
+              { label: "Sort", skeleton: "narrow" },
+              { label: "Rate schedule" },
+              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
+            ]}
+          />
         ) : (
           <ul className="space-y-4">
             {types.map((t) => (

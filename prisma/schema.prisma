@@ -244,6 +244,9 @@ model CommercialServiceRole {
   commercialService   CommercialService @relation(fields: [commercialServiceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   code                String
   name                String
+  /// When true, users on this role must be assigned to one sales point (or factory on factory lines).
+  /// Senior supervisors, managers, and org-wide global roles roam without a fixed posting site.
+  requiresFixedPostingSite Boolean      @default(true)
   sortOrder           Int               @default(0)
   isActive            Boolean           @default(true)
   createdAt           DateTime          @default(now())

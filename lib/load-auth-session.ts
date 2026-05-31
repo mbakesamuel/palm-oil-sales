@@ -4,7 +4,11 @@ import type { AuthSession } from "@/lib/auth-session";
 import type { UserRole } from "@/lib/domain";
 import { profileFromCommercialService } from "@/lib/commercial-profile";
 import { getPrismaClient } from "@/lib/prisma";
-import { roleRequiresCommercialServiceAssignment, roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { roleRequiresCommercialServiceAssignment } from "@/lib/auth-roles";
+import {
+  defaultRequiresFixedPostingSiteForRoleCode,
+  userRequiresFixedPostingSite,
+} from "@/lib/sales-point-assignment";
 const userSessionInclude = {
   salesPoint: { select: { id: true, name: true } },
   factory: { select: { id: true, name: true } },
@@ -20,7 +24,7 @@ const userSessionInclude = {
     },
   },
   commercialServiceRole: {
-    select: { id: true, code: true, name: true, isActive: true },
+    select: { id: true, code: true, name: true, isActive: true, requiresFixedPostingSite: true },
   },
   globalRoleDefinition: {
     select: { id: true, code: true, displayName: true, isActive: true, legacyRole: true },
@@ -50,6 +54,7 @@ function mapUserToAuthSession(user: {
     code: string;
     name: string;
     isActive: boolean;
+    requiresFixedPostingSite: boolean;
   } | null;
   globalRoleDefinition: {
     id: string;
@@ -88,6 +93,7 @@ function mapUserToAuthSession(user: {
       id: user.commercialServiceRole.id,
       code: user.commercialServiceRole.code,
       name: user.commercialServiceRole.name,
+      requiresFixedPostingSite: user.commercialServiceRole.requiresFixedPostingSite,
     };
   }
 
@@ -111,7 +117,7 @@ function mapUserToAuthSession(user: {
         ? (globalRoleDef.legacyRole as UserRole)
         : (user.role as UserRole);
 
-  if (!validateUserAssignment(role, commercialService, commercialServiceRole, salesPoint, factory)) {
+  if (!validateUserAssignment(role, globalRole, commercialService, commercialServiceRole, salesPoint, factory)) {
     return null;
   }
 
@@ -131,6 +137,7 @@ function mapUserToAuthSession(user: {
 
 function validateUserAssignment(
   role: UserRole,
+  globalRole: AuthSession["globalRole"],
   commercialService: AuthSession["commercialService"],
   commercialServiceRole: AuthSession["commercialServiceRole"],
   salesPoint: AuthSession["salesPoint"],
@@ -140,14 +147,18 @@ function validateUserAssignment(
     if (!commercialService) return false;
   }
 
-  if (roleRequiresSalesPoint(role) && commercialService) {
+  if (!userRequiresFixedPostingSite({ role, globalRole, commercialServiceRole })) {
+    return true;
+  }
+
+  if (commercialService) {
     if (commercialService.siteKind === "FACTORY") {
       if (!factory) return false;
     } else if (!salesPoint) {
       return false;
     }
-  } else if (roleRequiresSalesPoint(role) && !commercialService) {
-    if (!salesPoint) return false;
+  } else if (!salesPoint) {
+    return false;
   }
 
   return true;
@@ -212,7 +223,11 @@ export async function ensureDefaultServiceRolesForCommercialService(
     ];
     for (const r of roles) {
       await prisma.commercialServiceRole.create({
-        data: { commercialServiceId, ...r },
+        data: {
+          commercialServiceId,
+          ...r,
+          requiresFixedPostingSite: defaultRequiresFixedPostingSiteForRoleCode(r.code),
+        },
       });
     }
     return;
@@ -221,11 +236,17 @@ export async function ensureDefaultServiceRolesForCommercialService(
   const roles = [
     { code: "clerk", name: "Sales clerk", sortOrder: 10 },
     { code: "supervisor", name: "Supervisor", sortOrder: 20 },
-    { code: "bpo_clerk", name: "BPO clerk in charge", sortOrder: 30 },
+    { code: "senior_supervisor", name: "Senior sales supervisor", sortOrder: 30 },
+    { code: "manager", name: "Manager", sortOrder: 40 },
+    { code: "bpo_clerk", name: "BPO clerk in charge", sortOrder: 50 },
   ];
   for (const r of roles) {
     await prisma.commercialServiceRole.create({
-      data: { commercialServiceId, ...r },
+      data: {
+        commercialServiceId,
+        ...r,
+        requiresFixedPostingSite: defaultRequiresFixedPostingSiteForRoleCode(r.code),
+      },
     });
   }
 }

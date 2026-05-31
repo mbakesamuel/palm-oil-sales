@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import * as React from "react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRole } from "@/lib/domain";
 import { PERMISSION_KEYS, permissionLabelForKey, type PermissionKey } from "@/lib/access-control-keys";
@@ -43,13 +44,28 @@ function filterKeysForLine(
   return keys.filter((k) => !k.startsWith("route:") || allowedRoutes.has(k));
 }
 
+const permissionCheckboxClass =
+  "m-0 size-5 shrink-0 cursor-pointer rounded border-border accent-brand disabled:cursor-not-allowed";
+
+function groupBusyId(group: string): string {
+  return `group:${group}`;
+}
+
+type GroupSaveProgress = {
+  group: string;
+  done: number;
+  total: number;
+};
+
 function PermissionMatrix(props: {
   keys: PermissionKey[];
   map: Record<string, boolean> | null;
   busyKey: string | null;
+  groupSaveProgress: GroupSaveProgress | null;
   onToggle: (key: PermissionKey, allowed: boolean) => void;
+  onToggleGroup: (keys: PermissionKey[], allowed: boolean) => void;
 }) {
-  const { keys, map, busyKey, onToggle } = props;
+  const { keys, map, busyKey, groupSaveProgress, onToggle, onToggleGroup } = props;
   const grouped = keys.reduce(
     (acc, k) => {
       const g = groupForKey(k);
@@ -65,38 +81,98 @@ function PermissionMatrix(props: {
 
   return (
     <div className="space-y-4">
-      {Object.entries(grouped).map(([group, list]) => (
-        <section key={group} className="rounded-lg border border-border p-4">
-          <div className="font-medium text-sm">{group}</div>
-          <div className="mt-3 grid gap-2">
-            {list.map((key) => {
-              const allowed = Boolean(map[key]);
-              return (
-                <label
-                  key={key}
-                  className="flex w-full cursor-pointer items-start gap-2 text-sm"
+      {Object.entries(grouped).map(([group, list]) => {
+        const groupBusyIdValue = groupBusyId(group);
+        const groupBusy = busyKey === groupBusyIdValue;
+        const progress =
+          groupSaveProgress?.group === groupBusyIdValue ? groupSaveProgress : null;
+        const allChecked = list.every((key) => Boolean(map[key]));
+        const someChecked = list.some((key) => Boolean(map[key]));
+
+        return (
+          <section
+            key={group}
+            aria-busy={groupBusy}
+            className={[
+              "relative rounded-lg border border-border p-4",
+              groupBusy ? "border-brand/40 bg-brand/3" : "",
+            ].join(" ")}
+          >
+            <label
+              className={[
+                "flex items-center gap-2 border-b border-border pb-2 text-sm",
+                groupBusy ? "cursor-wait" : "cursor-pointer",
+              ].join(" ")}
+            >
+              {groupBusy ? (
+                <span
+                  className="inline-flex size-5 shrink-0 items-center justify-center"
+                  aria-hidden
                 >
-                  <span className="min-w-0 flex-1 break-all font-mono text-xs leading-6">
-                    {permissionLabelForKey(key)}
-                    {permissionLabelForKey(key) !== key ? (
-                      <span className="mt-0.5 block font-sans text-[11px] opacity-60">{key}</span>
-                    ) : null}
-                  </span>
-                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center">
+                  <Loader2 className="size-4 animate-spin text-brand" />
+                </span>
+              ) : (
+                <input
+                  ref={(el) => {
+                    if (el) el.indeterminate = someChecked && !allChecked;
+                  }}
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={(e) => void onToggleGroup(list, e.target.checked)}
+                  disabled={busyKey !== null}
+                  aria-label={`Select all in ${group}`}
+                  className={permissionCheckboxClass}
+                />
+              )}
+              <span className="min-w-0 flex-1 font-medium">{group}</span>
+              {groupBusy ? (
+                <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-brand">
+                  Saving
+                  {progress && progress.total > 0
+                    ? ` ${progress.done}/${progress.total}`
+                    : null}
+                  …
+                </span>
+              ) : (
+                <span className="shrink-0 text-xs opacity-60">Select all</span>
+              )}
+            </label>
+            <div
+              className={[
+                "mt-2 grid gap-1.5",
+                groupBusy ? "pointer-events-none opacity-60" : "",
+              ].join(" ")}
+            >
+              {list.map((key) => {
+                const allowed = Boolean(map[key]);
+                const label = permissionLabelForKey(key);
+                return (
+                  <label
+                    key={key}
+                    className="flex w-full cursor-pointer items-start gap-2 py-0.5 text-sm"
+                  >
                     <input
                       type="checkbox"
                       checked={allowed}
                       onChange={(e) => void onToggle(key, e.target.checked)}
-                      disabled={busyKey !== null && busyKey !== key}
-                      className="m-0 size-5 shrink-0 cursor-pointer rounded border-border accent-brand disabled:cursor-not-allowed"
+                      disabled={groupBusy || (busyKey !== null && busyKey !== key)}
+                      className={`${permissionCheckboxClass} mt-0.5`}
                     />
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+                    <span className="min-w-0 flex-1 break-all font-mono text-xs leading-5">
+                      {label}
+                      {label !== key ? (
+                        <span className="mt-0.5 block font-sans text-[11px] opacity-60">
+                          {key}
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -119,6 +195,8 @@ export function PermissionsClient(props: {
   const [serviceRoleId, setServiceRoleId] = React.useState("");
   const [map, setMap] = React.useState<Record<string, boolean> | null>(null);
   const [busyKey, setBusyKey] = React.useState<string | null>(null);
+  const [groupSaveProgress, setGroupSaveProgress] =
+    React.useState<GroupSaveProgress | null>(null);
   const isAdmin = session?.role === UserRole.ADMIN;
 
   const selectedService = lineCatalog.services.find(
@@ -226,6 +304,39 @@ export function PermissionsClient(props: {
     }
   }
 
+  async function toggleGlobalGroup(keys: PermissionKey[], allowed: boolean) {
+    if (!globalRoleId || !map) return;
+    const group = groupForKey(keys[0] ?? ("" as PermissionKey));
+    const toUpdate = keys.filter((key) => Boolean(map[key]) !== allowed);
+    if (toUpdate.length === 0) return;
+    const busyId = groupBusyId(group);
+    setBusyKey(busyId);
+    setGroupSaveProgress({ group: busyId, done: 0, total: toUpdate.length });
+    setMap((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      for (const key of toUpdate) next[key] = allowed;
+      return next;
+    });
+    try {
+      for (let i = 0; i < toUpdate.length; i++) {
+        const key = toUpdate[i]!;
+        const fd = new FormData();
+        fd.set("globalRoleId", globalRoleId);
+        fd.set("key", key);
+        fd.set("allowed", allowed ? "1" : "0");
+        await setGlobalRolePermission(fd);
+        setGroupSaveProgress({ group: busyId, done: i + 1, total: toUpdate.length });
+      }
+    } catch {
+      const restored = await getGlobalRolePermissionsAction(globalRoleId);
+      setMap(restored as unknown as Record<string, boolean>);
+    } finally {
+      setBusyKey(null);
+      setGroupSaveProgress(null);
+    }
+  }
+
   async function toggleLine(key: PermissionKey, allowed: boolean) {
     if (!serviceRoleId) return;
     setBusyKey(key);
@@ -238,6 +349,39 @@ export function PermissionsClient(props: {
       setMap((prev) => (prev ? { ...prev, [key]: allowed } : prev));
     } finally {
       setBusyKey(null);
+    }
+  }
+
+  async function toggleLineGroup(keys: PermissionKey[], allowed: boolean) {
+    if (!serviceRoleId || !map) return;
+    const group = groupForKey(keys[0] ?? ("" as PermissionKey));
+    const toUpdate = keys.filter((key) => Boolean(map[key]) !== allowed);
+    if (toUpdate.length === 0) return;
+    const busyId = groupBusyId(group);
+    setBusyKey(busyId);
+    setGroupSaveProgress({ group: busyId, done: 0, total: toUpdate.length });
+    setMap((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      for (const key of toUpdate) next[key] = allowed;
+      return next;
+    });
+    try {
+      for (let i = 0; i < toUpdate.length; i++) {
+        const key = toUpdate[i]!;
+        const fd = new FormData();
+        fd.set("serviceRoleId", serviceRoleId);
+        fd.set("key", key);
+        fd.set("allowed", allowed ? "1" : "0");
+        await setServiceRolePermission(fd);
+        setGroupSaveProgress({ group: busyId, done: i + 1, total: toUpdate.length });
+      }
+    } catch {
+      const restored = await getServiceRolePermissionsAction(serviceRoleId);
+      setMap(restored as unknown as Record<string, boolean>);
+    } finally {
+      setBusyKey(null);
+      setGroupSaveProgress(null);
     }
   }
 
@@ -421,7 +565,9 @@ export function PermissionsClient(props: {
             keys={visibleKeys}
             map={map}
             busyKey={busyKey}
+            groupSaveProgress={groupSaveProgress}
             onToggle={(key, allowed) => void toggleLine(key, allowed)}
+            onToggleGroup={(keys, allowed) => void toggleLineGroup(keys, allowed)}
           />
         </div>
       ) : globalRoleId ? (
@@ -431,7 +577,9 @@ export function PermissionsClient(props: {
             keys={visibleKeys}
             map={map}
             busyKey={busyKey}
+            groupSaveProgress={groupSaveProgress}
             onToggle={(key, allowed) => void toggleGlobal(key, allowed)}
+            onToggleGroup={(keys, allowed) => void toggleGlobalGroup(keys, allowed)}
           />
         </div>
       ) : (

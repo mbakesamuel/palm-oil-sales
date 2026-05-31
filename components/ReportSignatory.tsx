@@ -1,13 +1,12 @@
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import type { UserRole } from "@/lib/domain";
 
 /** Bottom-right signature line for printed reports. */
 export async function ReportSignatory() {
   const session = await getServerSession();
-  const role = session?.role as UserRole | undefined;
   const titleLine =
-    role != null && roleRequiresSalesPoint(role)
+    session != null && sessionRequiresFixedPostingSite(session)
       ? "Sales Supervisor"
       : "Manager, Local Sales";
 

@@ -24,10 +24,12 @@ import {
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
 import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
-import { canPickPendingPosSales, roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { canPickPendingPosSales } from "@/lib/auth-roles";
+import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
 import {
+  fetchActorSalesPointScope,
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
@@ -167,10 +169,7 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
   if (!session?.userId) {
     throw new Error("Login required.");
   }
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) {
     throw new Error("Login required.");
   }
@@ -779,7 +778,7 @@ export async function listPendingSales(): Promise<PendingSaleRow[]> {
   if (commercialServiceErrorForOperations(scope)) return [];
 
   const salesPointFilter =
-    actor.salesPointId != null && roleRequiresSalesPoint(actor.role as AppUserRole)
+    actor.salesPointId != null && actorRequiresFixedPostingSite(actor)
       ? { salesPointId: actor.salesPointId }
       : {};
 
