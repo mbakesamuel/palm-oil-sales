@@ -9,6 +9,10 @@
     "plugins": ["expo-router", "expo-secure-store"],
     "experiments": {
       "typedRoutes": true
+    },
+    "android": {
+      "package": "com.posapp.monitor",
+      "versionCode": 1
     }
   }
 }

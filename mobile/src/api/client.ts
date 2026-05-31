@@ -88,10 +88,29 @@ export function isNetworkError(error: unknown): boolean {
 
 export function networkErrorMessage(): string {
   const base = getApiBaseUrl() || "(not configured)";
+  if (__DEV__) {
+    return (
+      `Cannot reach the server at ${base}. ` +
+      "Start the backend with npm run dev in the pos-app folder. " +
+      "On a physical phone, PC and phone must be on the same Wi‑Fi, and Windows Firewall must allow port 3000."
+    );
+  }
   return (
     `Cannot reach the server at ${base}. ` +
-    "Start the backend with npm run dev in the pos-app folder. " +
-    "On a physical phone, PC and phone must be on the same Wi‑Fi, and Windows Firewall must allow port 3000."
+    "Check mobile data or Wi‑Fi, and confirm the app was built with the correct production API URL."
+  );
+}
+
+export function missingApiBaseUrlMessage(): string {
+  if (__DEV__) {
+    return (
+      "API base URL is not configured. Set EXPO_PUBLIC_API_BASE_URL in mobile/.env " +
+      "or extra.apiBaseUrl in app.json, then restart Expo."
+    );
+  }
+  return (
+    "API base URL is not configured in this build. " +
+    "Rebuild the APK with EXPO_PUBLIC_API_BASE_URL set to your Vercel URL (see mobile/README.md)."
   );
 }
 
@@ -114,7 +133,9 @@ export async function parseJsonResponse<T>(
     if (snippet.startsWith("<!doctype") || snippet.startsWith("<html")) {
       throw new ApiError(
         res.status === 404
-          ? `API not found (${res.status}). Restart the backend with npm run dev in the pos-app folder.`
+          ? __DEV__
+            ? `API not found (${res.status}). Restart the backend with npm run dev in the pos-app folder.`
+            : `API not found (${res.status}). Confirm the mobile API is deployed on Vercel and the app points to the correct URL.`
           : `Server returned HTML instead of JSON (${res.status}).`,
         res.status,
       );
@@ -170,7 +191,7 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const base = getApiBaseUrl();
   if (!base) {
-    throw new ApiError("API base URL is not configured.", 0);
+    throw new ApiError(missingApiBaseUrlMessage(), 0);
   }
 
   const headers = new Headers(init.headers);

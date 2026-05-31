@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "@/auth/AuthProvider";
-import { describeApiConnection } from "@/api/client";
+import { describeApiConnection, getApiBaseUrl } from "@/api/client";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -33,7 +33,7 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>POS Monitor</Text>
       <Text style={styles.subtitle}>Supervisor & leadership sign-in</Text>
-      {__DEV__ ? (
+      {getApiBaseUrl() ? (
         <Text style={styles.apiHint}>{describeApiConnection()}</Text>
       ) : null}
       <TextInput
