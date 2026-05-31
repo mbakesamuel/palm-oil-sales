@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma, StockCondition } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getOrInitCompanySettings } from "@/lib/settings";
@@ -55,7 +55,7 @@ function dec(v: Prisma.Decimal | string | number | null | undefined): Prisma.Dec
 export async function loadStockOnHandReport(
   session: AuthSession,
 ): Promise<StockOnHandReportData | { type: "no-sales-point" }> {
-  const scopedToSalesPoint = roleRequiresSalesPoint(session.role);
+  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const assignedSalesPointName = session.salesPoint?.name ?? null;
 

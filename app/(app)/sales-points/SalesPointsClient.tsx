@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SkeletonTable } from "@/components/SkeletonTable";
 
 type StorageLocationRow = {
   id: number;
@@ -348,7 +349,14 @@ export function SalesPointsClient(props: {
         </div>
 
         {points.length === 0 ? (
-          <p className="text-sm opacity-75">No sales points yet.</p>
+          <SkeletonTable
+            emptyMessage="No sales points yet."
+            columns={[
+              { label: "Name", skeleton: "wide" },
+              { label: "Locations", skeleton: "narrow" },
+              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
+            ]}
+          />
         ) : (
           <div className="space-y-3">
             {points.map((p) => (

@@ -6,7 +6,7 @@ import {
   type ActorSalesPointRow,
 } from "@/lib/auth-sales-point-scope";
 import { getPrismaClient } from "@/lib/prisma";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import type { AuthSession } from "@/lib/auth-session";
 import {
@@ -209,7 +209,7 @@ async function salesPointScopeForActor(
 ): Promise<{ actor: ActorSalesPointRow | null; scopedSalesPointId: number | null }> {
   const actor = await fetchActorSalesPointScope(prisma, userId);
   if (!actor) return { actor: null, scopedSalesPointId: null };
-  if (roleRequiresSalesPoint(actor.role)) {
+  if (actorRequiresFixedPostingSite(actor)) {
     return { actor, scopedSalesPointId: actor.salesPointId ?? null };
   }
   return { actor, scopedSalesPointId: null };

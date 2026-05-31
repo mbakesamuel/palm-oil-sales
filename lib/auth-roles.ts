@@ -6,8 +6,8 @@ export {
 } from "@/lib/service-scope";
 
 /**
- * Roles that must have a fixed sales point on the user record (assigned by admin).
- * Server actions enforce posting scope for these roles via `lib/auth-sales-point-scope`.
+ * Legacy UserRole fallback when a line role has no `requiresFixedPostingSite` flag loaded.
+ * Prefer `sessionRequiresFixedPostingSite` / `actorRequiresFixedPostingSite` for enforcement.
  */
 export function roleRequiresSalesPoint(role: UserRole): boolean {
   return (

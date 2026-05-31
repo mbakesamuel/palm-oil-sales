@@ -4,8 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { UserRole } from "@/lib/domain";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SkeletonTable } from "@/components/SkeletonTable";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleRequiresSalesPoint } from "@/lib/auth-display";
 import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 
 type CommercialOption = {
@@ -21,6 +21,7 @@ type ServiceRoleOption = {
   code: string;
   name: string;
   commercialServiceId: string;
+  requiresFixedPostingSite: boolean;
 };
 
 type UserRow = {
@@ -133,6 +134,11 @@ export function UsersClient(props: {
 
   const isLineStaffAccount = Boolean(commercialServiceId);
 
+  const selectedLineRole = serviceRoles.find((r) => r.id === commercialServiceRoleId) ?? null;
+  const requiresFixedPostingSiteForForm = isLineStaffAccount
+    ? (selectedLineRole?.requiresFixedPostingSite ?? true)
+    : false;
+
   function applyRoleSelect(value: string) {
     setRoleSelect(value);
     if (value.startsWith("global:")) {
@@ -153,7 +159,7 @@ export function UsersClient(props: {
       setRole(
         lineRole ? userRoleFromLineRoleCode(lineRole.code) : ("" as UserRole),
       );
-      if (lineRole && !roleRequiresSalesPoint(userRoleFromLineRoleCode(lineRole.code))) {
+      if (lineRole && !lineRole.requiresFixedPostingSite) {
         setSalesPointId("");
       }
     }
@@ -247,13 +253,13 @@ export function UsersClient(props: {
         setBanner({ type: "error", text: "Please select a role." });
         return;
       }
-      if (lineSiteKind === "FACTORY" && !factoryId) {
+      if (lineSiteKind === "FACTORY" && requiresFixedPostingSiteForForm && !factoryId) {
         setBanner({ type: "error", text: "Please select a factory." });
         return;
       }
       if (
         lineSiteKind === "SALES_POINT" &&
-        roleRequiresSalesPoint(derivedRole) &&
+        requiresFixedPostingSiteForForm &&
         !salesPointId
       ) {
         setBanner({ type: "error", text: "Please select a sales point." });
@@ -561,8 +567,7 @@ export function UsersClient(props: {
                   </select>
                 ) : isLineStaffAccount &&
                   lineSiteKind === "SALES_POINT" &&
-                  role !== "" &&
-                  roleRequiresSalesPoint(role) ? (
+                  requiresFixedPostingSiteForForm ? (
                   <select
                     id="salesPointId"
                     name="salesPointId"
@@ -587,7 +592,7 @@ export function UsersClient(props: {
                 ) : (
                   <p className={`${fieldControlClass} text-xs opacity-70 py-1.5`}>
                     {isLineStaffAccount
-                      ? "No sales point required for this role."
+                      ? "No fixed sales point for this role (roams across sites)."
                       : "Organization-wide access (no single posting site)."}
                   </p>
                 )}
@@ -664,7 +669,18 @@ export function UsersClient(props: {
           </button>
         </div>
         {users.length === 0 ? (
-          <p className="text-sm opacity-75">No users yet.</p>
+          <SkeletonTable
+            emptyMessage="No users yet."
+            columns={[
+              { label: "Username" },
+              { label: "Name", skeleton: "wide" },
+              { label: "Role" },
+              { label: "Site" },
+              { label: "Line" },
+              { label: "Active", skeleton: "narrow" },
+              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
+            ]}
+          />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">

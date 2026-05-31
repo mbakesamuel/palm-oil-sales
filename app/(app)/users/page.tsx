@@ -58,6 +58,7 @@ export default async function UsersPage() {
           code: true,
           name: true,
           commercialServiceId: true,
+          requiresFixedPostingSite: true,
         },
       }),
       prisma.globalRoleDefinition.findMany({

@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SkeletonTable } from "@/components/SkeletonTable";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 
 type TaxTypeOpt = { id: string; code: string; name: string };
@@ -372,7 +373,18 @@ export function TaxRegimesClient(props: {
         </div>
 
         {regimes.length === 0 ? (
-          <p className="text-sm opacity-75">No tax regimes yet.</p>
+          <SkeletonTable
+            emptyMessage="No tax regimes yet."
+            columns={[
+              { label: "Name", skeleton: "wide" },
+              { label: "Line" },
+              { label: "Taxes" },
+              { label: "Kind", skeleton: "narrow" },
+              { label: "VAT", skeleton: "narrow" },
+              { label: "Customers", skeleton: "narrow" },
+              { label: "Actions", className: "w-36 text-right", skeleton: "narrow" },
+            ]}
+          />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="min-w-full text-sm">

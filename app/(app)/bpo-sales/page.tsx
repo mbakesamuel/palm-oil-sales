@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { getBotaSalesPointId } from "@/lib/bpo";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
@@ -15,7 +15,7 @@ export default async function BpoSalesPage() {
   if (!session) redirect("/login");
   const prisma = getPrismaClient();
   const botaSalesPointId = await getBotaSalesPointId(prisma);
-  const scoped = roleRequiresSalesPoint(session.role);
+  const scoped = sessionRequiresFixedPostingSite(session);
   const canPost = botaSalesPointId != null && (!scoped || session.salesPoint?.id === botaSalesPointId);
 
   const [products, sales] = await Promise.all([

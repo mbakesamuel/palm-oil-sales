@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-server";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
@@ -30,7 +30,7 @@ function xaf(d: Prisma.Decimal) {
 export default async function BpoReportPrintPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  const scoped = roleRequiresSalesPoint(session.role);
+  const scoped = sessionRequiresFixedPostingSite(session);
   const assignedSalesPointId = session.salesPoint?.id ?? null;
   const prisma = getPrismaClient();
 

@@ -1,11 +1,13 @@
 import type { CommercialSiteKind } from "@/lib/domain-commercial";
 import type { AuthSession } from "@/lib/auth-session";
-import { roleRequiresSalesPoint } from "@/lib/auth-roles";
+import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import type { UserRole } from "@/lib/domain";
 import { resolveCommercialProfile, siteLabelForKind } from "@/lib/commercial-profile";
 
 export type ActorPostingSiteRow = {
   role: string;
+  globalRoleDefinitionId?: string | null;
+  requiresFixedPostingSite?: boolean | null;
   salesPointId: number | null;
   factoryId: string | null;
   isActive: boolean;
@@ -37,7 +39,13 @@ export function postingSiteErrorForSubmitted(
   submittedFactoryId: string | null,
 ): string | null {
   if (!actor.isActive) return "Your account is inactive.";
-  if (!roleRequiresSalesPoint(actor.role as UserRole)) {
+  if (
+    !actorRequiresFixedPostingSite({
+      role: actor.role as UserRole,
+      globalRoleDefinitionId: actor.globalRoleDefinitionId,
+      requiresFixedPostingSite: actor.requiresFixedPostingSite,
+    })
+  ) {
     return null;
   }
 
@@ -72,7 +80,13 @@ export function salesPointErrorForResource(
   resourceSalesPointId: number | null,
 ): string | null {
   if (!actor.isActive) return "Your account is inactive.";
-  if (!roleRequiresSalesPoint(actor.role as UserRole)) {
+  if (
+    !actorRequiresFixedPostingSite({
+      role: actor.role as UserRole,
+      globalRoleDefinitionId: actor.globalRoleDefinitionId,
+      requiresFixedPostingSite: actor.requiresFixedPostingSite,
+    })
+  ) {
     return null;
   }
   if (actor.factoryId && !actor.salesPointId) {

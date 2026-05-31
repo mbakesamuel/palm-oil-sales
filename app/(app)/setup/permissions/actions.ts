@@ -14,6 +14,7 @@ import {
   getPermissionsForSession,
   type PermissionKey,
 } from "@/lib/access-control";
+import { defaultRequiresFixedPostingSiteForRoleCode } from "@/lib/sales-point-assignment";
 import { parseEnabledModulesJson } from "@/lib/commercial-modules";
 import { ensureGlobalRoleDefinitions, isRetiredGlobalLegacyRole } from "@/lib/global-role-definitions";
 import { getServerSession } from "@/lib/auth-server";
@@ -354,6 +355,7 @@ export type LineRoleRow = {
   commercialServiceId: string;
   sortOrder: number;
   isActive: boolean;
+  requiresFixedPostingSite: boolean;
   userCount: number;
 };
 
@@ -399,6 +401,7 @@ export async function getLinePermissionsCatalogAction(): Promise<LinePermissions
         commercialServiceId: true,
         sortOrder: true,
         isActive: true,
+        requiresFixedPostingSite: true,
         _count: { select: { users: true } },
       },
     }),
@@ -418,6 +421,7 @@ export async function getLinePermissionsCatalogAction(): Promise<LinePermissions
       commercialServiceId: r.commercialServiceId,
       sortOrder: r.sortOrder,
       isActive: r.isActive,
+      requiresFixedPostingSite: r.requiresFixedPostingSite,
       userCount: r._count.users,
     })),
   };
@@ -432,6 +436,7 @@ export async function saveCommercialServiceRole(formData: FormData) {
   const codeInput = normalizeRoleCode(String(formData.get("code") ?? ""));
   const name = String(formData.get("name") ?? "").trim();
   const sortOrder = Number.parseInt(String(formData.get("sortOrder") ?? "10"), 10);
+  const requiresFixedPostingSite = !formData.getAll("requiresFixedPostingSite").includes("0");
 
   if (!commercialServiceId) throw new Error("Commercial line is required.");
   if (!codeInput) throw new Error("Role code is required (letters, numbers, underscores).");
@@ -470,6 +475,7 @@ export async function saveCommercialServiceRole(formData: FormData) {
         code: codeInput,
         name,
         sortOrder: Number.isFinite(sortOrder) ? sortOrder : 10,
+        requiresFixedPostingSite,
       },
     });
   } else {
@@ -486,6 +492,10 @@ export async function saveCommercialServiceRole(formData: FormData) {
         name,
         sortOrder: Number.isFinite(sortOrder) ? sortOrder : 10,
         isActive: true,
+        requiresFixedPostingSite:
+          formData.getAll("requiresFixedPostingSite").length > 0
+            ? requiresFixedPostingSite
+            : defaultRequiresFixedPostingSiteForRoleCode(codeInput),
       },
     });
 
