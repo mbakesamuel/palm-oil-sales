@@ -11,7 +11,10 @@ import {
 } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { canCreateOrEditDeliveryOrderDraft } from "@/lib/auth-roles";
+import {
+  canCreateOrEditDeliveryOrderDraft,
+  effectiveSessionRole,
+} from "@/lib/auth-roles";
 import { ValidationStatus } from "@/lib/domain";
 import type {
   DeliveryOrderTaxPreview,
@@ -661,9 +664,14 @@ export function DeliveryOrdersClient(props: {
   );
 
 
+  const workflowRole =
+    authStatus === "ready" && session ? effectiveSessionRole(session) : null;
   const canDraftDO =
-    authStatus === "ready" && session
-      ? canCreateOrEditDeliveryOrderDraft(session.role)
+    workflowRole != null
+      ? canCreateOrEditDeliveryOrderDraft(
+          workflowRole,
+          session?.commercialServiceRole?.code,
+        )
       : false;
   const canValidateDO =
     authStatus === "ready" && session && canValidateDeliveryOrderProp;
@@ -831,7 +839,7 @@ export function DeliveryOrdersClient(props: {
             disabled={
               authStatus !== "ready" ||
               !session ||
-              !canCreateOrEditDeliveryOrderDraft(session.role)
+              !canDraftDO
             }
             onClick={resetNew}
             className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent/25 disabled:opacity-50"

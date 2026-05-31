@@ -1,9 +1,21 @@
+import type { AuthSession } from "@/lib/auth-session";
 import { UserRole } from "@/lib/domain";
+import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
 
 export {
   roleRequiresCommercialServiceAssignment,
   roleSeesAllCommercialServices,
 } from "@/lib/service-scope";
+
+/** Workflow role: line role code wins over stale `User.role` on the account row. */
+export function effectiveSessionRole(
+  session: Pick<AuthSession, "role" | "commercialServiceRole">,
+): UserRole {
+  if (session.commercialServiceRole?.code) {
+    return userRoleFromLineRoleCode(session.commercialServiceRole.code);
+  }
+  return session.role;
+}
 
 /**
  * Legacy UserRole fallback when a line role has no `requiresFixedPostingSite` flag loaded.
@@ -32,8 +44,13 @@ export function canValidateDocuments(role: UserRole): boolean {
 }
 
 /** Draft delivery orders: created / edited / deleted while still pending. */
-export function canCreateOrEditDeliveryOrderDraft(role: UserRole): boolean {
-  return role === UserRole.SENIOR_SUPERVISOR || role === UserRole.ADMIN;
+export function canCreateOrEditDeliveryOrderDraft(
+  role: UserRole,
+  commercialServiceRoleCode?: string | null,
+): boolean {
+  if (role === UserRole.SENIOR_SUPERVISOR || role === UserRole.ADMIN) return true;
+  const c = (commercialServiceRoleCode ?? "").toLowerCase();
+  return c.includes("senior") && c.includes("supervisor");
 }
 
 /** Validate a pending delivery order after a senior supervisor has prepared it. */
