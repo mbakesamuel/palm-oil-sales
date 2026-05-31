@@ -13,6 +13,8 @@ function shouldSkipRouteCheck(pathname: string): boolean {
   if (pathname === "/login" || pathname === "/forbidden") return true;
   // Auth endpoints
   if (pathname.startsWith("/api/auth")) return true;
+  // Mobile JSON API (Bearer auth handled in route handlers)
+  if (pathname.startsWith("/api/mobile/v1")) return true;
   // Internal authorization probe endpoint (node runtime)
   if (pathname === "/api/access/authorize") return true;
   // Next.js / assets
@@ -51,6 +53,15 @@ export default async function proxy(
   // Auth.js may refresh the session cookie (sliding expiration) during the middleware session lookup,
   // which would re-set `__Secure-authjs.session-token` on the logout response.
   if (pathname === "/api/auth/logout") {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set(INVOKE_PATH_HEADER, pathname);
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    res.headers.set("x-proxy-hit", "1");
+    return res;
+  }
+
+  // Mobile API uses Bearer tokens — skip cookie session gate (handlers enforce auth).
+  if (pathname.startsWith("/api/mobile/v1")) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set(INVOKE_PATH_HEADER, pathname);
     const res = NextResponse.next({ request: { headers: requestHeaders } });

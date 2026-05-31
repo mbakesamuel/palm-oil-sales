@@ -118,6 +118,7 @@ const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> =
     "route:/reports/stock-inquiry/print",
     "route:/reports/stock-vs-commitments",
     "route:/reports/stock-vs-commitments/print",
+    "route:/api/mobile/v1",
     "route:/reports/sales-budget-monthly-crosstab",
     "route:/reports/sales-budget-weekly-crosstab",
     "route:/reports/pricing",

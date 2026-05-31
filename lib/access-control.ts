@@ -23,6 +23,18 @@ export { PERMISSION_KEYS, type PermissionKey };
 
 export type RolePermissionMap = Record<PermissionKey, boolean>;
 
+function grantMobileApiAccess(base: RolePermissionMap, role: UserRole): void {
+  const allowed =
+    role === UserRole.ADMIN ||
+    role === UserRole.DIRECTOR ||
+    role === UserRole.MANAGER ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.SUPERVISOR;
+  if (allowed) {
+    base["route:/api/mobile/v1"] = true;
+  }
+}
+
 /** Palm-oil report routes (`palm_reports` module), aligned with `defaultPermissionsForRole`. */
 function grantPalmOilReportRoutes(base: RolePermissionMap) {
   const mod: CommercialModuleKey = "palm_reports";
@@ -136,7 +148,10 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     role === UserRole.DIRECTOR ||
     role === UserRole.SUPERVISOR;
 
-  base["ui:validate-delivery-orders"] = role === UserRole.DIRECTOR;
+  base["ui:validate-delivery-orders"] =
+    role === UserRole.DIRECTOR || role === UserRole.MANAGER;
+
+  grantMobileApiAccess(base, role);
 
   // Setup defaults: admin only.
   const isAdmin = role === UserRole.ADMIN;
@@ -229,6 +244,13 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
   }
   if (c.includes("manager")) {
     base["ui:validate-delivery-orders"] = true;
+  }
+  if (
+    c.includes("supervisor") ||
+    c.includes("manager") ||
+    c.includes("director")
+  ) {
+    base["route:/api/mobile/v1"] = true;
   }
   return base;
 }
@@ -464,6 +486,14 @@ export async function assertPermissionKey(key: PermissionKey): Promise<void> {
   if (!session?.userId) {
     throw new Error("Login required.");
   }
+  await assertPermissionKeyForSession(session, key);
+}
+
+/** Same checks as assertPermissionKey but for Bearer/mobile or explicit session. */
+export async function assertPermissionKeyForSession(
+  session: AuthSession,
+  key: PermissionKey,
+): Promise<void> {
   if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
     const profile = await loadCommercialProfileForSession(session);
     if (!isRouteEnabledByProfile(profile, key)) {
