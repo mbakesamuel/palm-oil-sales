@@ -37,7 +37,11 @@ function inferDevApiHost(): string | null {
 /**
  * Base URL for the Next.js backend (web + /api/mobile/v1).
  *
- * Priority: app.json extra.apiBaseUrl → EXPO_PUBLIC_API_BASE_URL → dev auto-detect.
+ * Priority:
+ * - app.json `extra.apiBaseUrl` (explicit override)
+ * - In dev: same host as Expo / Metro (matches the QR code URL)
+ * - `EXPO_PUBLIC_API_BASE_URL` (manual fallback when auto-detect fails)
+ * - Release builds: env / extra only
  */
 export function getApiBaseUrl(): string {
   const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined;
@@ -45,21 +49,25 @@ export function getApiBaseUrl(): string {
     return trimTrailingSlash(extra.apiBaseUrl.trim());
   }
 
-  const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-  if (fromEnv) {
-    return trimTrailingSlash(fromEnv);
-  }
-
   if (__DEV__) {
     const inferred = inferDevApiHost();
     if (inferred) {
       return `http://${inferred}:${API_PORT}`;
+    }
+    const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+    if (fromEnv) {
+      return trimTrailingSlash(fromEnv);
     }
     // Android emulator: localhost on the device is not your PC.
     if (Platform.OS === "android") {
       return `http://10.0.2.2:${API_PORT}`;
     }
     return `http://localhost:${API_PORT}`;
+  }
+
+  const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (fromEnv) {
+    return trimTrailingSlash(fromEnv);
   }
 
   return "";
