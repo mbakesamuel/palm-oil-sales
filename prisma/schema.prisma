@@ -21,7 +21,6 @@ enum UserRole {
   SENIOR_SUPERVISOR
   SUPERVISOR
   CLERK
-  CLERK_IN_CHARGE_BPO
 }
 
 /// Where operational users post (collection point vs factory).

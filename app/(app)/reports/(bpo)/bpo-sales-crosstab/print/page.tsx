@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { UserRole } from "@prisma/client";
 import { AutoPrint } from "@/components/AutoPrint";
 import { PrintButton } from "@/components/PrintButton";
 import { ReportFooter } from "@/components/ReportFooter";
 import { ReportHeader } from "@/components/ReportHeader";
+import { assertRouteAllowedForPath } from "@/lib/access-control";
 import { getServerSession } from "@/lib/auth-server";
 import { formatFinancialYearLabel } from "@/lib/fiscal";
 import { ReportCrosstabSection } from "../ReportCrosstabSection";
@@ -12,19 +12,12 @@ import { loadBpoCrosstab } from "../loader";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const bpoReportRoles = new Set<UserRole>([
-  UserRole.ADMIN,
-  UserRole.DIRECTOR,
-  UserRole.SENIOR_SUPERVISOR,
-  UserRole.CLERK_IN_CHARGE_BPO,
-]);
-
 export default async function BpoSalesCrosstabPrintPage(props: {
   searchParams: Promise<{ fy?: string }>;
 }) {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  if (!bpoReportRoles.has(session.role as UserRole)) redirect("/forbidden");
+  await assertRouteAllowedForPath("/reports/bpo-sales-crosstab", session);
 
   const { fy: fyRaw } = await props.searchParams;
   const { selectedPeriod, rows, settings } = await loadBpoCrosstab(fyRaw);

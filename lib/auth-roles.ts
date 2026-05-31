@@ -10,11 +10,7 @@ export {
  * Prefer `sessionRequiresFixedPostingSite` / `actorRequiresFixedPostingSite` for enforcement.
  */
 export function roleRequiresSalesPoint(role: UserRole): boolean {
-  return (
-    role === UserRole.CLERK ||
-    role === UserRole.SUPERVISOR ||
-    role === UserRole.CLERK_IN_CHARGE_BPO
-  );
+  return role === UserRole.CLERK || role === UserRole.SUPERVISOR;
 }
 
 /** Sales-point staff see delivery orders only after manager validation (reports, load, print, POS lookup). */
@@ -50,11 +46,7 @@ export function canValidateDocuments(role: UserRole): boolean {
 
 /** BPO document validation (outbound sales, etc.). */
 export function canValidateBpoDocuments(role: UserRole): boolean {
-  return (
-    canValidateDocuments(role) ||
-    role === UserRole.SENIOR_SUPERVISOR ||
-    role === UserRole.CLERK_IN_CHARGE_BPO
-  );
+  return canValidateDocuments(role) || role === UserRole.SENIOR_SUPERVISOR;
 }
 
 /** Draft delivery orders: created / edited / deleted while still pending. */

@@ -80,14 +80,10 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   // supervisors). Only the supervisor responsible for the sales point may post/dispatch
   // for that point. Senior supervisors roam across sales points and therefore do NOT
   // post/dispatch themselves — they would defer to the sales-point supervisor.
-  // "Clerk in charge of BPO" is treated as the supervisor of the Bota BPO sales point.
   if (role === UserRole.CLERK) {
     base["ui:receive-stock-transfer"] = true;
   }
-  if (
-    role === UserRole.SUPERVISOR ||
-    role === UserRole.CLERK_IN_CHARGE_BPO
-  ) {
+  if (role === UserRole.SUPERVISOR) {
     base["ui:post-stock-receipt"] = true;
     base["ui:dispatch-stock-transfer"] = true;
     base["ui:receive-stock-transfer"] = true;
@@ -122,12 +118,6 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
     base["route:/consignment-notes"] = true;
   }
 
-  if (role === UserRole.CLERK_IN_CHARGE_BPO) {
-    base["route:/bpo-sales"] = true;
-    base["route:/reports"] = true;
-    base["route:/reports/bpo"] = true;
-  }
-
   if (role === UserRole.DIRECTOR) {
     base["route:/setup/sales-budget"] = true;
   }
@@ -139,8 +129,7 @@ export function defaultPermissionsForRole(role: UserRole): RolePermissionMap {
   base["route:/reports/bpo-sales-crosstab"] =
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
-    role === UserRole.SENIOR_SUPERVISOR ||
-    role === UserRole.CLERK_IN_CHARGE_BPO;
+    role === UserRole.SENIOR_SUPERVISOR;
 
   // Clerks draft; supervisors validate sales invoices. Leadership may override.
   base["ui:validate-documents"] =
@@ -229,6 +218,7 @@ export function defaultPermissionsForServiceRoleCode(code: string): RolePermissi
     base["route:/bpo-sales"] = true;
     base["route:/reports/bpo"] = true;
     base["route:/reports/bpo-pricing"] = true;
+    base["route:/reports/bpo-sales-crosstab"] = true;
   }
   if (c.includes("supervisor") || c.includes("manager")) {
     base["route:/consignment-notes"] = true;

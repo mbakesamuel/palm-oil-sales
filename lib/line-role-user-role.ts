@@ -12,7 +12,8 @@ export function userRoleFromLineRoleCode(code: string): UserRole {
     .trim()
     .toLowerCase();
 
-  if (c.includes("bpo")) return UserRole.CLERK_IN_CHARGE_BPO;
+  // BPO site lead (e.g. bpo_clerk) — supervisor-equivalent workflow rules.
+  if (c.includes("bpo")) return UserRole.SUPERVISOR;
   if (c.includes("senior") && c.includes("supervisor")) return UserRole.SENIOR_SUPERVISOR;
   // Factory site managers supervise one factory like a supervisor.
   if (c.includes("factory") && c.includes("manager")) return UserRole.SUPERVISOR;

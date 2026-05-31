@@ -46,8 +46,7 @@ function parseRole(raw: string): UserRole | null {
     r === UserRole.OFFICER ||
     r === UserRole.SENIOR_SUPERVISOR ||
     r === UserRole.SUPERVISOR ||
-    r === UserRole.CLERK ||
-    r === UserRole.CLERK_IN_CHARGE_BPO
+    r === UserRole.CLERK
   ) {
     return r;
   }

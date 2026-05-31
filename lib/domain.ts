@@ -13,7 +13,6 @@ export const UserRole = {
   SENIOR_SUPERVISOR: "SENIOR_SUPERVISOR",
   SUPERVISOR: "SUPERVISOR",
   CLERK: "CLERK",
-  CLERK_IN_CHARGE_BPO: "CLERK_IN_CHARGE_BPO",
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
