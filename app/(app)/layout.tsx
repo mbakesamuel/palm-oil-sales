@@ -104,7 +104,7 @@ export default async function AppLayout({
         }
       >
         <div className="h-full min-h-0 overflow-hidden print:h-auto print:overflow-visible">
-          <div className="mx-auto flex h-full min-h-0 w-full max-w-[min(100rem,calc(100vw-1.5rem))] flex-col gap-4 px-4 py-6 md:flex-row md:gap-6 print:block print:max-w-none print:px-6 print:py-4">
+          <div className="flex h-full min-h-0 w-full flex-col gap-4 px-4 py-6 sm:px-6 md:flex-row md:gap-6 print:block print:px-6 print:py-4">
             <div className="w-full max-md:min-w-0 max-md:overflow-hidden shrink-0 overflow-x-auto md:h-full md:min-h-0 md:w-20 md:max-w-20 md:shrink-0 md:overflow-hidden lg:max-w-none lg:w-auto print:hidden">
               <Sidebar
                 brand={settings.companyName}
