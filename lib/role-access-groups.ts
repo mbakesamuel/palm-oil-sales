@@ -22,6 +22,7 @@ export const ROLE_ACCESS_GROUPS: readonly RoleAccessGroup[] = [
       "route:/delivery-orders",
       "route:/delivery-orders/list",
       "route:/delivery-orders/validation-queue",
+      "ui:draft-delivery-orders",
       "route:/consignment-notes",
       "route:/pos",
       "route:/pos/list",
@@ -37,10 +38,18 @@ export const ROLE_ACCESS_GROUPS: readonly RoleAccessGroup[] = [
     ],
   },
   {
-    id: "validation",
-    label: "Approvals & validation",
-    description: "Validate sales documents and delivery orders.",
-    keys: ["ui:validate-documents", "ui:validate-delivery-orders"],
+    id: "validate-sales",
+    label: "Validate POS sales",
+    description:
+      "Validate pending sales invoices at POS. Typical for line supervisors and senior supervisors (not managers).",
+    keys: ["ui:validate-documents"],
+  },
+  {
+    id: "validate-delivery-orders",
+    label: "Validate delivery orders",
+    description:
+      "Validate pending delivery orders and use the validation queue. Typical for managers and directors (not senior supervisors).",
+    keys: ["ui:validate-delivery-orders"],
   },
   {
     id: "reports",

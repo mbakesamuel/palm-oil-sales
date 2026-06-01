@@ -1,7 +1,11 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
-import { getPermissionsForSession } from "@/lib/access-control";
+import {
+  canDraftDeliveryOrders,
+  getPermissionsForSession,
+} from "@/lib/access-control";
+import { loadAuthSessionByUserId } from "@/lib/load-auth-session";
 import {
   customerWhereForScope,
   productWhereForScope,
@@ -27,12 +31,21 @@ export default async function DeliveryOrdersPage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const prisma = getPrismaClient();
-  const session = await getServerSession();
+  const cookieSession = await getServerSession();
+  const session = cookieSession?.userId
+    ? await loadAuthSessionByUserId(cookieSession.userId)
+    : null;
   const scope = session ? resolveServiceScope(session) : { mode: "all" as const };
-  const canValidateDeliveryOrder =
-    session != null
-      ? (await getPermissionsForSession(session))["ui:validate-delivery-orders"]
+  const perms = session ? await getPermissionsForSession(session) : null;
+  const canValidateDeliveryOrder = Boolean(perms?.["ui:validate-delivery-orders"]);
+  const canAccessValidationQueue = Boolean(
+    perms?.["route:/delivery-orders/validation-queue"],
+  );
+  const canDraftDeliveryOrder =
+    session != null && perms != null
+      ? canDraftDeliveryOrders(perms, session)
       : false;
+  const commercialLineLabel = session?.commercialService?.name ?? null;
   const sp = (await props.searchParams) ?? {};
   const lookupNoRaw = Array.isArray(sp.no) ? sp.no[0] : sp.no;
   const initialLookupNo = typeof lookupNoRaw === "string" ? lookupNoRaw : "";
@@ -91,6 +104,9 @@ export default async function DeliveryOrdersPage(props: {
       previewStockOnHandAction={previewStockOnHandForDeliveryOrder}
       listPendingDeliveryOrdersAction={listPendingDeliveryOrders}
       canValidateDeliveryOrder={canValidateDeliveryOrder}
+      canAccessValidationQueue={canAccessValidationQueue}
+      canDraftDeliveryOrder={canDraftDeliveryOrder}
+      commercialLineLabel={commercialLineLabel}
     />
   );
 }

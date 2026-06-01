@@ -19,11 +19,21 @@ function isTransientDbNetworkError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e ?? "");
   return (
     /Can't reach database server/i.test(msg) ||
+    /Connection terminated unexpectedly/i.test(msg) ||
     /Client network socket disconnected before secure TLS connection was established/i.test(
       msg,
     ) ||
     /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND/i.test(msg)
   );
+}
+
+/** User-facing message for API routes when the database is temporarily unreachable. */
+export function databaseUnavailableMessage(): string {
+  return "The database is temporarily unavailable. Please try again in a moment.";
+}
+
+export function isDatabaseUnavailableError(e: unknown): boolean {
+  return isTransientDbNetworkError(e);
 }
 
 /**

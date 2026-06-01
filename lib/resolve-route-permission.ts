@@ -16,9 +16,6 @@ export function resolveRoutePermissionKey(pathname: string): PermissionKey | nul
   ) {
     return "route:/setup";
   }
-  if (normalized.startsWith("/delivery-orders/") && normalized !== "/delivery-orders") {
-    return "route:/delivery-orders";
-  }
 
   const routeKeys = PERMISSION_KEYS.filter((k): k is PermissionKey =>
     (k as string).startsWith("route:"),

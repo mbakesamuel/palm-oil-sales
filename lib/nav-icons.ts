@@ -52,6 +52,8 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/product-categories": FolderTree,
   "/products": Package,
   "/delivery-orders": Truck,
+  "/delivery-orders/list": ClipboardList,
+  "/delivery-orders/validation-queue": ClipboardList,
   "/consignment-notes": FileText,
   "/pos": ShoppingCart,
   "/stock": Boxes,

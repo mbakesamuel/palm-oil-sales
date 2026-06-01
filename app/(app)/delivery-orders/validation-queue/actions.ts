@@ -5,14 +5,16 @@ import { revalidatePath } from "next/cache";
 import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
-import { UserRole } from "@/lib/domain";
 import {
   commercialServiceErrorForOperations,
   commercialServiceErrorForResource,
   deliveryOrderWhereForScope,
   resolveServiceScope,
 } from "@/lib/service-scope";
-import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
+import {
+  fetchActorSalesPointScope,
+  salesPointErrorForResource,
+} from "@/lib/auth-sales-point-scope";
 
 type Cursor = { id: number } | null;
 
@@ -57,21 +59,18 @@ function money2Print(value: Prisma.Decimal) {
   return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
-async function requireManagerActor() {
+async function requireValidationQueueActor() {
   const prisma = getPrismaClient();
   const session = await getServerSession();
   if (!session?.userId) throw new Error("Login required.");
-  if (session.role !== UserRole.MANAGER) throw new Error("Only managers can use this screen.");
 
+  await assertPermissionKey("route:/delivery-orders/validation-queue");
   const perms = await getPermissionsForSession(session);
   if (!perms["ui:validate-delivery-orders"]) {
     throw new Error("You do not have permission to validate delivery orders.");
   }
 
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) throw new Error("Login required.");
   return { prisma, session, actor };
 }
@@ -87,10 +86,7 @@ export async function listPendingDeliveryOrdersForValidation(input?: {
   cursor?: Cursor;
   pageSize?: number;
 }): Promise<ValidationQueuePage> {
-  await assertPermissionKey("route:/delivery-orders");
-  await assertPermissionKey("route:/delivery-orders/validation-queue");
-
-  const { prisma, session, actor } = await requireManagerActor();
+  const { prisma, session, actor } = await requireValidationQueueActor();
 
   const scope = resolveServiceScope(session);
   const csErr = commercialServiceErrorForOperations(scope);
@@ -227,9 +223,7 @@ export async function markDeliveryOrdersReviewed(input: {
   ids: number[];
 }): Promise<{ ok: true; updated: number } | { ok: false; error: string }> {
   try {
-    await assertPermissionKey("route:/delivery-orders");
-    await assertPermissionKey("route:/delivery-orders/validation-queue");
-    const { prisma, session, actor } = await requireManagerActor();
+    const { prisma, session, actor } = await requireValidationQueueActor();
 
     const ids = (input.ids ?? []).filter((n) => Number.isFinite(n));
     if (ids.length === 0) return { ok: true, updated: 0 };
@@ -270,9 +264,7 @@ export async function validateReviewedDeliveryOrders(input: {
   | { ok: false; error: string }
 > {
   try {
-    await assertPermissionKey("route:/delivery-orders");
-    await assertPermissionKey("route:/delivery-orders/validation-queue");
-    const { prisma, session, actor } = await requireManagerActor();
+    const { prisma, session, actor } = await requireValidationQueueActor();
 
     const ids = (input.ids ?? []).filter((n) => Number.isFinite(n));
     if (ids.length === 0) return { ok: true, validated: 0, skipped: 0, errors: [] };

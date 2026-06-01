@@ -18,6 +18,12 @@ npm install
 npm start
 ```
 
+If `npx expo start` fails with **`TypeError: fetch failed`** before Metro starts, the Expo CLI could not reach `expo.dev` (offline PC, firewall, VPN, or proxy). Use offline mode instead:
+
+```bash
+npm run start:offline
+```
+
 3. On a **physical device**, the app uses the **same IP as the Expo QR code** (e.g. `Metro waiting on exp://192.168.43.249:8081` → API at `http://192.168.43.249:3000`). You usually do **not** need `EXPO_PUBLIC_API_BASE_URL` in `mobile/.env`.
 
 If auto-detect fails, set it manually to the **Network** URL from `npm run dev` (not `localhost`). Phone and PC must be on the same network. Avoid stale IPs (e.g. `192.168.137.1` from an old Windows hotspot) — they override auto-detect only when Expo cannot infer a host.

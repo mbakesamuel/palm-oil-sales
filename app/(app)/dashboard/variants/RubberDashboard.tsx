@@ -1,4 +1,5 @@
 import { DashboardSessionCard } from "../DashboardSessionCard";
+import { DashboardStockStats } from "../DashboardStockStats";
 import { DashboardIncomingTransfers } from "../DashboardIncomingTransfers";
 import { DashboardShell } from "../_shared/DashboardShell";
 import { DashboardQuickLinks } from "../widgets/DashboardQuickLinks";
@@ -15,6 +16,7 @@ export function RubberDashboard(props: {
       subtitle={`${serviceName} · ${siteLabelForKind(profile.siteKind)} line`}
     >
       <DashboardSessionCard />
+      <DashboardStockStats />
       <DashboardIncomingTransfers />
       <DashboardQuickLinks enabledModules={profile.enabledModules} />
     </DashboardShell>

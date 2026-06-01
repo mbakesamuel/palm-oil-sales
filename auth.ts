@@ -27,9 +27,32 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       // Initial sign-in: `user` already carries fresh DB fields from authorize().
       if (user) return next;
 
+      const forceRefresh = trigger === "update";
+      const lastRefresh =
+        typeof next.sessionRefreshedAt === "number" ? next.sessionRefreshedAt : 0;
+      const refreshIntervalMs = 60_000;
+      if (
+        !forceRefresh &&
+        lastRefresh > 0 &&
+        Date.now() - lastRefresh < refreshIntervalMs
+      ) {
+        return next;
+      }
+
       // Subsequent requests: reload role/line assignment (JWT can hold stale globalRole ids).
-      const fresh = await loadAuthSessionByUserId(userId);
-      if (fresh) return { ...next, ...mapAuthSessionToToken(fresh) };
+      try {
+        const fresh = await loadAuthSessionByUserId(userId);
+        if (fresh) {
+          return {
+            ...next,
+            ...mapAuthSessionToToken(fresh),
+            sessionRefreshedAt: Date.now(),
+          };
+        }
+      } catch (err) {
+        // Remote Postgres (e.g. Neon) can drop TLS mid-request; keep the cached JWT.
+        console.warn("[auth] session refresh skipped (database unavailable):", err);
+      }
 
       return next;
     },

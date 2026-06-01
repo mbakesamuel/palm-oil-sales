@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { DocumentStatusStamp } from "@/components/DocumentStatusStamp";
 import { ReportHeader } from "@/components/ReportHeader";
+import { printStampLabelForStockDocStatus } from "@/lib/print-document-stamp";
 
 function trimQty(qty: string): string {
   if (!qty.includes(".")) return qty;
@@ -65,9 +67,11 @@ export function StockReceiptVoucher(props: {
 }) {
   const { companyName, department, logoSrc, receipt } = props;
   const isDraft = receipt.status === "DRAFT";
+  const stampLabel = printStampLabelForStockDocStatus(receipt.status);
 
   return (
-    <article className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
+    <article className="relative text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
+      {stampLabel ? <DocumentStatusStamp label={stampLabel} /> : null}
       <header className="border-b border-black/20 pb-4 mb-6">
         <ReportHeader
           companyName={companyName}

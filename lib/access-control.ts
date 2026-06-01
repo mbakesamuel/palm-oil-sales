@@ -16,6 +16,10 @@ import {
   type CommercialProfile,
 } from "@/lib/commercial-profile";
 import { resolveRoutePermissionKey } from "@/lib/resolve-route-permission";
+import {
+  canCreateOrEditDeliveryOrderDraft,
+  effectiveSessionRole,
+} from "@/lib/auth-roles";
 import { roleSeesAllCommercialServices } from "@/lib/service-scope";
 import {
   defaultLineRoleCodeForUserRole,
@@ -34,6 +38,19 @@ function permissionsFromDbRows(
   rows: Array<{ key: string; allowed: boolean }>,
 ): RolePermissionMap {
   const out = emptyPermissionMap();
+  for (const r of rows) {
+    if (!(PERMISSION_KEYS as readonly string[]).includes(r.key)) continue;
+    out[r.key as PermissionKey] = r.allowed;
+  }
+  return out;
+}
+
+/** DB rows override seed defaults; keys missing from DB keep snapshot defaults. */
+function mergePermissionsWithSeed(
+  seed: RolePermissionMap,
+  rows: Array<{ key: string; allowed: boolean }>,
+): RolePermissionMap {
+  const out = { ...seed };
   for (const r of rows) {
     if (!(PERMISSION_KEYS as readonly string[]).includes(r.key)) continue;
     out[r.key as PermissionKey] = r.allowed;
@@ -67,7 +84,7 @@ export async function getPermissionsForGlobalRoleDefinition(
         },
         select: { key: true, allowed: true },
       }),
-    { retries: 6, baseDelayMs: 300 },
+    { retries: 3, baseDelayMs: 200 },
   );
 
   if (rows.length === 0) {
@@ -81,12 +98,12 @@ export async function getPermissionsForGlobalRoleDefinition(
           })),
           skipDuplicates: true,
         }),
-      { retries: 6, baseDelayMs: 300 },
+      { retries: 3, baseDelayMs: 200 },
     );
     return seed;
   }
 
-  const perms = permissionsFromDbRows(rows);
+  const perms = mergePermissionsWithSeed(seed, rows);
   // Built-in Admin must never be locked out by partial DB rows (common after permission migrations).
   if (def.legacyRole === UserRole.ADMIN) {
     for (const k of PERMISSION_KEYS) perms[k] = true;
@@ -143,7 +160,7 @@ export async function getPermissionsForServiceRole(
         },
         select: { key: true, allowed: true },
       }),
-    { retries: 6, baseDelayMs: 300 },
+    { retries: 3, baseDelayMs: 200 },
   );
 
   if (rows.length === 0) {
@@ -157,12 +174,101 @@ export async function getPermissionsForServiceRole(
           })),
           skipDuplicates: true,
         }),
-      { retries: 6, baseDelayMs: 300 },
+      { retries: 3, baseDelayMs: 200 },
     );
     return seed;
   }
 
-  return permissionsFromDbRows(rows);
+  return mergePermissionsWithSeed(seed, rows);
+}
+
+/** One query for all global roles — used by Setup → Permissions role picker. */
+export async function getPermissionsBatchForGlobalRoles(): Promise<
+  Record<string, RolePermissionMap>
+> {
+  const prisma = getPrismaClient();
+  const defs = await prisma.globalRoleDefinition.findMany({
+    where: { isActive: true },
+    select: { id: true, code: true, legacyRole: true },
+  });
+  if (defs.length === 0) return {};
+
+  const rows = await prismaRetry(
+    () =>
+      prisma.globalRolePermission.findMany({
+        where: {
+          globalRoleDefinitionId: { in: defs.map((d) => d.id) },
+          key: { in: [...PERMISSION_KEYS] },
+        },
+        select: { globalRoleDefinitionId: true, key: true, allowed: true },
+      }),
+    { retries: 3, baseDelayMs: 200 },
+  );
+
+  const rowsByRole = new Map<string, Array<{ key: string; allowed: boolean }>>();
+  for (const r of rows) {
+    const list = rowsByRole.get(r.globalRoleDefinitionId) ?? [];
+    list.push({ key: r.key, allowed: r.allowed });
+    rowsByRole.set(r.globalRoleDefinitionId, list);
+  }
+
+  const out: Record<string, RolePermissionMap> = {};
+  for (const def of defs) {
+    const seed = snapshotForGlobalRole(
+      def.code,
+      def.legacyRole as UserRole | null,
+    );
+    const roleRows = rowsByRole.get(def.id) ?? [];
+    if (roleRows.length === 0) {
+      out[def.id] = seed;
+      continue;
+    }
+    const perms = permissionsFromDbRows(roleRows);
+    if (def.legacyRole === UserRole.ADMIN) {
+      for (const k of PERMISSION_KEYS) perms[k] = true;
+    }
+    out[def.id] = perms;
+  }
+  return out;
+}
+
+/** One query for all line roles on a commercial service — used by Setup → Permissions. */
+export async function getPermissionsBatchForLineRoles(
+  commercialServiceId: string,
+): Promise<Record<string, RolePermissionMap>> {
+  const prisma = getPrismaClient();
+  const roles = await prisma.commercialServiceRole.findMany({
+    where: { commercialServiceId, isActive: true },
+    select: { id: true, code: true },
+  });
+  if (roles.length === 0) return {};
+
+  const rows = await prismaRetry(
+    () =>
+      prisma.commercialServiceRolePermission.findMany({
+        where: {
+          commercialServiceRoleId: { in: roles.map((r) => r.id) },
+          key: { in: [...PERMISSION_KEYS] },
+        },
+        select: { commercialServiceRoleId: true, key: true, allowed: true },
+      }),
+    { retries: 3, baseDelayMs: 200 },
+  );
+
+  const rowsByRole = new Map<string, Array<{ key: string; allowed: boolean }>>();
+  for (const r of rows) {
+    const list = rowsByRole.get(r.commercialServiceRoleId) ?? [];
+    list.push({ key: r.key, allowed: r.allowed });
+    rowsByRole.set(r.commercialServiceRoleId, list);
+  }
+
+  const out: Record<string, RolePermissionMap> = {};
+  for (const role of roles) {
+    const seed = snapshotForLineRoleCode(role.code);
+    const roleRows = rowsByRole.get(role.id) ?? [];
+    out[role.id] = roleRows.length === 0 ? seed : permissionsFromDbRows(roleRows);
+  }
+  return out;
 }
 
 function applyCommercialModuleFilter(
@@ -178,6 +284,18 @@ function applyCommercialModuleFilter(
     }
   }
   return out;
+}
+
+/** Draft delivery orders — DB permission with legacy senior-supervisor fallback. */
+export function canDraftDeliveryOrders(
+  perms: RolePermissionMap,
+  session: Pick<AuthSession, "role" | "commercialServiceRole">,
+): boolean {
+  if (perms["ui:draft-delivery-orders"]) return true;
+  return canCreateOrEditDeliveryOrderDraft(
+    effectiveSessionRole(session),
+    session.commercialServiceRole?.code ?? null,
+  );
 }
 
 export async function getPermissionsForSession(

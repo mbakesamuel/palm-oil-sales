@@ -11,10 +11,6 @@ import {
 } from "@/contexts/WorkingPeriodContext";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  canCreateOrEditDeliveryOrderDraft,
-  effectiveSessionRole,
-} from "@/lib/auth-roles";
 import { ValidationStatus } from "@/lib/domain";
 import type {
   DeliveryOrderTaxPreview,
@@ -76,6 +72,9 @@ export function DeliveryOrdersClient(props: {
   validateDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   cancelValidatedDeliveryOrder: (formData: FormData) => Promise<SaveSectionResult>;
   canValidateDeliveryOrder: boolean;
+  canAccessValidationQueue: boolean;
+  canDraftDeliveryOrder: boolean;
+  commercialLineLabel?: string | null;
   previewProductUnitPriceAction: (
     customerId: string,
     productId: number,
@@ -101,6 +100,9 @@ export function DeliveryOrdersClient(props: {
     validateDeliveryOrder,
     cancelValidatedDeliveryOrder,
     canValidateDeliveryOrder: canValidateDeliveryOrderProp,
+    canAccessValidationQueue: canAccessValidationQueueProp,
+    canDraftDeliveryOrder: canDraftDeliveryOrderProp,
+    commercialLineLabel,
     previewProductUnitPriceAction,
     previewStockOnHandAction,
     listPendingDeliveryOrdersAction,
@@ -664,15 +666,7 @@ export function DeliveryOrdersClient(props: {
   );
 
 
-  const workflowRole =
-    authStatus === "ready" && session ? effectiveSessionRole(session) : null;
-  const canDraftDO =
-    workflowRole != null
-      ? canCreateOrEditDeliveryOrderDraft(
-          workflowRole,
-          session?.commercialServiceRole?.code,
-        )
-      : false;
+  const canDraftDO = canDraftDeliveryOrderProp;
   const canValidateDO =
     authStatus === "ready" && session && canValidateDeliveryOrderProp;
   const draftFormLocked =
@@ -700,7 +694,7 @@ export function DeliveryOrdersClient(props: {
             </>
           )}
         </p>
-        {session?.role === "MANAGER" ? (
+        {canAccessValidationQueueProp ? (
           <div className="pt-2">
             <Link
               href="/delivery-orders/validation-queue"
@@ -872,7 +866,13 @@ export function DeliveryOrdersClient(props: {
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
             {customers.length === 0 ? (
-              <li>Add at least one customer.</li>
+              <li>
+                Add at least one customer
+                {commercialLineLabel
+                  ? ` for commercial line “${commercialLineLabel}”`
+                  : " for your commercial line"}
+                .
+              </li>
             ) : null}
             {products.length === 0 ? <li>Add at least one product.</li> : null}
             {salesPoints.length === 0 ? (
@@ -895,6 +895,17 @@ export function DeliveryOrdersClient(props: {
         <>
           {/* Section 1 — DeliveryOrder header */}
           <section className="rounded-lg border border-border p-4 sm:p-6 space-y-4">
+            {!canDraftDO && docStatus !== ValidationStatus.VALIDATED ? (
+              <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-950 dark:text-amber-100">
+                Your account is not allowed to create or edit delivery order drafts.
+                Ask an admin to enable{" "}
+                <span className="font-medium">
+                  Create and edit delivery order drafts
+                </span>{" "}
+                under Setup → Role access (Operations group) or User access control,
+                then sign out and sign in again.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">

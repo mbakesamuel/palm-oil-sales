@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { EmptyTableNotice } from "@/components/EmptyTableNotice";
 import {
   STOCK_DOC_STATUS_LABELS,
   STOCK_MOVEMENT_KIND_LABELS,
-  stockMovementSign,
+  movementQtyColumns,
 } from "@/lib/stock/display";
 import { utcIsoDateToday } from "@/lib/posting-calendar";
 import type {
@@ -427,7 +428,17 @@ function OnHandTab(props: {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm opacity-75">No balances to show.</p>
+        <EmptyTableNotice
+          columns={[
+            { label: "Sales point" },
+            { label: "Location" },
+            { label: "Product" },
+            { label: "On hand", className: "text-right" },
+            { label: "UOM" },
+          ]}
+        >
+          No balances to show.
+        </EmptyTableNotice>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
@@ -643,7 +654,23 @@ function MovementsTab(props: {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm opacity-75">No movements match these filters.</p>
+        <EmptyTableNotice
+          columns={[
+            { label: "When" },
+            { label: "Sales point" },
+            { label: "Location" },
+            { label: "Condition" },
+            { label: "Product" },
+            { label: "Kind" },
+            { label: "+ Qty", className: "text-right" },
+            { label: "− Qty", className: "text-right" },
+            { label: "Doc #" },
+            { label: "User" },
+            { label: "Notes" },
+          ]}
+        >
+          No movements match these filters.
+        </EmptyTableNotice>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
@@ -655,7 +682,8 @@ function MovementsTab(props: {
                 <th className="p-2 font-medium">Condition</th>
                 <th className="p-2 font-medium">Product</th>
                 <th className="p-2 font-medium">Kind</th>
-                <th className="p-2 font-medium text-right">Qty</th>
+                <th className="p-2 font-medium text-right">+ Qty</th>
+                <th className="p-2 font-medium text-right">− Qty</th>
                 <th className="p-2 font-medium">Doc #</th>
                 <th className="p-2 font-medium">User</th>
                 <th className="p-2 font-medium">Notes</th>
@@ -663,7 +691,7 @@ function MovementsTab(props: {
             </thead>
             <tbody>
               {filtered.map((r) => {
-                const sign = stockMovementSign(r.kind);
+                const { plus, minus } = movementQtyColumns(r, trimQty);
                 return (
                   <tr key={r.id} className="border-b border-border align-top">
                     <td className="p-2 whitespace-nowrap" title={r.createdAtIso}>
@@ -682,19 +710,11 @@ function MovementsTab(props: {
                     <td className="p-2 whitespace-nowrap">
                       {STOCK_MOVEMENT_KIND_LABELS[r.kind]}
                     </td>
-                    <td className="p-2 text-right tabular-nums font-medium">
-                      <span
-                        className={
-                          sign === "-"
-                            ? "text-red-700 dark:text-red-300"
-                            : sign === "+"
-                              ? "text-emerald-700 dark:text-emerald-300"
-                              : ""
-                        }
-                      >
-                        {sign === "-" ? "−" : sign === "+" ? "+" : "±"}
-                        {trimQty(r.qty)} {r.uom}
-                      </span>
+                    <td className="p-2 text-right tabular-nums font-medium text-emerald-700 dark:text-emerald-300">
+                      {plus ?? "—"}
+                    </td>
+                    <td className="p-2 text-right tabular-nums font-medium text-red-700 dark:text-red-300">
+                      {minus ?? "—"}
                     </td>
                     <td className="p-2 opacity-80">{r.documentNo ?? "—"}</td>
                     <td className="p-2">{r.userName}</td>
@@ -706,10 +726,12 @@ function MovementsTab(props: {
           </table>
         </div>
       )}
-      <p className="text-xs opacity-70">
-        Showing the latest {filtered.length} movement{filtered.length === 1 ? "" : "s"}
-        {filtered.length >= 200 ? " (use filters to narrow further)." : "."}
-      </p>
+      {filtered.length > 0 ? (
+        <p className="text-xs opacity-70">
+          Showing the latest {filtered.length} movement{filtered.length === 1 ? "" : "s"}
+          {filtered.length >= 200 ? " (use filters to narrow further)." : "."}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -1008,7 +1030,29 @@ function ReceiptsTab(props: {
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-sm opacity-75">No receipts recorded yet.</p>
+        <EmptyTableNotice
+          columns={[
+            { label: "Receipt #" },
+            { label: "Date" },
+            { label: "Sales point" },
+            { label: "Supplier" },
+            { label: "Lines", className: "text-right" },
+            { label: "Total qty", className: "text-right" },
+            { label: "Status" },
+            { label: "Created by" },
+            { label: "Posted by" },
+            { label: "Actions", className: "text-right" },
+          ]}
+        >
+          No receipts recorded yet.
+          {props.canDraft ? (
+            <>
+              {" "}
+              Use <span className="font-medium text-foreground">New receipt</span> to create
+              one.
+            </>
+          ) : null}
+        </EmptyTableNotice>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
@@ -1570,7 +1614,29 @@ function TransfersTab(props: {
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-sm opacity-75">No transfers recorded yet.</p>
+        <EmptyTableNotice
+          columns={[
+            { label: "Transfer #" },
+            { label: "From" },
+            { label: "To" },
+            { label: "Dispatched" },
+            { label: "Received" },
+            { label: "Lines", className: "text-right" },
+            { label: "Total qty", className: "text-right" },
+            { label: "Status" },
+            { label: "Created by" },
+            { label: "Actions", className: "text-right" },
+          ]}
+        >
+          No transfers recorded yet.
+          {props.canDraft ? (
+            <>
+              {" "}
+              Use <span className="font-medium text-foreground">New transfer</span> to create
+              one.
+            </>
+          ) : null}
+        </EmptyTableNotice>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">
@@ -1990,7 +2056,22 @@ function AdjustmentsTab(props: {
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-sm opacity-75">No adjustments recorded yet.</p>
+        <EmptyTableNotice
+          columns={[
+            { label: "Adjustment #" },
+            { label: "Date" },
+            { label: "Sales point" },
+            { label: "Reason" },
+            { label: "Lines", className: "text-right" },
+            { label: "Status" },
+            { label: "Created by" },
+            { label: "Posted by" },
+            { label: "Actions", className: "text-right" },
+          ]}
+        >
+          No adjustments recorded yet. Use{" "}
+          <span className="font-medium text-foreground">New adjustment</span> to create one.
+        </EmptyTableNotice>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="min-w-full text-sm">

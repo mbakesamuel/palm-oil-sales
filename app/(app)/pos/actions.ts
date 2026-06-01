@@ -24,7 +24,7 @@ import {
   type DeliveryOrderLookupDto,
 } from "@/lib/delivery-order-sale-control";
 import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
-import { canPickPendingPosSales } from "@/lib/auth-roles";
+import { canPickPendingPosSales, effectiveSessionRole } from "@/lib/auth-roles";
 import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
@@ -773,7 +773,7 @@ export async function listPendingSales(): Promise<PendingSaleRow[]> {
   if (
     !canPickPendingPosSales({
       validateDocuments: perms["ui:validate-documents"],
-      role: actor.role as AppUserRole,
+      role: effectiveSessionRole(session),
       commercialServiceRoleCode: session.commercialServiceRole?.code,
     })
   ) {
@@ -1309,6 +1309,7 @@ export async function loadSalePrintById(
 
   const saleModel: SalePrintModel = {
     invoiceNo: sale.invoiceNo,
+    status: sale.status,
     soldAtIso: sale.soldAt.toISOString(),
     vehicleNumber: sale.vehicleNumber,
     dateIssuedIso: (sale.dateIssued ?? sale.soldAt).toISOString(),

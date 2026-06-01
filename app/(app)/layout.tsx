@@ -41,6 +41,10 @@ const operationsNav = [
   { href: "/rubber", label: "Rubber sales" },
   { href: "/delivery-orders", label: "Delivery orders" },
   { href: "/delivery-orders/list", label: "Delivery orders list" },
+  {
+    href: "/delivery-orders/validation-queue",
+    label: "DO validation queue",
+  },
   { href: "/consignment-notes", label: "Vehicle Consignment" },
   { href: "/pos", label: "Sales Invoice" },
   { href: "/pos/list", label: "Sales list" },

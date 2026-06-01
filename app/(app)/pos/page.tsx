@@ -23,7 +23,7 @@ import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 import { SalesClient } from "./SalesClient";
 import { ReportHeader } from "@/components/ReportHeader";
 import Link from "next/link";
-import { canPickPendingPosSales } from "@/lib/auth-roles";
+import { canPickPendingPosSales, effectiveSessionRole } from "@/lib/auth-roles";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,11 +44,12 @@ export default async function PosPage(props: {
     session != null
       ? (await getPermissionsForSession(session))["ui:validate-documents"]
       : false;
+  const workflowRole = session != null ? effectiveSessionRole(session) : null;
   const canPickPendingSales =
-    session != null
+    session != null && workflowRole != null
       ? canPickPendingPosSales({
           validateDocuments: canValidateDocuments,
-          role: session.role,
+          role: workflowRole,
           commercialServiceRoleCode: session.commercialServiceRole?.code,
         })
       : false;

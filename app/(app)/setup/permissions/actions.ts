@@ -3,12 +3,13 @@
 import { getPrismaClient } from "@/lib/prisma";
 import {
   PERMISSION_KEYS,
-  assertActorIsAdmin,
-  assertPermissionKey,
+  getPermissionsBatchForGlobalRoles,
+  getPermissionsBatchForLineRoles,
   getPermissionsForGlobalRoleDefinition,
   getPermissionsForServiceRole,
   getPermissionsForSession,
   type PermissionKey,
+  type RolePermissionMap,
 } from "@/lib/access-control";
 import {
   minimalCustomGlobalSnapshot,
@@ -58,19 +59,17 @@ export type GlobalRolesCatalog = {
   roles: GlobalRoleRow[];
 };
 
-async function assertCanManageGlobalRoles() {
+/** Admin-only screen: one session read, no full permission matrix reload per action. */
+async function assertCanManagePermissions() {
   const session = await getServerSession();
   if (!session?.userId) throw new Error("Login required.");
-  try {
-    await assertPermissionKey("route:/setup/permissions");
-  } catch {
-    await assertPermissionKey("route:/setup/role-access");
+  if (session.role !== UserRole.ADMIN) {
+    throw new Error("Only administrators can manage access control.");
   }
-  await assertActorIsAdmin();
 }
 
 export async function getGlobalRolesCatalogAction(): Promise<GlobalRolesCatalog> {
-  await assertCanManageGlobalRoles();
+  await assertCanManagePermissions();
   await ensureGlobalRoleDefinitions();
   const prisma = getPrismaClient();
 
@@ -115,7 +114,7 @@ export async function getGlobalRolesCatalogAction(): Promise<GlobalRolesCatalog>
 
 export async function saveGlobalRoleDefinition(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageGlobalRoles();
+  await assertCanManagePermissions();
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const codeInput = normalizeGlobalRoleCode(String(formData.get("code") ?? ""));
@@ -180,7 +179,7 @@ export async function saveGlobalRoleDefinition(formData: FormData) {
 
 export async function setGlobalRoleDefinitionActive(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageGlobalRoles();
+  await assertCanManagePermissions();
 
   const id = String(formData.get("id") ?? "").trim();
   const isActive = formData.getAll("isActive").includes("1");
@@ -219,19 +218,21 @@ export async function setGlobalRoleDefinitionActive(formData: FormData) {
 }
 
 export async function getGlobalRolePermissionsAction(globalRoleId: string) {
-  await assertCanManageGlobalRoles();
-  const prisma = getPrismaClient();
-  const role = await prisma.globalRoleDefinition.findUnique({
-    where: { id: globalRoleId },
-    select: { id: true },
-  });
-  if (!role) throw new Error("Global role not found.");
+  await assertCanManagePermissions();
   return getPermissionsForGlobalRoleDefinition(globalRoleId);
+}
+
+/** Load every global role's matrix in two DB round-trips (permissions UI cache). */
+export async function getGlobalRolesPermissionsBatchAction(): Promise<
+  Record<string, RolePermissionMap>
+> {
+  await assertCanManagePermissions();
+  return getPermissionsBatchForGlobalRoles();
 }
 
 export async function setGlobalRolePermission(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageGlobalRoles();
+  await assertCanManagePermissions();
 
   const globalRoleId = String(formData.get("globalRoleId") ?? "").trim();
   const key = parsePermissionKey(String(formData.get("key") ?? ""));
@@ -259,7 +260,7 @@ export async function setGlobalRolePermission(formData: FormData) {
 
 export async function resetGlobalRolePermissions(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageGlobalRoles();
+  await assertCanManagePermissions();
 
   const globalRoleId = String(formData.get("globalRoleId") ?? "").trim();
   if (!globalRoleId) throw new Error("Global role is required.");
@@ -322,19 +323,8 @@ function normalizeRoleCode(raw: string): string | null {
   return s.length ? s : null;
 }
 
-async function assertCanManageLineRoles() {
-  const session = await getServerSession();
-  if (!session?.userId) throw new Error("Login required.");
-  try {
-    await assertPermissionKey("route:/setup/permissions");
-  } catch {
-    await assertPermissionKey("route:/setup/role-access");
-  }
-  await assertActorIsAdmin();
-}
-
 export async function getLinePermissionsCatalogAction(): Promise<LinePermissionsCatalog> {
-  await assertCanManageLineRoles();
+  await assertCanManagePermissions();
   const prisma = getPrismaClient();
   const [services, roles] = await Promise.all([
     prisma.commercialService.findMany({
@@ -378,7 +368,7 @@ export async function getLinePermissionsCatalogAction(): Promise<LinePermissions
 
 export async function saveCommercialServiceRole(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageLineRoles();
+  await assertCanManagePermissions();
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const commercialServiceId = String(formData.get("commercialServiceId") ?? "").trim();
@@ -477,7 +467,7 @@ export async function saveCommercialServiceRole(formData: FormData) {
 
 export async function setCommercialServiceRoleActive(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageLineRoles();
+  await assertCanManagePermissions();
 
   const id = String(formData.get("id") ?? "").trim();
   const isActive = formData.getAll("isActive").includes("1");
@@ -510,7 +500,7 @@ export async function setCommercialServiceRoleActive(formData: FormData) {
 }
 
 export async function getServiceRolePermissionsAction(serviceRoleId: string) {
-  await assertCanManageLineRoles();
+  await assertCanManagePermissions();
   const prisma = getPrismaClient();
   const role = await prisma.commercialServiceRole.findUnique({
     where: { id: serviceRoleId },
@@ -520,9 +510,17 @@ export async function getServiceRolePermissionsAction(serviceRoleId: string) {
   return getPermissionsForServiceRole(role.id, role.code);
 }
 
+/** Load every line role on a commercial service in two DB round-trips. */
+export async function getLineRolesPermissionsBatchAction(
+  commercialServiceId: string,
+): Promise<Record<string, RolePermissionMap>> {
+  await assertCanManagePermissions();
+  return getPermissionsBatchForLineRoles(commercialServiceId);
+}
+
 export async function setServiceRolePermission(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageLineRoles();
+  await assertCanManagePermissions();
 
   const serviceRoleId = String(formData.get("serviceRoleId") ?? "").trim();
   const key = parsePermissionKey(String(formData.get("key") ?? ""));
@@ -550,7 +548,7 @@ export async function setServiceRolePermission(formData: FormData) {
 
 export async function resetServiceRolePermissions(formData: FormData) {
   const prisma = getPrismaClient();
-  await assertCanManageLineRoles();
+  await assertCanManagePermissions();
 
   const serviceRoleId = String(formData.get("serviceRoleId") ?? "").trim();
   if (!serviceRoleId) throw new Error("Line role is required.");
