@@ -103,9 +103,9 @@ export default async function AppLayout({
           openPeriod ? prismaDateToIso(openPeriod.endDate) : null
         }
       >
-        <div className="h-screen overflow-hidden print:h-auto print:overflow-visible">
-          <div className="mx-auto w-full max-w-[min(100rem,calc(100vw-1.5rem))] px-4 py-6 h-full min-h-0 flex flex-col gap-4 md:flex-row md:gap-6 print:max-w-none print:px-6 print:py-4 print:block">
-            <div className="print:hidden shrink-0 w-full max-md:min-w-0 md:h-full md:w-20 md:max-w-20 md:shrink-0 md:overflow-y-auto lg:max-w-none lg:w-auto overflow-x-auto overflow-y-visible md:overflow-x-visible">
+        <div className="h-full min-h-0 overflow-hidden print:h-auto print:overflow-visible">
+          <div className="flex h-full min-h-0 w-full flex-col gap-4 px-4 py-6 sm:px-6 md:flex-row md:gap-6 print:block print:px-6 print:py-4">
+            <div className="w-full max-md:min-w-0 max-md:overflow-hidden shrink-0 overflow-x-auto md:h-full md:min-h-0 md:w-20 md:max-w-20 md:shrink-0 md:overflow-hidden lg:max-w-none lg:w-auto print:hidden">
               <Sidebar
                 brand={settings.companyName}
                 department={settings.department}

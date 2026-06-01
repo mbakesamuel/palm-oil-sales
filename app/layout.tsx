@@ -59,13 +59,13 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" className="h-full antialiased" data-ui-theme={uiTheme}>
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+    <html lang="en" className="h-full overflow-hidden antialiased" data-ui-theme={uiTheme}>
+      <body className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
         <AuthProvider>
-          <main className="flex-1">{children}</main>
-          <footer className="border-t border-border print:hidden">
+          <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+          <footer className="shrink-0 border-t border-border print:hidden">
             <div className="flex flex-row justify-between items-center">
-              <div className="mx-auto w-full max-w-5xl px-4 py-3 text-xs opacity-70">
+              <div className="w-full px-4 py-3 text-xs opacity-70 sm:px-6">
                 {footerLine}
               </div>
               <div className="text-xs opacity-70 px-4">
