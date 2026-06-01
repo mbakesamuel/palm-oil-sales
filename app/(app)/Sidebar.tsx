@@ -345,9 +345,9 @@ export function Sidebar(props: {
   return (
     <aside
       className={[
-        "rounded-2xl border border-border bg-sidebar text-sidebar-foreground p-3 flex transition-[width] duration-200",
-        "max-md:flex-row max-md:items-stretch max-md:gap-2 max-md:min-h-13",
-        "md:h-full md:max-h-full md:flex-col md:gap-0",
+        "rounded-2xl border border-border bg-sidebar text-sidebar-foreground p-3 flex h-full min-h-0 max-h-full transition-[width] duration-200",
+        "max-md:flex-row max-md:items-stretch max-md:gap-2 max-md:min-h-13 max-md:h-auto",
+        "md:flex-col md:gap-0",
         "w-full md:w-20 md:max-w-20 lg:max-w-none",
         widthLg,
       ].join(" ")}
