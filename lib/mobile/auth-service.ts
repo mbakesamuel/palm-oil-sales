@@ -70,7 +70,7 @@ export async function authenticateMobileUser(
     return { ok: false, error: "Invalid username or password." };
   }
 
-  const session = await loadAuthSessionByUsername(normalized);
+  const session = await prismaRetry(() => loadAuthSessionByUsername(normalized));
   if (!session) {
     return { ok: false, error: "Account is inactive or misconfigured." };
   }

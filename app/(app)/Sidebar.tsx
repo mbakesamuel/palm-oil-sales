@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserRound } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { sessionRoleLabel } from "@/lib/auth-display";
 import { PERMISSION_KEYS } from "@/lib/access-control-keys";
@@ -358,22 +358,13 @@ export function Sidebar(props: {
           collapsed ? "lg:items-center lg:w-full" : "",
         ].join(" ")}
       >
-        <div className="relative flex w-full items-center justify-center">
+        <div className="flex w-full items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to /public or http(s) URLs */}
           <img
             src={logoSrc}
             alt=""
             className="h-6 max-h-6 w-auto max-w-[72px] shrink-0 object-contain"
           />
-          <button
-            type="button"
-            onClick={toggle}
-            className="absolute right-0 top-1/2 hidden -translate-y-1/2 lg:block shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/5"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand" : "Collapse"}
-          >
-            {collapsed ? "»" : "«"}
-          </button>
         </div>
         {!collapsed ? (
           <div className="hidden lg:block min-w-0 w-full">
@@ -540,6 +531,22 @@ export function Sidebar(props: {
             ) : null}
           </>
         ) : null}
+      </div>
+
+      <div className="hidden lg:flex shrink-0 justify-end pt-2">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border hover:bg-foreground/5 focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-5 shrink-0" aria-hidden />
+          ) : (
+            <PanelLeftClose className="size-5 shrink-0" aria-hidden />
+          )}
+        </button>
       </div>
     </aside>
   );

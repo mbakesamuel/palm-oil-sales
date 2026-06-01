@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { roleLabel } from "@/lib/auth-display";
+import { sessionRoleLabel } from "@/lib/auth-display";
 import { getServerSession } from "@/lib/auth-server";
 import { resolveHomeDashboardPath } from "@/lib/dashboard-routing";
 import { SignOutButton } from "./SignOutButton";
@@ -14,7 +14,7 @@ export default async function ForbiddenPage() {
       <h1 className="text-xl font-semibold">Access denied</h1>
       {session ? (
         <p className="text-sm opacity-80">
-         <span className="text-foreground/90">{roleLabel(session.role)}</span>.
+         <span className="text-foreground/90">{sessionRoleLabel(session)}</span>.
           role is not allowed to open the page you tried to reach. Use the
           menu for screens you can access, or go back to the dashboard.
         </p>

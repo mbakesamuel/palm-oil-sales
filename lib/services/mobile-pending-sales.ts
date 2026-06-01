@@ -6,9 +6,14 @@ import {
   assertPermissionKeyForSession,
   getPermissionsForSession,
 } from "@/lib/access-control";
-import { canPickPendingPosSales, roleRequiresSalesPoint } from "@/lib/auth-roles";
+import {
+  canPickPendingPosSales,
+  effectiveSessionRole,
+} from "@/lib/auth-roles";
+import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
+import { fetchActorSalesPointScope } from "@/lib/auth-sales-point-scope";
 import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
-import { UserRole, type UserRole as AppUserRole } from "@/lib/domain";
+import { UserRole } from "@/lib/domain";
 import { deliveryOrderPosUsageError } from "@/lib/delivery-order-sale-control";
 import { getPrismaClient } from "@/lib/prisma";
 import {
@@ -42,17 +47,14 @@ export async function listPendingSalesForSession(
   await assertPermissionKeyForSession(session, "route:/pos");
 
   const prisma = getPrismaClient();
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) return [];
 
   const perms = await getPermissionsForSession(session);
   if (
     !canPickPendingPosSales({
       validateDocuments: perms["ui:validate-documents"],
-      role: actor.role as AppUserRole,
+      role: effectiveSessionRole(session),
       commercialServiceRoleCode: session.commercialServiceRole?.code,
     })
   ) {
@@ -63,7 +65,7 @@ export async function listPendingSalesForSession(
   if (commercialServiceErrorForOperations(scope)) return [];
 
   const salesPointFilter =
-    actor.salesPointId != null && roleRequiresSalesPoint(actor.role as AppUserRole)
+    actor.salesPointId != null && actorRequiresFixedPostingSite(actor)
       ? { salesPointId: actor.salesPointId }
       : {};
 
@@ -127,10 +129,7 @@ export async function validateSaleForSession(
     };
   }
 
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) {
     return { ok: false, error: "Login required." };
   }

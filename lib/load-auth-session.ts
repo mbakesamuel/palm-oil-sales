@@ -31,7 +31,24 @@ const userSessionInclude = {
     },
   },
   commercialServiceRole: {
-    select: { id: true, code: true, name: true, isActive: true, requiresFixedPostingSite: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      isActive: true,
+      requiresFixedPostingSite: true,
+      commercialService: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          invoicePrefix: true,
+          isActive: true,
+          siteKind: true,
+          enabledModules: true,
+        },
+      },
+    },
   },
   globalRoleDefinition: {
     select: { id: true, code: true, displayName: true, isActive: true, legacyRole: true },
@@ -62,6 +79,15 @@ function mapUserToAuthSession(user: {
     name: string;
     isActive: boolean;
     requiresFixedPostingSite: boolean;
+    commercialService: {
+      id: string;
+      code: string;
+      name: string;
+      invoicePrefix: string;
+      isActive: boolean;
+      siteKind: "SALES_POINT" | "FACTORY";
+      enabledModules: unknown;
+    } | null;
   } | null;
   globalRoleDefinition: {
     id: string;
@@ -81,14 +107,22 @@ function mapUserToAuthSession(user: {
   const service =
     typeof user.service === "string" && user.service.trim() !== "" ? user.service.trim() : null;
 
+  const lineCommercialService =
+    user.commercialServiceRole?.commercialService?.isActive === true
+      ? user.commercialServiceRole.commercialService
+      : null;
+  const userCommercialService =
+    user.commercialService?.isActive === true ? user.commercialService : null;
+  const commercialServiceSource = userCommercialService ?? lineCommercialService;
+
   let commercialService: AuthSession["commercialService"] = null;
-  if (user.commercialService?.isActive === true) {
-    const profile = profileFromCommercialService(user.commercialService);
+  if (commercialServiceSource) {
+    const profile = profileFromCommercialService(commercialServiceSource);
     commercialService = {
       id: profile.commercialServiceId,
       code: profile.code,
       name: profile.name,
-      invoicePrefix: user.commercialService.invoicePrefix,
+      invoicePrefix: commercialServiceSource.invoicePrefix,
       siteKind: profile.siteKind,
       enabledModules: profile.enabledModules,
     };
@@ -205,6 +239,8 @@ async function ensureUserRoleDefinitionLinks(userId: string): Promise<void> {
   const updates: {
     globalRoleDefinitionId?: string;
     commercialServiceRoleId?: string;
+    commercialServiceId?: string;
+    role?: UserRole;
   } = {};
 
   if (
@@ -238,7 +274,25 @@ async function ensureUserRoleDefinitionLinks(userId: string): Promise<void> {
     }
   }
 
-  if (updates.globalRoleDefinitionId || updates.commercialServiceRoleId) {
+  if (user.commercialServiceRoleId) {
+    const lineRole = await prisma.commercialServiceRole.findUnique({
+      where: { id: user.commercialServiceRoleId },
+      select: { commercialServiceId: true, code: true, isActive: true },
+    });
+    if (lineRole?.isActive) {
+      updates.role = userRoleFromLineRoleCode(lineRole.code);
+      if (user.commercialServiceId !== lineRole.commercialServiceId) {
+        updates.commercialServiceId = lineRole.commercialServiceId;
+      }
+    }
+  }
+
+  if (
+    updates.globalRoleDefinitionId ||
+    updates.commercialServiceRoleId ||
+    updates.commercialServiceId ||
+    updates.role
+  ) {
     await prisma.user.update({
       where: { id: userId },
       data: updates,
@@ -256,17 +310,14 @@ async function loadUserForSession(
   });
   if (!user) return null;
 
-  if (!user.globalRoleDefinitionId && !user.commercialServiceRoleId) {
-    await ensureUserRoleDefinitionLinks(user.id);
-    const refreshed = await prisma.user.findUnique({
-      where: { id: user.id },
-      include: userSessionInclude,
-    });
-    if (!refreshed) return null;
-    return mapUserToAuthSession(refreshed);
-  }
+  await ensureUserRoleDefinitionLinks(user.id);
 
-  return mapUserToAuthSession(user);
+  const refreshed = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: userSessionInclude,
+  });
+  if (!refreshed) return null;
+  return mapUserToAuthSession(refreshed);
 }
 
 export async function loadAuthSessionByUserId(

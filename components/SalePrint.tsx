@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { DocumentStatusStamp } from "@/components/DocumentStatusStamp";
 import { ReportHeader } from "@/components/ReportHeader";
+import { ValidationStatus } from "@/lib/domain";
+import { printStampLabelForValidationStatus } from "@/lib/print-document-stamp";
 
 function moneyLabel(value: string | null | undefined) {
   if (value == null || value === "") return "—";
@@ -41,6 +44,7 @@ function formatDisplayDate(iso: string) {
 
 export type SalePrintModel = {
   invoiceNo: string;
+  status: ValidationStatus | string;
   soldAtIso: string;
   vehicleNumber?: string | null;
   dateIssuedIso?: string | null;
@@ -87,9 +91,11 @@ export function SalePrint(props: {
   sale: SalePrintModel;
 }) {
   const { companyName, department, companyPhone, companyAddress, logoSrc, sale } = props;
+  const stampLabel = printStampLabelForValidationStatus(sale.status);
 
   return (
-    <article className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
+    <article className="relative text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0">
+      {stampLabel ? <DocumentStatusStamp label={stampLabel} /> : null}
       <header className="border-b border-black/20 pb-4 mb-6">
         <ReportHeader
           companyName={companyName}

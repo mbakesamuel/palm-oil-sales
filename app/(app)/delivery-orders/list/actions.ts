@@ -12,7 +12,10 @@ import {
   deliveryOrderWhereForScope,
   resolveServiceScope,
 } from "@/lib/service-scope";
-import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
+import {
+  fetchActorSalesPointScope,
+  salesPointErrorForResource,
+} from "@/lib/auth-sales-point-scope";
 import { cookies } from "next/headers";
 
 export type DeliveryOrdersListPeriod = "month" | "year" | "all";
@@ -84,10 +87,7 @@ export async function listDeliveryOrdersForOperations(input?: {
     };
   }
 
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) {
     return {
       rows: [],

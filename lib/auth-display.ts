@@ -1,4 +1,5 @@
 import { UserRole } from "@/lib/domain";
+import { effectiveSessionRole } from "./auth-roles";
 
 export { roleRequiresSalesPoint } from "./auth-roles";
 export {
@@ -24,9 +25,9 @@ export function roleLabel(role: UserRole): string {
 /** Sidebar / profile: prefer the commercial line role name when assigned. */
 export function sessionRoleLabel(session: {
   role: UserRole;
-  commercialServiceRole?: { name: string } | null;
+  commercialServiceRole?: { name: string; code?: string } | null;
 }): string {
   const lineName = session.commercialServiceRole?.name?.trim();
   if (lineName) return lineName;
-  return roleLabel(session.role);
+  return roleLabel(effectiveSessionRole(session));
 }

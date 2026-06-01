@@ -7,16 +7,14 @@ import {
   validateReviewedDeliveryOrders,
 } from "./actions";
 import { getServerSession } from "@/lib/auth-server";
-import { UserRole } from "@/lib/domain";
 import { assertPermissionKey } from "@/lib/access-control";
 
 export default async function DeliveryOrderValidationQueuePage() {
-  await assertPermissionKey("route:/delivery-orders");
   await assertPermissionKey("route:/delivery-orders/validation-queue");
+  await assertPermissionKey("ui:validate-delivery-orders");
 
   const session = await getServerSession();
   if (!session?.userId) redirect("/login");
-  if (session.role !== UserRole.MANAGER) redirect("/forbidden");
 
   const initialPage = await listPendingDeliveryOrdersForValidation({ pageSize: 50 });
 

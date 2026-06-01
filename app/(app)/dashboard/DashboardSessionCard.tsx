@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { roleLabel } from "@/lib/auth-display";
+import { sessionRoleLabel } from "@/lib/auth-display";
 
 export function DashboardSessionCard() {
   const { status, session } = useAuth();
@@ -32,8 +32,9 @@ export function DashboardSessionCard() {
 
   return (
     <div className="rounded-lg border border-border p-4 text-sm space-y-1">
-      <div className="font-medium">Signed in as {session.username}</div>
-      <div className="opacity-80">{roleLabel(session.role)}</div>
+      <div className="font-medium">Signed in as {session.displayName}</div>
+      <div className="opacity-70">@{session.username}</div>
+      <div className="opacity-80">{sessionRoleLabel(session)}</div>
       {session.factory ? (
         <div className="opacity-80">Factory: {session.factory.name}</div>
       ) : session.salesPoint ? (

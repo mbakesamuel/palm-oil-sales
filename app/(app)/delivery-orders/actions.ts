@@ -1,6 +1,10 @@
 "use server";
 
-import { assertPermissionKey, getPermissionsForSession } from "@/lib/access-control";
+import {
+  assertPermissionKey,
+  canDraftDeliveryOrders,
+  getPermissionsForSession,
+} from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { allocateDeliveryOrderNo } from "@/lib/delivery-order-no";
 import {
@@ -18,13 +22,14 @@ import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
 import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import {
-  canCreateOrEditDeliveryOrderDraft,
   effectiveSessionRole,
   roleSeesOnlyValidatedDeliveryOrders,
 } from "@/lib/auth-roles";
+import { loadAuthSessionByUserId } from "@/lib/load-auth-session";
 import type { UserRole as AppUserRole } from "@/lib/domain";
 import { getServerSession } from "@/lib/auth-server";
 import {
+  fetchActorSalesPointScope,
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
@@ -160,14 +165,15 @@ function money2(value: Prisma.Decimal) {
 }
 
 async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
-  const session = await getServerSession();
-  if (!session?.userId) {
+  const cookieSession = await getServerSession();
+  if (!cookieSession?.userId) {
     throw new Error("Login required.");
   }
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const session = await loadAuthSessionByUserId(cookieSession.userId);
+  if (!session) {
+    throw new Error("Login required.");
+  }
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) throw new Error("Login required.");
   return { session, actor };
 }
@@ -495,16 +501,12 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
   const csOpErr = commercialServiceErrorForOperations(scope);
   if (csOpErr) return { ok: false, error: csOpErr };
 
-  if (
-    !canCreateOrEditDeliveryOrderDraft(
-      effectiveSessionRole(session),
-      session.commercialServiceRole?.code,
-    )
-  ) {
+  const perms = await getPermissionsForSession(session);
+  if (!canDraftDeliveryOrders(perms, session)) {
     return {
       ok: false,
       error:
-        "Only senior sales supervisors can create or edit delivery order drafts. Directors validate pending orders once they are ready.",
+        "You do not have permission to create or edit delivery order drafts. Enable “Create and edit delivery order drafts” under Setup → Role access (Operations) or User access control, then sign out and sign in again.",
     };
   }
 
@@ -823,15 +825,11 @@ export async function deleteDeliveryOrder(formData: FormData): Promise<SaveSecti
   if (existing.status === ValidationStatus.VALIDATED) {
     return { ok: false, error: "Validated delivery orders cannot be deleted." };
   }
-  if (
-    !canCreateOrEditDeliveryOrderDraft(
-      effectiveSessionRole(session),
-      session.commercialServiceRole?.code,
-    )
-  ) {
+  const perms = await getPermissionsForSession(session);
+  if (!canDraftDeliveryOrders(perms, session)) {
     return {
       ok: false,
-      error: "Only senior sales supervisors can delete a pending delivery order.",
+      error: "You do not have permission to delete a pending delivery order.",
     };
   }
 

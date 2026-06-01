@@ -14,6 +14,10 @@ import {
   assertFullStockActionAccess,
 } from "@/lib/stock/stock-page-access-server";
 import {
+  movementSignedDelta,
+  type AdjustmentLineForDelta,
+} from "@/lib/stock/movement-signed-delta";
+import {
   Prisma,
   StockCondition,
   StockDocStatus,
@@ -61,6 +65,8 @@ export type StockMovementRow = {
   kind: StockMovementKind;
   condition: StockCondition;
   qty: string;
+  /** Net balance impact (+ in, − out). Used for movement ledger +/− columns. */
+  signedQty: string;
   sourceKind: string;
   sourceId: string;
   documentNo: string | null;
@@ -408,7 +414,62 @@ async function loadMovements(
   for (const s of sales) docNoById.set(`SALE:${s.id}`, s.invoiceNo);
   for (const a of adjustments) docNoById.set(`ADJUSTMENT:${a.id}`, a.adjustmentNo);
 
-  return rows.map((r) => ({
+  const adjustmentSourceIds = [
+    ...new Set(
+      rows
+        .filter(
+          (m) =>
+            m.kind === StockMovementKind.ADJUSTMENT &&
+            m.sourceKind === "ADJUSTMENT",
+        )
+        .map((m) => m.sourceId),
+    ),
+  ];
+
+  const adjustmentLines =
+    adjustmentSourceIds.length > 0
+      ? await prisma.stockAdjustmentLine.findMany({
+          where: { adjustmentId: { in: adjustmentSourceIds } },
+          select: {
+            adjustmentId: true,
+            productId: true,
+            storageLocationId: true,
+            deltaQty: true,
+            fromCondition: true,
+            toCondition: true,
+          },
+        })
+      : [];
+
+  const linesByAdjustmentId = new Map<string, AdjustmentLineForDelta[]>();
+  for (const line of adjustmentLines) {
+    const arr = linesByAdjustmentId.get(line.adjustmentId) ?? [];
+    arr.push({
+      productId: line.productId,
+      storageLocationId: line.storageLocationId,
+      deltaQty: line.deltaQty,
+      fromCondition: line.fromCondition,
+      toCondition: line.toCondition,
+    });
+    linesByAdjustmentId.set(line.adjustmentId, arr);
+  }
+
+  return rows.map((r) => {
+    const signed = movementSignedDelta(
+      {
+        kind: r.kind,
+        qty: r.qty,
+        sourceKind: r.sourceKind,
+        sourceId: r.sourceId,
+        productId: r.productId,
+        storageLocationId: r.storageLocationId,
+        condition: r.condition,
+        notes: r.notes,
+      },
+      linesByAdjustmentId,
+    );
+
+    return {
     id: r.id,
     occurredAtIso: r.occurredAt.toISOString(),
     salesPointId: r.salesPointId,
@@ -423,6 +484,7 @@ async function loadMovements(
     kind: r.kind,
     condition: r.condition,
     qty: r.qty.toString(),
+    signedQty: signed.toString(),
     sourceKind: r.sourceKind,
     sourceId: r.sourceId,
     documentNo: docNoById.get(`${r.sourceKind}:${r.sourceId}`) ?? null,
@@ -430,7 +492,8 @@ async function loadMovements(
     userName: r.user.name,
     notes: r.notes ?? null,
     createdAtIso: r.createdAt.toISOString(),
-  }));
+    };
+  });
 }
 
 async function loadReceipts(

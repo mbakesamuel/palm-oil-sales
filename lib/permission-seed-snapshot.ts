@@ -45,7 +45,8 @@ export function snapshotForLegacyUserRole(role: UserRole): RolePermissionMap {
     role === UserRole.ADMIN || role === UserRole.DIRECTOR;
   base["route:/delivery-orders"] = true;
   base["route:/delivery-orders/list"] = true;
-  base["route:/delivery-orders/validation-queue"] = role === UserRole.MANAGER;
+  base["route:/delivery-orders/validation-queue"] =
+    role === UserRole.MANAGER || role === UserRole.DIRECTOR;
   base["route:/pos"] = true;
   base["route:/pos/list"] = true;
   base["route:/stock"] = true;
@@ -60,6 +61,8 @@ export function snapshotForLegacyUserRole(role: UserRole): RolePermissionMap {
   }
   if (role === UserRole.SENIOR_SUPERVISOR) {
     base["ui:receive-stock-transfer"] = true;
+    base["ui:draft-delivery-orders"] = true;
+    base["ui:validate-documents"] = true;
   }
   if (role === UserRole.MANAGER) {
     base["ui:receive-stock-transfer"] = true;
@@ -154,7 +157,8 @@ export function snapshotForLineRoleCode(code: string): RolePermissionMap {
 
   base["route:/delivery-orders"] = true;
   base["route:/delivery-orders/list"] = true;
-  base["route:/delivery-orders/validation-queue"] = c.includes("manager");
+  base["route:/delivery-orders/validation-queue"] =
+    c.includes("manager") || c.includes("director");
   base["route:/pos"] = true;
   base["route:/pos/list"] = true;
   base["route:/stock"] = true;
@@ -171,7 +175,8 @@ export function snapshotForLineRoleCode(code: string): RolePermissionMap {
     base["ui:post-stock-adjustment"] = true;
   }
   if (c.includes("senior") && c.includes("supervisor")) {
-    // senior — no sales invoice validation
+    base["ui:draft-delivery-orders"] = true;
+    base["ui:validate-documents"] = true;
   } else if (c.includes("supervisor")) {
     base["ui:validate-documents"] = true;
   }

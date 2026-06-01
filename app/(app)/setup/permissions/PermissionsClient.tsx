@@ -13,6 +13,8 @@ import {
 } from "@/lib/commercial-modules";
 import {
   getGlobalRolePermissionsAction,
+  getGlobalRolesPermissionsBatchAction,
+  getLineRolesPermissionsBatchAction,
   getServiceRolePermissionsAction,
   resetGlobalRolePermissions,
   resetServiceRolePermissions,
@@ -194,6 +196,10 @@ export function PermissionsClient(props: {
   const [commercialServiceId, setCommercialServiceId] = React.useState("");
   const [serviceRoleId, setServiceRoleId] = React.useState("");
   const [map, setMap] = React.useState<Record<string, boolean> | null>(null);
+  const [permCache, setPermCache] = React.useState<
+    Record<string, Record<string, boolean>>
+  >({});
+  const [permCacheLoading, setPermCacheLoading] = React.useState(false);
   const [busyKey, setBusyKey] = React.useState<string | null>(null);
   const [groupSaveProgress, setGroupSaveProgress] =
     React.useState<GroupSaveProgress | null>(null);
@@ -223,6 +229,59 @@ export function PermissionsClient(props: {
     return filterKeysForLine(all, selectedService.enabledModules);
   }, [scope, selectedService]);
 
+  const globalBatchLoadedRef = React.useRef(false);
+  const lineBatchLoadedForRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (status !== "ready" || !session?.userId || !isAdmin) return;
+    if (scope === "global" && activeGlobalRoles.length > 0 && !globalBatchLoadedRef.current) {
+      globalBatchLoadedRef.current = true;
+      setPermCacheLoading(true);
+      void getGlobalRolesPermissionsBatchAction()
+        .then((batch) => {
+          setPermCache((prev) => {
+            const next = { ...prev };
+            for (const [id, m] of Object.entries(batch)) {
+              next[id] = m as unknown as Record<string, boolean>;
+            }
+            return next;
+          });
+        })
+        .catch(() => {
+          globalBatchLoadedRef.current = false;
+        })
+        .finally(() => setPermCacheLoading(false));
+      return;
+    }
+    if (scope === "line" && commercialServiceId && rolesForLine.length > 0) {
+      if (lineBatchLoadedForRef.current === commercialServiceId) return;
+      lineBatchLoadedForRef.current = commercialServiceId;
+      setPermCacheLoading(true);
+      void getLineRolesPermissionsBatchAction(commercialServiceId)
+        .then((batch) => {
+          setPermCache((prev) => {
+            const next = { ...prev };
+            for (const [id, m] of Object.entries(batch)) {
+              next[id] = m as unknown as Record<string, boolean>;
+            }
+            return next;
+          });
+        })
+        .catch(() => {
+          lineBatchLoadedForRef.current = null;
+        })
+        .finally(() => setPermCacheLoading(false));
+    }
+  }, [
+    status,
+    session?.userId,
+    isAdmin,
+    scope,
+    commercialServiceId,
+    activeGlobalRoles.length,
+    rolesForLine.length,
+  ]);
+
   React.useEffect(() => {
     if (status !== "ready" || !session?.userId || !isAdmin) return;
     if (scope === "global") {
@@ -230,10 +289,17 @@ export function PermissionsClient(props: {
         setMap(null);
         return;
       }
+      const cached = permCache[globalRoleId];
+      if (cached) {
+        setMap(cached);
+        return;
+      }
       setMap(null);
       void getGlobalRolePermissionsAction(globalRoleId)
         .then((m) => {
-          setMap(m as unknown as Record<string, boolean>);
+          const row = m as unknown as Record<string, boolean>;
+          setMap(row);
+          setPermCache((prev) => ({ ...prev, [globalRoleId]: row }));
         })
         .catch(() => setMap(null));
       return;
@@ -242,13 +308,28 @@ export function PermissionsClient(props: {
       setMap(null);
       return;
     }
+    const cached = permCache[serviceRoleId];
+    if (cached) {
+      setMap(cached);
+      return;
+    }
     setMap(null);
     void getServiceRolePermissionsAction(serviceRoleId)
       .then((m) => {
-        setMap(m as unknown as Record<string, boolean>);
+        const row = m as unknown as Record<string, boolean>;
+        setMap(row);
+        setPermCache((prev) => ({ ...prev, [serviceRoleId]: row }));
       })
       .catch(() => setMap(null));
-  }, [status, session?.userId, isAdmin, scope, globalRoleId, serviceRoleId]);
+  }, [
+    status,
+    session?.userId,
+    isAdmin,
+    scope,
+    globalRoleId,
+    serviceRoleId,
+    permCache,
+  ]);
 
   React.useEffect(() => {
     if (scope !== "global" || activeGlobalRoles.length === 0) return;
@@ -298,7 +379,14 @@ export function PermissionsClient(props: {
       fd.set("key", key);
       fd.set("allowed", allowed ? "1" : "0");
       await setGlobalRolePermission(fd);
-      setMap((prev) => (prev ? { ...prev, [key]: allowed } : prev));
+      setMap((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, [key]: allowed };
+        setPermCache((cache) =>
+          globalRoleId ? { ...cache, [globalRoleId]: next } : cache,
+        );
+        return next;
+      });
     } finally {
       setBusyKey(null);
     }
@@ -316,6 +404,9 @@ export function PermissionsClient(props: {
       if (!prev) return prev;
       const next = { ...prev };
       for (const key of toUpdate) next[key] = allowed;
+      setPermCache((cache) =>
+        globalRoleId ? { ...cache, [globalRoleId]: next } : cache,
+      );
       return next;
     });
     try {
@@ -330,7 +421,9 @@ export function PermissionsClient(props: {
       }
     } catch {
       const restored = await getGlobalRolePermissionsAction(globalRoleId);
-      setMap(restored as unknown as Record<string, boolean>);
+      const row = restored as unknown as Record<string, boolean>;
+      setMap(row);
+      setPermCache((prev) => ({ ...prev, [globalRoleId]: row }));
     } finally {
       setBusyKey(null);
       setGroupSaveProgress(null);
@@ -346,7 +439,14 @@ export function PermissionsClient(props: {
       fd.set("key", key);
       fd.set("allowed", allowed ? "1" : "0");
       await setServiceRolePermission(fd);
-      setMap((prev) => (prev ? { ...prev, [key]: allowed } : prev));
+      setMap((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, [key]: allowed };
+        setPermCache((cache) =>
+          serviceRoleId ? { ...cache, [serviceRoleId]: next } : cache,
+        );
+        return next;
+      });
     } finally {
       setBusyKey(null);
     }
@@ -364,6 +464,9 @@ export function PermissionsClient(props: {
       if (!prev) return prev;
       const next = { ...prev };
       for (const key of toUpdate) next[key] = allowed;
+      setPermCache((cache) =>
+        serviceRoleId ? { ...cache, [serviceRoleId]: next } : cache,
+      );
       return next;
     });
     try {
@@ -378,7 +481,9 @@ export function PermissionsClient(props: {
       }
     } catch {
       const restored = await getServiceRolePermissionsAction(serviceRoleId);
-      setMap(restored as unknown as Record<string, boolean>);
+      const row = restored as unknown as Record<string, boolean>;
+      setMap(row);
+      setPermCache((prev) => ({ ...prev, [serviceRoleId]: row }));
     } finally {
       setBusyKey(null);
       setGroupSaveProgress(null);
@@ -393,13 +498,17 @@ export function PermissionsClient(props: {
         fd.set("globalRoleId", globalRoleId);
         await resetGlobalRolePermissions(fd);
         const next = await getGlobalRolePermissionsAction(globalRoleId);
-        setMap(next as unknown as Record<string, boolean>);
+        const row = next as unknown as Record<string, boolean>;
+        setMap(row);
+        setPermCache((prev) => ({ ...prev, [globalRoleId]: row }));
       } else if (serviceRoleId) {
         const fd = new FormData();
         fd.set("serviceRoleId", serviceRoleId);
         await resetServiceRolePermissions(fd);
         const next = await getServiceRolePermissionsAction(serviceRoleId);
-        setMap(next as unknown as Record<string, boolean>);
+        const row = next as unknown as Record<string, boolean>;
+        setMap(row);
+        setPermCache((prev) => ({ ...prev, [serviceRoleId]: row }));
       }
     } finally {
       setBusyKey(null);

@@ -1,5 +1,6 @@
 import { DashboardSessionCard } from "../DashboardSessionCard";
 import { DashboardStats } from "../DashboardStats";
+import { DashboardStockStats } from "../DashboardStockStats";
 import { DashboardIncomingTransfers } from "../DashboardIncomingTransfers";
 import { DashboardShell } from "../_shared/DashboardShell";
 import { DashboardQuickLinks } from "../widgets/DashboardQuickLinks";
@@ -18,6 +19,7 @@ export function PalmOilDashboard(props: {
     >
       <DashboardSessionCard />
       <DashboardStats commercialServiceId={commercialServiceId} />
+      <DashboardStockStats />
       <DashboardIncomingTransfers />
       <DashboardQuickLinks enabledModules={profile.enabledModules} />
     </DashboardShell>

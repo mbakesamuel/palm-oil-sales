@@ -1,7 +1,9 @@
 "use client";
 
+import { DocumentStatusStamp } from "@/components/DocumentStatusStamp";
 import type { ConsignmentNotePrintModel } from "@/lib/consignment-note-types";
 import { ValidationStatus } from "@/lib/domain";
+import { printStampLabelForValidationStatus } from "@/lib/print-document-stamp";
 import { ReportHeader } from "@/components/ReportHeader";
 
 function formatDisplayDate(iso: string) {
@@ -27,12 +29,14 @@ export function ConsignmentNotePrint(props: {
 }) {
   const { companyName, department, companyPhone, companyAddress, logoSrc, note } = props;
   const { doContext } = note;
+  const stampLabel = printStampLabelForValidationStatus(note.status);
 
   return (
     <article
       data-print-fit-page
-      className="text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0"
+      className="relative text-black bg-white max-w-3xl mx-auto print:max-w-none print:mx-0"
     >
+      {stampLabel ? <DocumentStatusStamp label={stampLabel} /> : null}
       <header className="border-b border-black/20 pb-4 mb-6">
         <ReportHeader
           companyName={companyName}
