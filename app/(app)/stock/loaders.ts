@@ -9,6 +9,7 @@ import { getPrismaClient } from "@/lib/prisma";
 import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import type { AuthSession } from "@/lib/auth-session";
+import { effectiveSessionRole } from "@/lib/auth-roles";
 import {
   assertStockPageActionAccess,
   assertFullStockActionAccess,
@@ -197,7 +198,8 @@ export type StockBootstrap = {
  * ability to draft.
  */
 function canDraftStockDocumentsForSession(session: AuthSession): boolean {
-  if (session.role === UserRole.SUPERVISOR || session.role === UserRole.MANAGER) {
+  const workflowRole = effectiveSessionRole(session);
+  if (workflowRole === UserRole.SUPERVISOR || workflowRole === UserRole.MANAGER) {
     return false;
   }
   const csrCode = session.commercialServiceRole?.code?.toLowerCase() ?? "";

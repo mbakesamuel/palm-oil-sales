@@ -27,7 +27,6 @@ import { isInsufficientStockError } from "@/lib/stock/errors";
 import { assertPosLocationSellable } from "@/lib/stock/pos-location";
 import { applyMovement } from "@/lib/stock/post";
 import { resolveDefaultStorageLocationId } from "@/lib/stock/storage-location";
-
 export type MobilePendingSaleRow = {
   id: string;
   invoiceNo: string;
@@ -35,6 +34,33 @@ export type MobilePendingSaleRow = {
   customerName: string;
   totalLabel: string;
   salesPointName: string | null;
+};
+
+export type MobileSaleDetail = {
+  id: string;
+  invoiceNo: string;
+  soldAtIso: string;
+  salesPointName: string | null;
+  customerName: string;
+  deliveryOrderNo: string | null;
+  vehicleNumber: string;
+  createdByName: string;
+  status: string;
+  netAmount: string;
+  vatAmount: string;
+  grossAmount: string;
+  lines: Array<{
+    productName: string;
+    productCat: string;
+    qtyLabel: string;
+    unitPriceLabel: string;
+    lineGross: string;
+  }>;
+  payments: Array<{
+    method: string;
+    amount: string;
+    reference: string | null;
+  }>;
 };
 
 function money2Print(value: Prisma.Decimal) {
@@ -110,6 +136,91 @@ export async function listPendingSalesForSession(
       salesPointName: r.salesPoint?.name ?? null,
     };
   });
+}
+
+export async function loadSaleDetailForSession(
+  session: AuthSession,
+  saleId: string,
+): Promise<MobileSaleDetail | null> {
+  await assertPermissionKeyForSession(session, "route:/pos");
+  const perms = await getPermissionsForSession(session);
+  if (!perms["ui:validate-documents"]) return null;
+
+  const prisma = getPrismaClient();
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  if (!actor?.isActive) return null;
+
+  const scope = resolveServiceScope(session);
+  const id = String(saleId ?? "").trim();
+  if (!id) return null;
+
+  const row = await prisma.sale.findUnique({
+    where: { id },
+    include: {
+      customer: {
+        select: { name: true, taxRegime: { select: { vatApplies: true } } },
+      },
+      createdBy: { select: { name: true } },
+      salesPoint: { select: { name: true } },
+      appliedTaxes: { orderBy: { id: "asc" } },
+      lines: {
+        include: {
+          product: {
+            select: {
+              productName: true,
+              productCat: { select: { productCat: true, isBottled: true } },
+            },
+          },
+        },
+        orderBy: { id: "asc" },
+      },
+      payments: { orderBy: { id: "asc" } },
+    },
+  });
+  if (!row) return null;
+  const accessErr = salesPointErrorForResource(actor, row.salesPointId ?? null);
+  if (accessErr) return null;
+  const csErr = commercialServiceErrorForResource(scope, row.commercialServiceId);
+  if (csErr) return null;
+
+  return {
+    id: row.id,
+    invoiceNo: row.invoiceNo,
+    soldAtIso: row.soldAt.toISOString().slice(0, 10),
+    salesPointName: row.salesPoint?.name ?? null,
+    customerName: row.customer.name,
+    deliveryOrderNo: row.deliveryOrderNo ?? null,
+    vehicleNumber: row.vehicleNumber,
+    createdByName: row.createdBy.name,
+    status: row.status,
+    netAmount: row.netAmount.toString(),
+    vatAmount: row.vatAmount.toString(),
+    grossAmount: row.grossAmount.toString(),
+    lines: row.lines.map((l) => {
+      const bottled = l.product.productCat?.isBottled === true;
+      const qty = bottled ? (l.qtyUnits ?? l.qtyKg) : l.qtyKg;
+      const unitPrice = bottled
+        ? (l.unitPricePerUnit ?? l.unitPricePerKg)
+        : l.unitPricePerKg;
+      return {
+        productName: l.product.productName,
+        productCat: l.product.productCat.productCat,
+        qtyLabel: `${qty.toString()} ${bottled ? "units" : "kg"}`,
+        unitPriceLabel: unitPrice.toString(),
+        lineGross: l.lineGross.toString(),
+      };
+    }),
+    payments: row.payments.map((p) => ({
+      method: p.method,
+      amount: p.amount.toString(),
+      reference:
+        p.method === "CHEQUE"
+          ? [p.chequeNo, p.bank].filter(Boolean).join(" · ") || null
+          : p.method === "TRAITE"
+            ? p.traiteNo
+            : null,
+    })),
+  };
 }
 
 export async function validateSaleForSession(

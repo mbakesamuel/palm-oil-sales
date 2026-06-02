@@ -9,7 +9,9 @@ export default function ValidationLayout() {
         headerTitleStyle: { fontWeight: "600" },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Validation inbox" }} />
+      <Stack.Screen name="index" options={{ title: "Approvals" }} />
+      <Stack.Screen name="sale/[id]" options={{ title: "Review sale" }} />
+      <Stack.Screen name="do/[id]" options={{ title: "Review delivery order" }} />
     </Stack>
   );
 }

@@ -12,7 +12,10 @@ export type MobileSessionPayload = {
   userId: string;
   username: string;
   displayName: string;
+  /** Workflow role (line role code wins over stale `User.role`). */
   role: string;
+  /** Human-readable role for UI (line role name or legacy label). */
+  roleLabel: string;
   globalRole: { id: string; code: string; displayName: string } | null;
   salesPoint: { id: number; name: string } | null;
   factory: { id: string; name: string } | null;
@@ -48,6 +51,107 @@ export type MobilePendingSaleRow = {
   salesPointName: string | null;
 };
 
+export type MobileSaleDetail = {
+  id: string;
+  invoiceNo: string;
+  soldAtIso: string;
+  salesPointName: string | null;
+  customerName: string;
+  deliveryOrderNo: string | null;
+  vehicleNumber: string;
+  createdByName: string;
+  status: string;
+  netAmount: string;
+  vatAmount: string;
+  grossAmount: string;
+  lines: Array<{
+    productName: string;
+    productCat: string;
+    qtyLabel: string;
+    unitPriceLabel: string;
+    lineGross: string;
+  }>;
+  payments: Array<{
+    method: string;
+    amount: string;
+    reference: string | null;
+  }>;
+};
+
+export type MobileDeliveryOrderDetail = {
+  id: number;
+  deliveryOrderNo: string;
+  dateIssuedIso: string;
+  salesPointName: string;
+  customerName: string;
+  status: string;
+  reviewedAtIso: string | null;
+  reviewedByName: string | null;
+  orderRef: string | null;
+  totalAmountXaf: string;
+  lines: Array<{
+    productName: string;
+    orderQty: string;
+    orderUnit: string;
+    amount: string | null;
+  }>;
+  payments: Array<{
+    method: string;
+    amount: string;
+    reference: string | null;
+  }>;
+};
+
+export type MobileReceiptDetail = {
+  id: string;
+  receiptNo: string;
+  salesPointName: string;
+  supplierLabel: string;
+  status: string;
+  receivedAtIso: string;
+  createdByName: string;
+  createdAtIso: string;
+  postedByName: string | null;
+  postedAtIso: string | null;
+  notes: string | null;
+  totalQty: string;
+  lines: Array<{
+    productName: string;
+    qty: string;
+    uom: string;
+    storageLocationName: string;
+  }>;
+};
+
+export type MobileTransferDetail = {
+  id: string;
+  transferNo: string;
+  fromSalesPointName: string;
+  toSalesPointName: string;
+  status: string;
+  dispatchedAtIso: string | null;
+  receivedAtIso: string | null;
+  createdByName: string;
+  createdAtIso: string;
+  dispatchedByName: string | null;
+  receivedByName: string | null;
+  notes: string | null;
+  totalQty: string;
+  lines: Array<{
+    id: string;
+    productName: string;
+    qty: string;
+    uom: string;
+    fromStorageLocationName: string;
+    toStorageLocationName: string | null;
+  }>;
+  receiveLocations?: Array<{
+    id: number;
+    name: string;
+    isSellable: boolean;
+  }>;
+};
+
 export const MOBILE_REPORT_LINKS = [
   {
     id: "stock-vs-commitments",
@@ -72,5 +176,50 @@ export const MOBILE_REPORT_LINKS = [
     label: "DO commitments",
     permission: "route:/reports/do-commitment-crosstab",
     path: `${MOBILE_API_PREFIX}/reports/commitments`,
+  },
+] as const;
+
+export type MobileReceiptListRow = {
+  id: string;
+  receiptNo: string;
+  salesPointName: string;
+  supplierLabel: string;
+  status: string;
+  totalQty: string;
+  lineCount: number;
+  createdByName: string;
+  receivedAtIso: string;
+};
+
+export type MobileTransferListRow = {
+  id: string;
+  transferNo: string;
+  fromSalesPointName: string;
+  toSalesPointName: string;
+  status: string;
+  totalQty: string;
+  lineCount: number;
+  createdByName: string;
+  dispatchedAtIso: string | null;
+};
+
+export const MOBILE_STOCK_LINKS = [
+  {
+    id: "receipts",
+    label: "Stock receipts",
+    description: "Review clerk drafts, then post into stock",
+    permission: "ui:post-stock-receipt",
+  },
+  {
+    id: "transfers",
+    label: "Stock transfers",
+    description: "Review drafts, then dispatch",
+    permission: "ui:dispatch-stock-transfer",
+  },
+  {
+    id: "transfers-receive",
+    label: "Receive transfers",
+    description: "Review in transit, then receive",
+    permission: "ui:receive-stock-transfer",
   },
 ] as const;

@@ -28,6 +28,30 @@ export type ValidationQueueFilters = {
   salesPointId?: number | null;
 };
 
+export type MobileDeliveryOrderDetail = {
+  id: number;
+  deliveryOrderNo: string;
+  dateIssuedIso: string;
+  salesPointName: string;
+  customerName: string;
+  status: string;
+  reviewedAtIso: string | null;
+  reviewedByName: string | null;
+  orderRef: string | null;
+  totalAmountXaf: string;
+  lines: Array<{
+    productName: string;
+    orderQty: string;
+    orderUnit: string;
+    amount: string | null;
+  }>;
+  payments: Array<{
+    method: string;
+    amount: string;
+    reference: string | null;
+  }>;
+};
+
 export type ValidationQueueRow = {
   id: number;
   deliveryOrderNo: string;
@@ -223,6 +247,74 @@ export async function listPendingDeliveryOrdersForSession(
     totalReviewedPending,
     totalUnreviewedPending,
   };
+}
+
+export async function loadDeliveryOrderDetailForSession(
+  session: AuthSession,
+  deliveryOrderId: number,
+): Promise<MobileDeliveryOrderDetail | null> {
+  try {
+    const { prisma, actor } = await requireValidationQueueActor(session);
+    const id = Number(deliveryOrderId);
+    if (!Number.isFinite(id)) return null;
+
+    const scope = resolveServiceScope(session);
+    const row = await prisma.deliveryOrder.findUnique({
+      where: { id },
+      include: {
+        salesPoint: { select: { name: true } },
+        customer: { select: { name: true } },
+        reviewedBy: { select: { name: true } },
+        details: {
+          orderBy: { id: "asc" },
+          include: { product: { select: { productName: true } } },
+        },
+        payments: { orderBy: { id: "asc" } },
+      },
+    });
+    if (!row) return null;
+    if (salesPointErrorForResource(actor, row.salesPointId)) return null;
+    if (commercialServiceErrorForResource(scope, row.commercialServiceId)) return null;
+
+    const total = row.details.reduce(
+      (acc, d) => acc.add(d.amount ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    );
+
+    return {
+      id: row.id,
+      deliveryOrderNo: row.deliveryOrderNo,
+      dateIssuedIso: row.dateIssued.toISOString().slice(0, 10),
+      salesPointName: row.salesPoint.name,
+      customerName: row.customer.name,
+      status: row.status,
+      reviewedAtIso: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+      reviewedByName: row.reviewedBy?.name ?? null,
+      orderRef: row.orderRef ?? null,
+      totalAmountXaf: total.gt(0)
+        ? `${money2Print(total).toNumber().toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })} XAF`
+        : "",
+      lines: row.details.map((d) => ({
+        productName: d.product.productName,
+        orderQty: d.orderQty.toString(),
+        orderUnit: d.orderUnit ?? "",
+        amount: d.amount != null ? d.amount.toString() : null,
+      })),
+      payments: row.payments.map((p) => ({
+        method: p.method,
+        amount: p.paymentDate.toISOString().slice(0, 10),
+        reference:
+          p.chequeNo || p.bank
+            ? [p.chequeNo, p.bank].filter(Boolean).join(" · ")
+            : p.cashReceiptNo,
+      })),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function markDeliveryOrdersReviewedForSession(

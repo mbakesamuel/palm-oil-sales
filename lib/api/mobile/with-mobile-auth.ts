@@ -8,6 +8,8 @@ import {
 } from "@/lib/access-control";
 import type { PermissionKey } from "@/lib/access-control-keys";
 import { serializeForMobile } from "@/lib/api/mobile/serialize";
+import { effectiveSessionRole } from "@/lib/auth-roles";
+import { sessionRoleLabel } from "@/lib/auth-display";
 import { loadAuthSessionByUserId } from "@/lib/load-auth-session";
 import { verifyMobileAccessToken } from "@/lib/mobile/tokens";
 
@@ -81,12 +83,15 @@ export function toMobileSessionPayload(
     .filter(([, allowed]) => allowed)
     .map(([key]) => key);
 
+  const workflowRole = effectiveSessionRole(session);
+
   return {
     session: {
       userId: session.userId,
       username: session.username,
       displayName: session.displayName,
-      role: session.role,
+      role: workflowRole,
+      roleLabel: sessionRoleLabel({ ...session, role: workflowRole }),
       globalRole: session.globalRole,
       salesPoint: session.salesPoint,
       factory: session.factory,
