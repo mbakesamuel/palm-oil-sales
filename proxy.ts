@@ -10,7 +10,7 @@ const { auth } = NextAuth(authConfig);
 
 function shouldSkipRouteCheck(pathname: string): boolean {
   // Public pages
-  if (pathname === "/login" || pathname === "/forbidden") return true;
+  if (pathname === "/" || pathname === "/login" || pathname === "/forbidden") return true;
   // Auth endpoints
   if (pathname.startsWith("/api/auth")) return true;
   // Mobile JSON API (Bearer auth handled in route handlers)

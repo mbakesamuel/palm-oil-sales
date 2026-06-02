@@ -1,11 +1,17 @@
 import { resolveCompanyLogoSrc } from "@/lib/company-logo";
+import { getServerSession } from "@/lib/auth-server";
+import { resolveHomeDashboardPath } from "@/lib/dashboard-routing";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { redirect } from "next/navigation";
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function LoginPage() {
+  const session = await getServerSession();
+  if (session) redirect(resolveHomeDashboardPath(session));
+
   const settings = await getOrInitCompanySettings();
 
   return (

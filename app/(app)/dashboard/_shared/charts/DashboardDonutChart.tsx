@@ -22,7 +22,8 @@ export function DashboardDonutChart(props: { data: StatusSlice[] }) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <DashboardChartFrame>
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        {(size) => (
+        <ResponsiveContainer width={size.width} height={size.height} minWidth={0}>
           <PieChart>
             <Pie
               data={data}
@@ -52,6 +53,7 @@ export function DashboardDonutChart(props: { data: StatusSlice[] }) {
             />
           </PieChart>
         </ResponsiveContainer>
+        )}
       </DashboardChartFrame>
       <ul className="mt-0.5 flex shrink-0 flex-wrap justify-center gap-x-2 gap-y-0.5 text-[9px] sm:text-[10px]">
         {data.map((d, i) => {
