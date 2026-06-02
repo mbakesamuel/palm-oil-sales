@@ -3,6 +3,7 @@
 import * as React from "react";
 import { refreshCurrentUserSession } from "@/app/(app)/users/session-actions";
 import type { AuthSession } from "@/lib/auth-session";
+import { clearWorkingCalCookiesClient } from "@/lib/working-period-cookie";
 
 type AuthStatus = "loading" | "ready";
 
@@ -72,7 +73,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = React.useCallback(async () => {
-    setSession(null);
+    setSession((prev) => {
+      clearWorkingCalCookiesClient(prev?.userId ?? null);
+      return null;
+    });
     try {
       await fetch("/api/auth/logout", {
         method: "POST",

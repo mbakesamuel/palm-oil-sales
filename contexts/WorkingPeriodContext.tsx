@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   defaultSelectableMonthForToday,
   firstDayOfCalendarMonth,
@@ -8,9 +9,14 @@ import {
   listSelectableCalendarMonths,
   type SelectableMonth,
 } from "@/lib/posting-calendar";
-import { WORKING_CAL_COOKIE } from "@/lib/working-period-cookie";
+import {
+  formatWorkingCalCookieValue,
+  workingCalCookieName,
+} from "@/lib/working-period-cookie";
 
-const STORAGE_KEY = "po_working_period";
+const STORAGE_KEY = "po_working_period_v2";
+
+type StoredByUser = Record<string, { calendarYear: number; calendarMonth: number }>;
 
 export type WorkingPeriodContextValue = {
   openFinancialYear: number | null;
@@ -28,6 +34,63 @@ export type WorkingPeriodContextValue = {
 
 const WorkingPeriodContext = React.createContext<WorkingPeriodContextValue | null>(null);
 
+function readStoredMonth(
+  financialYear: number,
+  userId: string | null,
+): { calendarYear: number; calendarMonth: number } | null {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as {
+      financialYear?: unknown;
+      byUser?: unknown;
+    };
+    if (o.financialYear !== financialYear || typeof o.byUser !== "object" || !o.byUser) {
+      return null;
+    }
+    const entry = (o.byUser as StoredByUser)[userId];
+    if (
+      entry &&
+      typeof entry.calendarYear === "number" &&
+      typeof entry.calendarMonth === "number"
+    ) {
+      return {
+        calendarYear: entry.calendarYear,
+        calendarMonth: entry.calendarMonth,
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeStoredMonth(
+  financialYear: number,
+  userId: string,
+  calendarYear: number,
+  calendarMonth: number,
+): void {
+  try {
+    let byUser: StoredByUser = {};
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const o = JSON.parse(raw) as {
+        financialYear?: unknown;
+        byUser?: unknown;
+      };
+      if (o.financialYear === financialYear && typeof o.byUser === "object" && o.byUser) {
+        byUser = { ...(o.byUser as StoredByUser) };
+      }
+    }
+    byUser[userId] = { calendarYear, calendarMonth };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ financialYear, byUser }));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function WorkingPeriodProvider(props: {
   children: React.ReactNode;
   openFinancialYear: number | null;
@@ -35,6 +98,8 @@ export function WorkingPeriodProvider(props: {
   openPeriodEndIso: string | null;
 }) {
   const { children, openFinancialYear, openPeriodStartIso, openPeriodEndIso } = props;
+  const { status: authStatus, session } = useAuth();
+  const userId = session?.userId ?? null;
 
   const selectableMonths = React.useMemo(() => {
     if (
@@ -50,7 +115,7 @@ export function WorkingPeriodProvider(props: {
   const [workingCalYear, setWorkingCalYear] = React.useState(2000);
   const [workingCalMonth, setWorkingCalMonth] = React.useState(1);
 
-  const applyDefaultMonth = React.useCallback(() => {
+  const applyMonthForUser = React.useCallback(() => {
     if (
       openFinancialYear == null ||
       openPeriodStartIso == null ||
@@ -61,32 +126,23 @@ export function WorkingPeriodProvider(props: {
       setWorkingCalMonth(1);
       return;
     }
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const o = JSON.parse(raw) as {
-          financialYear?: unknown;
-          calendarYear?: unknown;
-          calendarMonth?: unknown;
-        };
-        const cy = o.calendarYear;
-        const cm = o.calendarMonth;
-        if (
-          o.financialYear === openFinancialYear &&
-          typeof cy === "number" &&
-          typeof cm === "number"
-        ) {
-          const ok = selectableMonths.some((r) => r.year === cy && r.month === cm);
-          if (ok) {
-            setWorkingCalYear(cy);
-            setWorkingCalMonth(cm);
-            return;
-          }
+
+    if (authStatus === "loading") return;
+
+    if (userId) {
+      const stored = readStoredMonth(openFinancialYear, userId);
+      if (stored) {
+        const ok = selectableMonths.some(
+          (r) => r.year === stored.calendarYear && r.month === stored.calendarMonth,
+        );
+        if (ok) {
+          setWorkingCalYear(stored.calendarYear);
+          setWorkingCalMonth(stored.calendarMonth);
+          return;
         }
       }
-    } catch {
-      /* ignore */
     }
+
     const d = defaultSelectableMonthForToday(openPeriodStartIso, openPeriodEndIso);
     if (d) {
       setWorkingCalYear(d.year);
@@ -98,39 +154,46 @@ export function WorkingPeriodProvider(props: {
       setWorkingCalYear(f.year);
       setWorkingCalMonth(f.month);
     }
-  }, [openFinancialYear, openPeriodStartIso, openPeriodEndIso, selectableMonths]);
+  }, [
+    authStatus,
+    userId,
+    openFinancialYear,
+    openPeriodStartIso,
+    openPeriodEndIso,
+    selectableMonths,
+  ]);
 
   React.useEffect(() => {
-    applyDefaultMonth();
-  }, [applyDefaultMonth]);
+    applyMonthForUser();
+  }, [applyMonthForUser]);
 
-  /** Mirror working month to an HTTP cookie so server-rendered reports (e.g. sales register) can filter. */
   React.useEffect(() => {
-    if (openFinancialYear == null) return;
-    const ok = selectableMonths.some((m) => m.year === workingCalYear && m.month === workingCalMonth);
+    if (openFinancialYear == null || !userId) return;
+    const ok = selectableMonths.some(
+      (m) => m.year === workingCalYear && m.month === workingCalMonth,
+    );
     if (!ok) return;
     const maxAge = 60 * 60 * 24 * 400;
-    document.cookie = `${WORKING_CAL_COOKIE}=${workingCalYear}-${workingCalMonth}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  }, [openFinancialYear, selectableMonths, workingCalYear, workingCalMonth]);
+    const value = formatWorkingCalCookieValue(workingCalYear, workingCalMonth);
+    document.cookie = `${workingCalCookieName(userId)}=${value}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }, [
+    openFinancialYear,
+    selectableMonths,
+    workingCalYear,
+    workingCalMonth,
+    userId,
+  ]);
 
-  function setWorkingCalendarMonth(year: number, month: number) {
-    setWorkingCalYear(year);
-    setWorkingCalMonth(month);
-    if (openFinancialYear != null) {
-      try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            financialYear: openFinancialYear,
-            calendarYear: year,
-            calendarMonth: month,
-          }),
-        );
-      } catch {
-        /* ignore */
+  const setWorkingCalendarMonth = React.useCallback(
+    (year: number, month: number) => {
+      setWorkingCalYear(year);
+      setWorkingCalMonth(month);
+      if (openFinancialYear != null && userId) {
+        writeStoredMonth(openFinancialYear, userId, year, month);
       }
-    }
-  }
+    },
+    [openFinancialYear, userId],
+  );
 
   const fyLabel =
     openFinancialYear != null && openPeriodStartIso != null && openPeriodEndIso != null
@@ -178,6 +241,7 @@ export function WorkingPeriodProvider(props: {
       workingCalMonth,
       workingMonthStartEnd.startIso,
       workingMonthStartEnd.endIso,
+      setWorkingCalendarMonth,
       fyLabel,
       workingMonthLabel,
     ],

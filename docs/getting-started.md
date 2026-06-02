@@ -84,6 +84,25 @@ Open [http://localhost:3000](http://localhost:3000). Unauthenticated users are d
 
 4. **[Access control](http://localhost:3000/setup/permissions)** configures which roles can reach which routes.
 
+## Slow local dev (`Slow filesystem detected`)
+
+Next.js benchmarks disk speed under `.next/dev`. A warning around **200ms+** usually means the project folder is on a **slow or synced path**, not that the app logic is wrong.
+
+Your repo is under `Desktop\sales-project`, which on Windows is often synced by **OneDrive** and feels like a network drive to the compiler.
+
+**Try these in order:**
+
+1. **Windows Defender exclusion** — Add the project folder (or `%LOCALAPPDATA%\pos-app-next-dev`) under *Virus & threat protection → Manage settings → Exclusions*. See [Next.js local development](https://nextjs.org/docs/app/guides/local-development).
+2. **Move the repo** — Clone or copy to a simple local path, e.g. `C:\dev\pos-app`, not Desktop/OneDrive.
+3. **Put `.next` on a fast disk (Windows)** — Stop the dev server, run `npm run dev:clean`, then:
+   ```powershell
+   npm run dev:cache
+   ```
+   This creates a junction so `.next` lives under `%LOCALAPPDATA%\pos-app-next-dev` while your source stays on Desktop.
+4. **Reset a bad cache** — `npm run dev:clean`, then `npm run dev` again.
+
+**Also affects perceived speed:** this app uses many `force-dynamic` pages and a remote Postgres (`DATABASE_URL`). Every navigation can hit the DB; slow Neon cold starts feel like a “slow app” even when the filesystem is fine.
+
 ## Common failures
 
 | Symptom | What to check |
@@ -91,6 +110,7 @@ Open [http://localhost:3000](http://localhost:3000). Unauthenticated users are d
 | Prisma cannot connect | `DATABASE_URL` in `.env`, PostgreSQL running, network/firewall, SSL mode if required by host |
 | “Migration failed” / schema drift | Run `prisma migrate dev` locally or `migrate deploy` in CI; avoid editing production DB by hand |
 | Stale types or missing columns after pull | `npm run prisma:generate`, restart dev server |
+| Slow filesystem / sluggish `next dev` | See [Slow local dev](#slow-local-dev-slow-filesystem-detected) above |
 | Auth errors in production | Set **`AUTH_SECRET`** or **`NEXTAUTH_SECRET`**; see [configuration.md](configuration.md) |
 
 ## Further reading

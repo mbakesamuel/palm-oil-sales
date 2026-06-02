@@ -1,13 +1,17 @@
 import { Link } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { MOBILE_REPORT_LINKS, MOBILE_STOCK_LINKS } from "@pos/shared";
+import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useAuth } from "@/auth/AuthProvider";
+import { reportLinks, stockLinks } from "@/constants/home-links";
+import { useSafePadding } from "@/hooks/use-safe-padding";
 
 export default function HomeScreen() {
   const { session, logout, hasPermission } = useAuth();
+  const { scrollBottom } = useSafePadding();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingBottom: scrollBottom + 24 }]}
+    >
       <Text style={styles.greeting}>Hello, {session?.displayName}</Text>
       <Text style={styles.meta}>
         {session?.roleLabel ?? session?.role}
@@ -15,7 +19,7 @@ export default function HomeScreen() {
       </Text>
 
       <Text style={styles.section}>Reports</Text>
-      {MOBILE_REPORT_LINKS.filter((r) => hasPermission(r.permission)).map((r) => (
+      {reportLinks.filter((r) => hasPermission(r.permission)).map((r) => (
         <Link key={r.id} href={`/(app)/reports/${r.id}` as never} asChild>
           <Pressable style={styles.card}>
             <Text style={styles.cardTitle}>{r.label}</Text>
@@ -23,10 +27,10 @@ export default function HomeScreen() {
         </Link>
       ))}
 
-      {MOBILE_STOCK_LINKS.filter((s) => hasPermission(s.permission)).length > 0 ? (
+      {stockLinks.filter((s) => hasPermission(s.permission)).length > 0 ? (
         <>
           <Text style={styles.section}>Stock</Text>
-          {MOBILE_STOCK_LINKS.filter((s) => hasPermission(s.permission)).map((s) => (
+          {stockLinks.filter((s) => hasPermission(s.permission)).map((s) => (
             <Link key={s.id} href={`/(app)/stock/${s.id}` as never} asChild>
               <Pressable style={styles.card}>
                 <Text style={styles.cardTitle}>{s.label}</Text>

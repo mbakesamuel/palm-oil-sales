@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafePadding } from "@/hooks/use-safe-padding";
 
 export function ReviewLoader() {
   return (
@@ -23,10 +24,22 @@ export function ReviewScroll({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const { scrollBottom, footerBottom } = useSafePadding();
   return (
     <View style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.container}>{children}</ScrollView>
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          footer ? { paddingBottom: 16 } : { paddingBottom: scrollBottom + 16 },
+        ]}
+      >
+        {children}
+      </ScrollView>
+      {footer ? (
+        <View style={[styles.footer, { paddingBottom: footerBottom + 16 }]}>
+          {footer}
+        </View>
+      ) : null}
     </View>
   );
 }

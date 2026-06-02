@@ -5,7 +5,7 @@ import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
-import { WORKING_CAL_COOKIE, parseWorkingCalCookie } from "@/lib/working-period-cookie";
+import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
 import {
   commercialServiceErrorForOperations,
   commercialServiceErrorForResource,
@@ -16,8 +16,6 @@ import {
   fetchActorSalesPointScope,
   salesPointErrorForResource,
 } from "@/lib/auth-sales-point-scope";
-import { cookies } from "next/headers";
-
 export type DeliveryOrdersListPeriod = "month" | "year" | "all";
 
 export type DeliveryOrdersListFilters = {
@@ -107,10 +105,8 @@ export async function listDeliveryOrdersForOperations(input?: {
   // "Financial month/year" = open FY + user's working calendar month (cookie),
   // since DOs are posted with financialYear + financialMonth.
   const openPeriod = await getOpenFinancialYearPeriod();
-  const ck = await cookies();
-  const cal = parseWorkingCalCookie(ck.get(WORKING_CAL_COOKIE)?.value);
-  const workingYear = cal?.year;
-  const workingMonth = cal?.month;
+  const { monthFilter } = await resolveReportWorkingMonthFilter();
+  const workingMonth = monthFilter?.financialMonth;
 
   if (period === "month" && openPeriod && workingMonth != null) {
     dateIssuedWhere = {

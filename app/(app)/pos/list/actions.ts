@@ -5,7 +5,7 @@ import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
-import { WORKING_CAL_COOKIE, parseWorkingCalCookie } from "@/lib/working-period-cookie";
+import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
 import {
   commercialServiceErrorForOperations,
   commercialServiceErrorForResource,
@@ -14,8 +14,6 @@ import {
   saleWhereForScope,
 } from "@/lib/service-scope";
 import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
-import { cookies } from "next/headers";
-
 export type SalesListPeriod = "month" | "year" | "all";
 
 export type SalesListFilters = {
@@ -108,9 +106,8 @@ export async function listSalesForOperations(input?: {
   let periodLabel = "All time";
 
   const openPeriod = await getOpenFinancialYearPeriod();
-  const ck = await cookies();
-  const cal = parseWorkingCalCookie(ck.get(WORKING_CAL_COOKIE)?.value);
-  const workingMonth = cal?.month;
+  const { monthFilter } = await resolveReportWorkingMonthFilter();
+  const workingMonth = monthFilter?.financialMonth;
 
   if (period === "month" && openPeriod && workingMonth != null) {
     dateWhere = {

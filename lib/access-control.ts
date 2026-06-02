@@ -342,6 +342,7 @@ export async function isRouteAllowedForPath(
   pathname: string,
   session: AuthSession,
 ): Promise<boolean> {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
   const key = resolveRoutePermissionKey(pathname);
   if (!key) return true;
   if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
@@ -349,7 +350,18 @@ export async function isRouteAllowedForPath(
     if (!isRouteEnabledByProfile(profile, pathname)) return false;
   }
   const perms = await getPermissionsForSession(session);
-  return Boolean(perms[key]);
+  if (perms[key]) return true;
+
+  if (
+    normalized === "/setup/permissions" ||
+    normalized.startsWith("/setup/permissions/")
+  ) {
+    return Boolean(
+      perms["route:/setup/permissions"] || perms["route:/setup/role-access"],
+    );
+  }
+
+  return false;
 }
 
 /** Server-only: block direct URL access when the session lacks `route:*` permission. */
