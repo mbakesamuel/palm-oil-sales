@@ -5,6 +5,7 @@ import {
   resolveServiceScope,
   taxRegimeWhereForCommercialLine,
 } from "@/lib/service-scope";
+import { getEffectiveRatesSummary, decimalToPercentLabel } from "@/lib/tax/schedules";
 import { CustomersClient } from "./CustomersClient";
 import { deleteCustomer, saveCustomer } from "./actions";
 
@@ -22,7 +23,7 @@ export default async function CustomersPage() {
       ? taxRegimeWhereForCommercialLine(scope.commercialServiceId)
       : undefined;
 
-  const [commercialServices, taxRegimes, customers] = await Promise.all([
+  const [commercialServices, taxRegimes, customers, rateSummary] = await Promise.all([
     prisma.commercialService.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -34,6 +35,7 @@ export default async function CustomersPage() {
       select: {
         id: true,
         name: true,
+        kind: true,
         vatApplies: true,
         commercialServiceId: true,
       },
@@ -57,7 +59,13 @@ export default async function CustomersPage() {
       },
       take: 200,
     }),
+    getEffectiveRatesSummary(),
   ]);
+
+  const vatPct = decimalToPercentLabel(rateSummary.vatRate);
+  const satRealPct = decimalToPercentLabel(rateSummary.satRates.REAL ?? null);
+  const satSimplifiedPct = decimalToPercentLabel(rateSummary.satRates.SIMPLIFIED ?? null);
+  const satNoTpnPct = decimalToPercentLabel(rateSummary.satRates.NO_TAXPAYER_ID ?? null);
 
   const defaultLineId =
     scope.mode === "single"
@@ -70,6 +78,12 @@ export default async function CustomersPage() {
       defaultCommercialServiceId={defaultLineId}
       commercialServices={commercialServices}
       taxRegimes={taxRegimes}
+      rateHints={{
+        vatPct,
+        satRealPct,
+        satSimplifiedPct,
+        satNoTpnPct,
+      }}
       customers={customers.map((c) => ({
         ...c,
         createdAtIso: c.createdAt.toISOString(),

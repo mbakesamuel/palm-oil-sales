@@ -3,93 +3,10 @@ import "dotenv/config";
 import { PrismaClient, TaxRateVariant, TaxRegimeKind } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
+import { resolveTaxesForCustomer } from "@/lib/tax/resolve-customer";
 
 function d(n: number) {
-  // Prisma accepts string/number; use string for exact decimals we care about.
   return n.toString();
-}
-
-function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-async function resolveTaxesForCustomerLikeApp(
-  prisma: PrismaClient,
-  customerId: string,
-  soldAt: Date,
-) {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-    select: {
-      residency: true,
-      customerType: true,
-      hasTaxpayerId: true,
-      taxRegimeId: true,
-      taxRegime: { select: { kind: true } },
-    },
-  });
-  if (!customer) return { ok: false as const, error: "Customer not found." };
-  if (!customer.taxRegimeId || !customer.taxRegime) {
-    return { ok: false as const, error: "Customer has no tax regime." };
-  }
-
-  const day = isoDate(soldAt);
-  const asOfStartUtc = new Date(`${day}T00:00:00.000Z`);
-  const taxRegimeKind = customer.taxRegime.kind;
-
-  const links = await prisma.taxRegimeTax.findMany({
-    where: { taxRegimeId: customer.taxRegimeId },
-    include: { taxType: { select: { id: true, code: true, name: true, sortOrder: true } } },
-  });
-  const ordered = [...links].sort((a, b) => {
-    const so = a.taxType.sortOrder - b.taxType.sortOrder;
-    if (so !== 0) return so;
-    return a.taxType.code.localeCompare(b.taxType.code);
-  });
-
-  const taxes: Array<{ code: string; rate: string }> = [];
-
-  for (const link of ordered) {
-    if (link.taxType.code === VAT_TAX_CODE) {
-      if (customer.residency !== "LOCAL") continue;
-      const row = await prisma.taxRateSchedule.findFirst({
-        where: {
-          taxTypeId: link.taxType.id,
-          variant: TaxRateVariant.DEFAULT,
-          effectiveFrom: { lte: asOfStartUtc },
-        },
-        orderBy: { effectiveFrom: "desc" },
-      });
-      if (!row) return { ok: false as const, error: `Missing VAT schedule on ${day}` };
-      taxes.push({ code: link.taxType.code, rate: row.rate.toString() });
-      continue;
-    }
-
-    if (link.taxType.code === SALES_TAX_CODE) {
-      if (customer.residency !== "LOCAL") continue;
-      if (customer.customerType === "INDUSTRY") continue;
-
-      const variant = !customer.hasTaxpayerId
-        ? TaxRateVariant.NO_TAXPAYER_ID
-        : taxRegimeKind === TaxRegimeKind.REAL
-          ? TaxRateVariant.REAL
-          : TaxRateVariant.SIMPLIFIED;
-
-      const row = await prisma.taxRateSchedule.findFirst({
-        where: {
-          taxTypeId: link.taxType.id,
-          variant,
-          effectiveFrom: { lte: asOfStartUtc },
-        },
-        orderBy: { effectiveFrom: "desc" },
-      });
-      if (!row) return { ok: false as const, error: `Missing SALES_TAX(${variant}) schedule on ${day}` };
-      taxes.push({ code: link.taxType.code, rate: row.rate.toString() });
-      continue;
-    }
-  }
-
-  return { ok: true as const, taxes };
 }
 
 async function main() {
@@ -248,16 +165,30 @@ async function main() {
     const c2 = await prisma.customer.create({
       data: {
         commercialServiceId: defaultLine.id,
-        name: "__tax_verify__Local_Real_NoTPN",
+        name: "__tax_verify__Local_Real_Regime",
         customerType: "RETAIL",
         residency: "LOCAL",
         taxRegimeId: realRegime.id,
+        hasTaxpayerId: true,
+        taxpayerId: "TPN-456",
+      },
+      select: { id: true },
+    });
+    created.push({ model: "Customer", id: c2.id });
+
+    const cNoRegime = await prisma.customer.create({
+      data: {
+        commercialServiceId: defaultLine.id,
+        name: "__tax_verify__Local_No_Regime",
+        customerType: "RETAIL",
+        residency: "LOCAL",
+        taxRegimeId: null,
         hasTaxpayerId: false,
         taxpayerId: null,
       },
       select: { id: true },
     });
-    created.push({ model: "Customer", id: c2.id });
+    created.push({ model: "Customer", id: cNoRegime.id });
 
     const c3 = await prisma.customer.create({
       data: {
@@ -275,17 +206,22 @@ async function main() {
 
     const cases = [
       {
-        name: "Local + Simplified + hasTaxpayerId=true (expect VAT 19.25% + SalesTax 5%)",
+        name: "Local + Simplified regime (expect VAT 19.25% + Sales Tax 5%)",
         customerId: c1.id,
-        expect: { VAT: "0.1925", SALES_TAX: "0.05" },
+        expect: { VAT: "0.1925", [SALES_TAX_CODE]: "0.05" },
       },
       {
-        name: "Local + Real + hasTaxpayerId=false (expect VAT 19.25% + SalesTax 10%)",
+        name: "Local + Real regime (expect VAT 19.25% + Sales Tax 2%)",
         customerId: c2.id,
-        expect: { VAT: "0.1925", SALES_TAX: "0.1" },
+        expect: { VAT: "0.1925", [SALES_TAX_CODE]: "0.02" },
       },
       {
-        name: "Local + Industry (expect VAT 19.25% only; no SalesTax)",
+        name: "Local + no regime (expect VAT 19.25% + Sales Tax 10%)",
+        customerId: cNoRegime.id,
+        expect: { VAT: "0.1925", [SALES_TAX_CODE]: "0.1" },
+      },
+      {
+        name: "Local + Industry (expect VAT 19.25% only; no Sales Tax)",
         customerId: c3.id,
         expect: { VAT: "0.1925" as const },
       },
@@ -293,27 +229,29 @@ async function main() {
 
     let failures = 0;
     for (const tc of cases) {
-      const resolved = await resolveTaxesForCustomerLikeApp(prisma, tc.customerId, soldAt);
+      const resolved = await resolveTaxesForCustomer(prisma, tc.customerId, soldAt);
       if (!resolved.ok) {
         failures++;
         console.log(`FAIL: ${tc.name}`);
         console.log(`  resolver error: ${resolved.error}`);
         continue;
       }
-      const byCode = new Map(resolved.taxes.map((t) => [t.code, t.rate]));
+      const byCode = new Map(
+        resolved.taxes.map((t) => [t.code, t.rate.toString()]),
+      );
       const gotVat = byCode.get(VAT_TAX_CODE);
       const gotSales = byCode.get(SALES_TAX_CODE);
 
-      const expVat = (tc.expect as any).VAT as string | undefined;
-      const expSales = (tc.expect as any).SALES_TAX as string | undefined;
+      const expVat = (tc.expect as Record<string, string>).VAT;
+      const expSales = (tc.expect as Record<string, string>)[SALES_TAX_CODE];
 
       const okVat = expVat ? gotVat === expVat : gotVat == null;
       const okSales = expSales ? gotSales === expSales : gotSales == null;
       const ok = okVat && okSales;
 
       console.log(`${ok ? "PASS" : "FAIL"}: ${tc.name}`);
-      console.log(`  got: VAT=${gotVat ?? "—"} SALES_TAX=${gotSales ?? "—"}`);
-      console.log(`  exp: VAT=${expVat ?? "—"} SALES_TAX=${expSales ?? "—"}`);
+      console.log(`  got: VAT=${gotVat ?? "—"} ${SALES_TAX_CODE}=${gotSales ?? "—"}`);
+      console.log(`  exp: VAT=${expVat ?? "—"} ${SALES_TAX_CODE}=${expSales ?? "—"}`);
       if (!ok) failures++;
     }
 

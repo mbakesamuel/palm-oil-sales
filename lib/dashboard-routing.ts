@@ -1,6 +1,11 @@
 import type { AuthSession } from "@/lib/auth-session";
 import { roleSeesAllCommercialServices } from "@/lib/service-scope";
 
+export function isDashboardPath(pathname: string): boolean {
+  const path = pathname.trim();
+  return path === "/dashboard" || path.startsWith("/dashboard/");
+}
+
 /** Post-login and sidebar home dashboard URL for this session. */
 export function resolveHomeDashboardPath(session: AuthSession): string {
   if (roleSeesAllCommercialServices(session.role)) {

@@ -1,10 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useWorkingPeriod } from "@/contexts/WorkingPeriodContext";
+import { isDashboardPath } from "@/lib/dashboard-routing";
 
 export function WorkingPeriodBanner() {
+  const pathname = usePathname();
   const wp = useWorkingPeriod();
+
+  if (isDashboardPath(pathname)) {
+    return null;
+  }
 
   if (wp.openFinancialYear == null) {
     return (

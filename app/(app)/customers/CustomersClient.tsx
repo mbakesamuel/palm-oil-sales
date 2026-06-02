@@ -10,8 +10,16 @@ import { NO_TAX_REGIME_LABEL, NO_TAX_REGIME_VALUE } from "@/lib/customers/consta
 type TaxRegime = {
   id: string;
   name: string;
+  kind: "SIMPLIFIED" | "REAL";
   vatApplies: boolean;
   commercialServiceId: string | null;
+};
+
+type RateHints = {
+  vatPct: string | null;
+  satRealPct: string | null;
+  satSimplifiedPct: string | null;
+  satNoTpnPct: string | null;
 };
 type CustomerRow = {
   id: string;
@@ -64,6 +72,7 @@ export function CustomersClient(props: {
   defaultCommercialServiceId: string;
   commercialServices: Array<{ id: string; name: string; code: string }>;
   taxRegimes: TaxRegime[];
+  rateHints: RateHints;
   customers: CustomerRow[];
   saveCustomerAction: (formData: FormData) => void | Promise<void>;
   deleteCustomerAction: (formData: FormData) => void | Promise<void>;
@@ -73,6 +82,7 @@ export function CustomersClient(props: {
     defaultCommercialServiceId,
     commercialServices,
     taxRegimes,
+    rateHints,
     customers,
     saveCustomerAction,
     deleteCustomerAction,
@@ -455,6 +465,9 @@ export function CustomersClient(props: {
                     <option value="LOCAL">Local</option>
                     <option value="OVERSEAS">Overseas</option>
                   </select>
+                  <p className={hintClass}>
+                    Local: VAT and sales tax may apply. Overseas: exempt from VAT and sales tax.
+                  </p>
                 </div>
               </div>
 
@@ -478,16 +491,30 @@ export function CustomersClient(props: {
                     className={selectClass}
                   >
                     <option value={NO_TAX_REGIME_VALUE}>{NO_TAX_REGIME_LABEL}</option>
-                    {regimesForSelectedLine.map((tr) => (
-                      <option key={tr.id} value={tr.id}>
-                        {tr.name} ({tr.vatApplies ? "VAT applies" : "VAT exempt"})
-                      </option>
-                    ))}
+                    {regimesForSelectedLine.map((tr) => {
+                      const satPct =
+                        tr.kind === "REAL"
+                          ? rateHints.satRealPct
+                          : rateHints.satSimplifiedPct;
+                      const satLabel = satPct != null ? `${satPct}% sales tax` : "sales tax per regime";
+                      const vatLabel = tr.vatApplies
+                        ? rateHints.vatPct != null
+                          ? `VAT ${rateHints.vatPct}%`
+                          : "VAT applies"
+                        : "VAT exempt";
+                      return (
+                        <option key={tr.id} value={tr.id}>
+                          {tr.name} ({satLabel}, {vatLabel})
+                        </option>
+                      );
+                    })}
                   </select>
                   <p className={hintClass}>
                     {hasTaxRegime
-                      ? "A tax regime means the customer is a registered taxpayer."
-                      : "No regime uses the no-TPN sales tax rate (10% SAT when applicable)."}
+                      ? "Registered taxpayer: sales tax follows the regime (Real or Simplified)."
+                      : rateHints.satNoTpnPct != null
+                        ? `No regime: treated as no taxpayer card (${rateHints.satNoTpnPct}% sales tax when applicable).`
+                        : "No regime: no taxpayer card sales tax rate applies when eligible."}
                   </p>
                 </div>
               </div>

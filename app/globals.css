@@ -12,6 +12,12 @@
   --sidebar: #fafafa;
   --sidebar-foreground: #171717;
   --ring: #171717;
+  --dashboard-chart-1: #171717;
+  --dashboard-chart-2: #404040;
+  --dashboard-chart-3: #737373;
+  --dashboard-chart-4: #a3a3a3;
+  --dashboard-chart-5: #525252;
+  --dashboard-chart-6: #262626;
 }
 
 @theme inline {
@@ -41,6 +47,12 @@
     --sidebar: #141414;
     --sidebar-foreground: #ededed;
     --ring: #ededed;
+    --dashboard-chart-1: #ededed;
+    --dashboard-chart-2: #a3a3a3;
+    --dashboard-chart-3: #737373;
+    --dashboard-chart-4: #525252;
+    --dashboard-chart-5: #d4d4d4;
+    --dashboard-chart-6: #fafafa;
   }
 }
 
@@ -55,6 +67,12 @@ html[data-ui-theme="agro"] {
   --sidebar: #e3efe7;
   --sidebar-foreground: #142018;
   --ring: #1b5e34;
+  --dashboard-chart-1: #1b5e34;
+  --dashboard-chart-2: #2d7a47;
+  --dashboard-chart-3: #3d9a62;
+  --dashboard-chart-4: #e8c547;
+  --dashboard-chart-5: #5cb87a;
+  --dashboard-chart-6: #142018;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -69,6 +87,12 @@ html[data-ui-theme="agro"] {
     --sidebar: #122018;
     --sidebar-foreground: #e6f0e9;
     --ring: #5cb87a;
+    --dashboard-chart-1: #5cb87a;
+    --dashboard-chart-2: #3d9a62;
+    --dashboard-chart-3: #c9a227;
+    --dashboard-chart-4: #e8c547;
+    --dashboard-chart-5: #2d7a47;
+    --dashboard-chart-6: #e6f0e9;
   }
 }
 
@@ -132,4 +156,9 @@ body {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
+}
+
+/* Dashboard: size container for fluid chart layout */
+.dashboard-crm {
+  container-type: size;
 }

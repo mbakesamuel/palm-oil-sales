@@ -1,9 +1,8 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { Prisma } from "@prisma/client";
 import { BrandingProvider } from "@/components/BrandingProvider";
-import { WorkingPeriodBanner } from "@/components/WorkingPeriodBanner";
+import { AppShellMainSection } from "@/components/AppShellMainSection";
 import { WorkingPeriodProvider } from "@/contexts/WorkingPeriodContext";
 import { getServerSession } from "@/lib/auth-server";
 import { assertRouteAllowedForPath } from "@/lib/access-control";
@@ -12,9 +11,17 @@ import { headers } from "next/headers";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 import { resolveCompanyLogoSrc } from "@/lib/company-logo";
-import { getDefaultCommercialInvoicePrefix } from "@/lib/commercial-service";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import { resolveHomeDashboardPath } from "@/lib/dashboard-routing";
+import {
+  formatAppShellFooterLine,
+  formatAppShellSidebarSubtitle,
+  resolveAppShellFooterContext,
+} from "@/lib/app-shell-footer";
+import { AppShellFooter } from "@/components/AppShellFooter";
+import {
+  isDashboardPath,
+  resolveHomeDashboardPath,
+} from "@/lib/dashboard-routing";
 import { redirect } from "next/navigation";
 import { reportNavItems, reportNavSections } from "@/lib/reports-catalog";
 import { Sidebar } from "./Sidebar";
@@ -24,6 +31,7 @@ const setupNav = [
   { href: "/setup/commercial-services", label: "Sales Services" },
   { href: "/setup/sales-budget", label: "Sales budget Phasing" },
   { href: "/setup/product-pricing", label: "Product pricing" },
+  { href: "/setup/tax-rates", label: "Tax rates" },
   { href: "/setup/role-access", label: "Role access" },
   { href: "/setup/permissions", label: "User access control" },
   { href: "/users", label: "Users" },
@@ -73,19 +81,17 @@ export default async function AppLayout({
     await assertRouteAllowedForPath(pathname, session);
   }
 
-  const [settings, openPeriod, invoicePrefix] = await Promise.all([
+  const [settings, openPeriod] = await Promise.all([
     getOrInitCompanySettings(),
     getOpenFinancialYearPeriod(),
-    getDefaultCommercialInvoicePrefix(),
   ]);
-  const vatPct = new Prisma.Decimal(String(settings.vatRate))
-    .mul(100)
-    .toDecimalPlaces(2)
-    .toString();
-  const subtitle = `Currency: XAF · VAT: ${vatPct}% · Invoice prefix: ${invoicePrefix}`;
+  const footerCtx = await resolveAppShellFooterContext(session, settings);
+  const subtitle = formatAppShellSidebarSubtitle(footerCtx);
+  const footerLine = formatAppShellFooterLine(footerCtx);
   const dashboardNav = [
     { href: resolveHomeDashboardPath(session), label: "Dashboard" },
   ] as const;
+  const isDashboard = pathname ? isDashboardPath(pathname) : false;
 
   return (
     <BrandingProvider
@@ -103,33 +109,35 @@ export default async function AppLayout({
           openPeriod ? prismaDateToIso(openPeriod.endDate) : null
         }
       >
-        <div className="h-full min-h-0 overflow-hidden print:h-auto print:overflow-visible">
-          <div className="flex h-full min-h-0 w-full flex-col gap-4 px-4 py-6 sm:px-6 md:flex-row md:gap-6 print:block print:px-6 print:py-4">
-            <div className="w-full max-md:min-w-0 max-md:overflow-hidden shrink-0 overflow-x-auto md:h-full md:min-h-0 md:w-20 md:max-w-20 md:shrink-0 md:overflow-hidden lg:max-w-none lg:w-auto print:hidden">
-              <Sidebar
-                brand={settings.companyName}
-                department={settings.department}
-                logoSrc={resolveCompanyLogoSrc(settings.logoUrl)}
-                subtitle={subtitle}
-                dashboardNav={[...dashboardNav]}
-                setupNav={[...setupNav]}
-                operationsNav={[...operationsNav]}
-                reportNav={reportNavItems()}
-                reportNavSections={reportNavSections()}
-              />
-            </div>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden print:h-auto print:overflow-visible">
+          <div className="min-h-0 flex-1 overflow-hidden print:overflow-visible">
+            <div
+              className={[
+                "flex h-full min-h-0 w-full flex-col md:flex-row print:block print:px-6 print:py-4",
+                isDashboard
+                  ? "gap-2 px-2 py-2 sm:gap-3 sm:px-3 sm:py-3 md:gap-4 md:px-4"
+                  : "gap-4 px-4 py-6 sm:px-6 md:gap-6",
+              ].join(" ")}
+            >
+              <div className="w-full max-md:min-w-0 max-md:overflow-hidden shrink-0 overflow-x-auto md:h-full md:min-h-0 md:w-20 md:max-w-20 md:shrink-0 md:overflow-hidden lg:max-w-none lg:w-auto print:hidden">
+                <Sidebar
+                  brand={settings.companyName}
+                  department={settings.department}
+                  logoSrc={resolveCompanyLogoSrc(settings.logoUrl)}
+                  subtitle={subtitle}
+                  dashboardNav={[...dashboardNav]}
+                  setupNav={[...setupNav]}
+                  operationsNav={[...operationsNav]}
+                  reportNav={reportNavItems()}
+                  reportNavSections={reportNavSections()}
+                />
+              </div>
 
-            <section className="min-w-0 flex flex-1 flex-col gap-3 min-h-0 print:w-full print:overflow-visible">
-              <div className="shrink-0 print:hidden">
-                <WorkingPeriodBanner />
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-4 sm:p-6 print:overflow-visible print:border-0 print:shadow-none print:p-0 print:rounded-none">
-                {children}
-              </div>
-            </section>
+              <AppShellMainSection>{children}</AppShellMainSection>
+            </div>
           </div>
-        </div>
-      </WorkingPeriodProvider>
+          <AppShellFooter line={footerLine} />
+        </div>      </WorkingPeriodProvider>
     </BrandingProvider>
   );
 }

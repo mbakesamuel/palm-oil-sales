@@ -1,23 +1,32 @@
-import { DashboardSessionCard } from "../DashboardSessionCard";
-import { DashboardShell } from "../_shared/DashboardShell";
-import { DashboardQuickLinks } from "../widgets/DashboardQuickLinks";
 import { siteLabelForKind, type CommercialProfile } from "@/lib/commercial-profile";
+import { loadGenericDashboardData } from "@/lib/dashboard/load-dashboard-data";
+import { DashboardFilterPanel } from "../_shared/DashboardFilterPanel";
+import { DashboardPageLayout } from "../_shared/DashboardPageLayout";
+import { GenericDashboardView } from "../_shared/GenericDashboardView";
 
-export function GenericLineDashboard(props: {
+export async function GenericLineDashboard(props: {
   serviceName: string;
   profile: CommercialProfile;
 }) {
   const { serviceName, profile } = props;
+  const data = await loadGenericDashboardData(serviceName, profile.enabledModules);
+
   return (
-    <DashboardShell
+    <DashboardPageLayout
       title="Dashboard"
       subtitle={`${serviceName} · ${siteLabelForKind(profile.siteKind)} line`}
+      actionHref="/setup"
+      actionLabel="Setup"
+      sidebar={
+        <DashboardFilterPanel
+          monthFilter={data.monthFilter}
+          hasOpenFy={data.hasOpenFy}
+          scopeLabel={serviceName}
+          quickLinks={data.quickLinks}
+        />
+      }
     >
-      <DashboardSessionCard />
-      <p className="text-sm opacity-80">
-        Choose a module from the sidebar to start working.
-      </p>
-      <DashboardQuickLinks enabledModules={profile.enabledModules} />
-    </DashboardShell>
+      <GenericDashboardView data={data} />
+    </DashboardPageLayout>
   );
 }

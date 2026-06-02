@@ -2,7 +2,8 @@
 
 import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
-import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
+import { syncSalesTaxRegimeLinks } from "@/lib/tax/bootstrap";
 import { revalidatePath } from "next/cache";
 import { TaxRegimeKind } from "@prisma/client";
 
@@ -21,11 +22,14 @@ async function mergedTaxTypeIdsForRegime(
   taxTypeIds: string[],
   vatAppliesCheckbox: boolean,
 ): Promise<{ merged: string[]; vatApplies: boolean }> {
-  const vatType = await prisma.taxType.findUnique({
-    where: { code: VAT_TAX_CODE },
-    select: { id: true },
-  });
+  const [vatType, satType] = await Promise.all([
+    prisma.taxType.findUnique({ where: { code: VAT_TAX_CODE }, select: { id: true } }),
+    prisma.taxType.findUnique({ where: { code: SALES_TAX_CODE }, select: { id: true } }),
+  ]);
   let merged = [...taxTypeIds];
+  if (satType && !merged.includes(satType.id)) {
+    merged.push(satType.id);
+  }
   if (vatType) {
     if (vatAppliesCheckbox && !merged.includes(vatType.id)) {
       merged.push(vatType.id);
@@ -75,8 +79,11 @@ export async function createTaxRegime(formData: FormData) {
     });
   }
 
+  await syncSalesTaxRegimeLinks();
+
   revalidatePath("/tax-regimes");
   revalidatePath("/customers");
+  revalidatePath("/setup/tax-rates");
   revalidatePath("/pos");
 }
 
@@ -116,8 +123,11 @@ export async function updateTaxRegime(formData: FormData) {
     });
   }
 
+  await syncSalesTaxRegimeLinks();
+
   revalidatePath("/tax-regimes");
   revalidatePath("/customers");
+  revalidatePath("/setup/tax-rates");
   revalidatePath("/pos");
 }
 
@@ -138,5 +148,6 @@ export async function deleteTaxRegime(formData: FormData) {
 
   revalidatePath("/tax-regimes");
   revalidatePath("/customers");
+  revalidatePath("/setup/tax-rates");
   revalidatePath("/pos");
 }

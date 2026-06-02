@@ -98,6 +98,7 @@ export async function saveTaxRateSchedule(formData: FormData) {
   }
 
   revalidatePath("/tax-types");
+  revalidatePath("/setup/tax-rates");
   revalidatePath("/pos");
 }
 
@@ -110,5 +111,6 @@ export async function deleteTaxRateSchedule(formData: FormData) {
   await prisma.taxRateSchedule.delete({ where: { id } });
 
   revalidatePath("/tax-types");
+  revalidatePath("/setup/tax-rates");
   revalidatePath("/pos");
 }

@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { getServerSession } from "@/lib/auth-server";
-import { getDefaultCommercialInvoicePrefix } from "@/lib/commercial-service";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { uiThemePresetToDataAttribute } from "@/lib/ui-theme";
 import "./globals.css";
@@ -30,30 +28,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const devby = "ISD";
-  let footerLine = "Currency: XAF · VAT: 19.25% · Invoice prefix: PO";
   let uiTheme = uiThemePresetToDataAttribute(undefined);
   try {
-    const [s, defaultInvoicePrefix, session] = await Promise.all([
-      getOrInitCompanySettings(),
-      getDefaultCommercialInvoicePrefix(),
-      getServerSession(),
-    ]);
+    const s = await getOrInitCompanySettings();
     uiTheme = uiThemePresetToDataAttribute(s.uiThemePreset);
-    const vatPct = (Number.parseFloat(String(s.vatRate)) * 100).toFixed(2);
-    const dept = s.department?.trim() || null;
-    const serviceName = session?.commercialService?.name?.trim() || null;
-    const invoicePrefix =
-      session?.commercialService?.invoicePrefix?.trim() || defaultInvoicePrefix;
-    footerLine = [
-      dept,
-      serviceName,
-      `Currency: XAF`,
-      `VAT: ${vatPct}%`,
-      `Invoice prefix: ${invoicePrefix}`,
-    ]
-      .filter(Boolean)
-      .join(" · ");
   } catch {
     /* build without DB */
   }
@@ -63,16 +41,6 @@ export default async function RootLayout({
       <body className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
         <AuthProvider>
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
-          <footer className="shrink-0 border-t border-border print:hidden">
-            <div className="flex flex-row justify-between items-center">
-              <div className="w-full px-4 py-3 text-xs opacity-70 sm:px-6">
-                {footerLine}
-              </div>
-              <div className="text-xs opacity-70 px-4">
-                Developed by: {devby} 2026
-              </div>
-            </div>
-          </footer>
         </AuthProvider>
       </body>
     </html>
