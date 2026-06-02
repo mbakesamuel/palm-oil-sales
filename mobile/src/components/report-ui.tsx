@@ -9,6 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useSafePadding } from "@/hooks/use-safe-padding";
 
 export const colors = {
   brand: "#2d5016",
@@ -33,9 +34,10 @@ export function ReportScroll(props: {
   refreshing: boolean;
   onRefresh: () => void;
 }) {
+  const { scrollBottom } = useSafePadding();
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { paddingBottom: scrollBottom + 24 }]}
       refreshControl={
         <RefreshControl
           refreshing={props.refreshing}

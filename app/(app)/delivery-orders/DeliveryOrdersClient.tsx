@@ -902,7 +902,7 @@ export function DeliveryOrdersClient(props: {
                 <span className="font-medium">
                   Create and edit delivery order drafts
                 </span>{" "}
-                under Setup → Role access (Operations group) or User access control,
+                under Setup → Roles & access (Operations group),
                 then sign out and sign in again.
               </p>
             ) : null}

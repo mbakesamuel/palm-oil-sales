@@ -48,11 +48,11 @@ export default async function PermissionsPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">User Roles and Access Control (Permissions)</h1>
+        <h1 className="text-2xl font-semibold">Roles & access</h1>
         <p className="text-sm opacity-75">
-          Configure global app roles (Admin, Director), define line roles per
-          service, and set route permissions for each role. Only
-          administrators can edit this page.
+          Configure capability groups per role, define global and line roles, and
+          fine-tune individual permission keys. Only administrators can edit this
+          page.
         </p>
       </div>
       <PermissionsClient

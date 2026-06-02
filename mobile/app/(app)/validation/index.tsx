@@ -12,6 +12,7 @@ import { Link } from "expo-router";
 import type { MobilePendingSaleRow } from "@pos/shared";
 import { apiFetch } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
+import { useSafePadding } from "@/hooks/use-safe-padding";
 
 type PendingSalesResponse = { rows: MobilePendingSaleRow[] };
 
@@ -27,6 +28,7 @@ type DoQueueResponse = {
 
 export default function ValidationScreen() {
   const { hasPermission } = useAuth();
+  const { scrollBottom } = useSafePadding();
   const [sales, setSales] = useState<MobilePendingSaleRow[]>([]);
   const [dos, setDos] = useState<DoQueueResponse["rows"]>([]);
   const [busy, setBusy] = useState(true);
@@ -68,7 +70,7 @@ export default function ValidationScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { paddingBottom: scrollBottom + 24 }]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

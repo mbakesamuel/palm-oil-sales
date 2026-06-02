@@ -1,14 +1,12 @@
 import { cookies } from "next/headers";
+import { getServerSession } from "@/lib/auth-server";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import {
   defaultSelectableMonthForToday,
   listSelectableCalendarMonths,
   prismaDateToIso,
 } from "@/lib/posting-calendar";
-import {
-  WORKING_CAL_COOKIE,
-  parseWorkingCalCookie,
-} from "@/lib/working-period-cookie";
+import { readWorkingCalCookie } from "@/lib/working-period-cookie";
 
 export type ReportMonthFilter = {
   financialYear: number;
@@ -32,10 +30,9 @@ export async function resolveReportWorkingMonthFilter(): Promise<{
     return { monthFilter: null, hasOpenFy: true };
   }
 
+  const session = await getServerSession();
   const cookieStore = await cookies();
-  const parsed = parseWorkingCalCookie(
-    cookieStore.get(WORKING_CAL_COOKIE)?.value,
-  );
+  const parsed = readWorkingCalCookie(cookieStore, session?.userId);
   const fromCookie =
     parsed &&
     selectable.some((s) => s.year === parsed.year && s.month === parsed.month)

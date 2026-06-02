@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:cache": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-local-cache.ps1",
+    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "build": "prisma generate && next build",
     "vercel-build": "prisma generate && next build",
     "start": "next start",

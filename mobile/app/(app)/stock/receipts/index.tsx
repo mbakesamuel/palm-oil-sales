@@ -11,10 +11,12 @@ import {
 import { Link } from "expo-router";
 import type { MobileReceiptListRow } from "@pos/shared";
 import { apiFetch } from "@/api/client";
+import { useSafePadding } from "@/hooks/use-safe-padding";
 
 type ReceiptsResponse = { rows: MobileReceiptListRow[] };
 
 export default function StockReceiptsScreen() {
+  const { scrollBottom } = useSafePadding();
   const [rows, setRows] = useState<MobileReceiptListRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,7 +44,7 @@ export default function StockReceiptsScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { paddingBottom: scrollBottom + 24 }]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

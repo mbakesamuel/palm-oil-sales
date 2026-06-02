@@ -506,7 +506,7 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
     return {
       ok: false,
       error:
-        "You do not have permission to create or edit delivery order drafts. Enable “Create and edit delivery order drafts” under Setup → Role access (Operations) or User access control, then sign out and sign in again.",
+        "You do not have permission to create or edit delivery order drafts. Enable “Create and edit delivery order drafts” under Setup → Roles & access (Operations group), then sign out and sign in again.",
     };
   }
 

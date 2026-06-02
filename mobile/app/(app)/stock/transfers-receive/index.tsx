@@ -11,10 +11,12 @@ import {
 import { Link } from "expo-router";
 import type { MobileTransferListRow } from "@pos/shared";
 import { apiFetch } from "@/api/client";
+import { useSafePadding } from "@/hooks/use-safe-padding";
 
 type TransfersResponse = { rows: MobileTransferListRow[] };
 
 export default function StockTransfersReceiveScreen() {
+  const { scrollBottom } = useSafePadding();
   const [rows, setRows] = useState<MobileTransferListRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,7 +46,7 @@ export default function StockTransfersReceiveScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { paddingBottom: scrollBottom + 24 }]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

@@ -19,10 +19,12 @@ import {
   resetGlobalRolePermissions,
   resetServiceRolePermissions,
   setGlobalRolePermission,
+  setRoleAccessGroup,
   setServiceRolePermission,
   type GlobalRolesCatalog,
   type LinePermissionsCatalog,
 } from "./actions";
+import { CapabilityGroupsPanel } from "./CapabilityGroupsPanel";
 import { GlobalRoleDefinitions } from "./GlobalRoleDefinitions";
 import { LineRoleDefinitions } from "./LineRoleDefinitions";
 
@@ -203,6 +205,11 @@ export function PermissionsClient(props: {
   const [busyKey, setBusyKey] = React.useState<string | null>(null);
   const [groupSaveProgress, setGroupSaveProgress] =
     React.useState<GroupSaveProgress | null>(null);
+  const [busyCapGroup, setBusyCapGroup] = React.useState<string | null>(null);
+  const [capBanner, setCapBanner] = React.useState<{
+    type: "error" | "ok";
+    text: string;
+  } | null>(null);
   const isAdmin = session?.role === UserRole.ADMIN;
 
   const selectedService = lineCatalog.services.find(
@@ -216,7 +223,6 @@ export function PermissionsClient(props: {
     [lineCatalog.roles, commercialServiceId],
   );
 
-  const selectedGlobalRole = globalCatalog.roles.find((r) => r.id === globalRoleId);
   const activeGlobalRoles = React.useMemo(
     () => globalCatalog.roles.filter((r) => r.isActive),
     [globalCatalog.roles],
@@ -228,6 +234,15 @@ export function PermissionsClient(props: {
     if (!selectedService) return [];
     return filterKeysForLine(all, selectedService.enabledModules);
   }, [scope, selectedService]);
+
+  const capabilityRouteFilter = React.useMemo(() => {
+    if (scope !== "line" || !selectedService) return null;
+    return permissionKeysForModules(
+      selectedService.enabledModules as CommercialModuleKey[],
+    );
+  }, [scope, selectedService]);
+
+  const activeRoleId = scope === "global" ? globalRoleId : serviceRoleId;
 
   const globalBatchLoadedRef = React.useRef(false);
   const lineBatchLoadedForRef = React.useRef<string | null>(null);
@@ -520,6 +535,36 @@ export function PermissionsClient(props: {
 
   const hasLoadErrors = Boolean(loadErrors?.global || loadErrors?.line);
 
+  async function onToggleCapabilityGroup(groupId: string, allowed: boolean) {
+    if (!activeRoleId) return;
+    setCapBanner(null);
+    setBusyCapGroup(groupId);
+    try {
+      await setRoleAccessGroup(
+        scope,
+        activeRoleId,
+        groupId,
+        allowed,
+        scope === "line" ? selectedService?.enabledModules : undefined,
+      );
+      const fresh =
+        scope === "global"
+          ? await getGlobalRolePermissionsAction(activeRoleId)
+          : await getServiceRolePermissionsAction(activeRoleId);
+      const row = fresh as unknown as Record<string, boolean>;
+      setMap(row);
+      setPermCache((prev) => ({ ...prev, [activeRoleId]: row }));
+      setCapBanner({ type: "ok", text: "Capability group updated." });
+    } catch (e) {
+      setCapBanner({
+        type: "error",
+        text: e instanceof Error ? e.message : "Could not update capability group.",
+      });
+    } finally {
+      setBusyCapGroup(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {hasLoadErrors ? (
@@ -567,9 +612,9 @@ export function PermissionsClient(props: {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap gap-4">
         {scope === "line" ? (
-          <div className="flex flex-wrap gap-4">
+          <>
             <div className="grid gap-2">
               <label className="text-sm font-medium">Service</label>
               <select
@@ -615,47 +660,45 @@ export function PermissionsClient(props: {
             </div>
             {selectedService ? (
               <p className="text-xs opacity-70 max-w-md self-end pb-2">
-                Showing routes enabled for:{" "}
-                {selectedService.enabledModules.join(", ") || "no modules"}
+                Routes limited to modules:{" "}
+                {selectedService.enabledModules.join(", ") || "none"}
               </p>
             ) : null}
-          </div>
-        ) : selectedGlobalRole ? (
-          <p className="text-xs opacity-70 max-w-md pb-2">
-            Editing permissions for{" "}
-            <span className="font-medium">{selectedGlobalRole.displayName}</span> (
-            {selectedGlobalRole.code})
-          </p>
+          </>
         ) : (
-          <p className="text-xs opacity-70 max-w-md pb-2">
-            Select a global role below to edit route permissions.
-          </p>
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">Global role</label>
+            <select
+              className="h-10 rounded-md border border-border bg-transparent px-3 py-2 text-sm min-w-48"
+              value={globalRoleId}
+              onChange={(e) => setGlobalRoleId(e.target.value)}
+              disabled={activeGlobalRoles.length === 0}
+            >
+              {activeGlobalRoles.length === 0 ? (
+                <option value="">No active global roles</option>
+              ) : (
+                activeGlobalRoles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.displayName} ({r.code})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
         )}
-        <button
-          type="button"
-          onClick={() => void onReset()}
-          disabled={busyKey !== null || (!canResetGlobal && !canResetLine)}
-          className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
-        >
-          Reset to defaults
-        </button>
       </div>
 
-      {scope === "global" ? (
-        <GlobalRoleDefinitions
-          roles={globalCatalog.roles}
-          selectedRoleId={globalRoleId}
-          onSelectRole={setGlobalRoleId}
-        />
-      ) : null}
-
-      {scope === "line" && commercialServiceId ? (
-        <LineRoleDefinitions
-          commercialServiceId={commercialServiceId}
-          roles={lineCatalog.roles}
-          selectedRoleId={serviceRoleId}
-          onSelectRole={setServiceRoleId}
-        />
+      {capBanner ? (
+        <p
+          className={[
+            "text-sm rounded-md border px-3 py-2",
+            capBanner.type === "error"
+              ? "border-destructive/40 text-destructive"
+              : "border-brand/30 text-foreground",
+          ].join(" ")}
+        >
+          {capBanner.text}
+        </p>
       ) : null}
 
       {scope === "line" && lineCatalog.services.length === 0 ? (
@@ -663,37 +706,92 @@ export function PermissionsClient(props: {
           Add a commercial line under Setup → Services, then assign line roles
           under Users.
         </p>
-      ) : scope === "line" && !serviceRoleId ? (
-        <p className="text-sm opacity-75">
-          Select or create a line role above to edit its route permissions.
-        </p>
-      ) : scope === "line" ? (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold">Route permissions</h2>
-          <PermissionMatrix
-            keys={visibleKeys}
-            map={map}
-            busyKey={busyKey}
-            groupSaveProgress={groupSaveProgress}
-            onToggle={(key, allowed) => void toggleLine(key, allowed)}
-            onToggleGroup={(keys, allowed) => void toggleLineGroup(keys, allowed)}
-          />
-        </div>
-      ) : globalRoleId ? (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold">Route permissions</h2>
-          <PermissionMatrix
-            keys={visibleKeys}
-            map={map}
-            busyKey={busyKey}
-            groupSaveProgress={groupSaveProgress}
-            onToggle={(key, allowed) => void toggleGlobal(key, allowed)}
-            onToggleGroup={(keys, allowed) => void toggleGlobalGroup(keys, allowed)}
-          />
-        </div>
+      ) : !activeRoleId ? (
+        <p className="text-sm opacity-75">Select a role to configure access.</p>
       ) : (
-        <p className="text-sm opacity-75">Select a global role to edit permissions.</p>
+        <CapabilityGroupsPanel
+          map={map}
+          routeFilter={capabilityRouteFilter}
+          busyGroupId={busyCapGroup}
+          disabled={busyKey !== null || busyCapGroup !== null}
+          onToggleGroup={(groupId, allowed) =>
+            void onToggleCapabilityGroup(groupId, allowed)
+          }
+        />
       )}
+
+      <details className="rounded-lg border border-border group">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium hover:bg-accent/10">
+          Advanced: role definitions & individual permissions
+        </summary>
+        <div className="space-y-4 border-t border-border px-4 py-4">
+          <div className="flex flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={() => void onReset()}
+              disabled={busyKey !== null || (!canResetGlobal && !canResetLine)}
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent/25 disabled:opacity-50"
+            >
+              Reset to defaults
+            </button>
+          </div>
+
+          {scope === "global" ? (
+            <GlobalRoleDefinitions
+              roles={globalCatalog.roles}
+              selectedRoleId={globalRoleId}
+              onSelectRole={setGlobalRoleId}
+            />
+          ) : null}
+
+          {scope === "line" && commercialServiceId ? (
+            <LineRoleDefinitions
+              commercialServiceId={commercialServiceId}
+              roles={lineCatalog.roles}
+              selectedRoleId={serviceRoleId}
+              onSelectRole={setServiceRoleId}
+            />
+          ) : null}
+
+          {scope === "line" && !serviceRoleId ? (
+            <p className="text-sm opacity-75">
+              Select or create a line role above to edit individual permissions.
+            </p>
+          ) : scope === "line" ? (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Individual permission keys</h3>
+              <PermissionMatrix
+                keys={visibleKeys}
+                map={map}
+                busyKey={busyKey}
+                groupSaveProgress={groupSaveProgress}
+                onToggle={(key, allowed) => void toggleLine(key, allowed)}
+                onToggleGroup={(keys, allowed) =>
+                  void toggleLineGroup(keys, allowed)
+                }
+              />
+            </div>
+          ) : globalRoleId ? (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Individual permission keys</h3>
+              <PermissionMatrix
+                keys={visibleKeys}
+                map={map}
+                busyKey={busyKey}
+                groupSaveProgress={groupSaveProgress}
+                onToggle={(key, allowed) => void toggleGlobal(key, allowed)}
+                onToggleGroup={(keys, allowed) =>
+                  void toggleGlobalGroup(keys, allowed)
+                }
+              />
+            </div>
+          ) : (
+            <p className="text-sm opacity-75">
+              Select a global role to edit individual permissions.
+            </p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

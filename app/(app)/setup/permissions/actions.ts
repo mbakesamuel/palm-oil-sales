@@ -18,7 +18,15 @@ import {
   snapshotForLineRoleCode,
 } from "@/lib/permission-seed-snapshot";
 import { defaultRequiresFixedPostingSiteForRoleCode } from "@/lib/sales-point-assignment";
-import { parseEnabledModulesJson } from "@/lib/commercial-modules";
+import {
+  parseEnabledModulesJson,
+  permissionKeysForModules,
+  type CommercialModuleKey,
+} from "@/lib/commercial-modules";
+import {
+  ROLE_ACCESS_GROUPS,
+  groupKeysForModules,
+} from "@/lib/role-access-groups";
 import { ensureGlobalRoleDefinitions, isRetiredGlobalLegacyRole } from "@/lib/global-role-definitions";
 import { getServerSession } from "@/lib/auth-server";
 import { UserRole } from "@prisma/client";
@@ -173,7 +181,6 @@ export async function saveGlobalRoleDefinition(formData: FormData) {
   }
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -213,7 +220,6 @@ export async function setGlobalRoleDefinitionActive(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -255,7 +261,6 @@ export async function setGlobalRolePermission(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
 }
 
 export async function resetGlobalRolePermissions(formData: FormData) {
@@ -289,7 +294,6 @@ export async function resetGlobalRolePermissions(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
 }
 
 export type LineRoleRow = {
@@ -461,7 +465,6 @@ export async function saveCommercialServiceRole(formData: FormData) {
   }
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -495,7 +498,6 @@ export async function setCommercialServiceRoleActive(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
   revalidatePath("/users");
 }
 
@@ -543,7 +545,6 @@ export async function setServiceRolePermission(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
 }
 
 export async function resetServiceRolePermissions(formData: FormData) {
@@ -574,5 +575,55 @@ export async function resetServiceRolePermissions(formData: FormData) {
   });
 
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
+}
+
+export type RoleAccessScope = "global" | "line";
+
+export async function getRoleAccessPermissionsAction(
+  scope: RoleAccessScope,
+  roleId: string,
+) {
+  await assertCanManagePermissions();
+  if (scope === "global") {
+    return getGlobalRolePermissionsAction(roleId);
+  }
+  return getServiceRolePermissionsAction(roleId);
+}
+
+export async function setRoleAccessGroup(
+  scope: RoleAccessScope,
+  roleId: string,
+  groupId: string,
+  allowed: boolean,
+  enabledModules?: readonly string[],
+) {
+  await assertCanManagePermissions();
+
+  const group = ROLE_ACCESS_GROUPS.find((g) => g.id === groupId);
+  if (!group) throw new Error("Unknown capability group.");
+
+  const routeFilter =
+    scope === "line" && enabledModules
+      ? permissionKeysForModules(enabledModules as CommercialModuleKey[])
+      : null;
+
+  const keys =
+    routeFilter != null
+      ? groupKeysForModules(group, routeFilter)
+      : [...group.keys];
+
+  for (const key of keys) {
+    const fd = new FormData();
+    fd.set("allowed", allowed ? "1" : "0");
+    fd.set("key", key);
+    if (scope === "global") {
+      fd.set("globalRoleId", roleId);
+      await setGlobalRolePermission(fd);
+    } else {
+      fd.set("serviceRoleId", roleId);
+      await setServiceRolePermission(fd);
+    }
+  }
+
+  revalidatePath("/setup/permissions");
 }

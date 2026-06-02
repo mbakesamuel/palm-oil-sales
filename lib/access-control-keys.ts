@@ -68,7 +68,8 @@ export type PermissionKey = (typeof PERMISSION_KEYS)[number];
 
 const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   "route:/api/mobile/v1": "Mobile monitoring app (sign-in and API)",
-  "route:/setup/role-access": "Role access (capability groups)",
+  "route:/setup/permissions": "Roles & access (setup)",
+  "route:/setup/role-access": "Roles & access (legacy route key)",
   "ui:validate-documents": "Validate sales invoices and similar documents",
   "ui:validate-delivery-orders": "Validate delivery orders",
   "ui:draft-delivery-orders": "Create and edit delivery order drafts",

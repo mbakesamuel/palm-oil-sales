@@ -236,7 +236,6 @@ export async function saveUser(formData: FormData) {
   revalidatePath("/setup");
   revalidatePath("/setup/commercial-services");
   revalidatePath("/setup/permissions");
-  revalidatePath("/setup/role-access");
   if (selfUpdated) {
     revalidatePath("/");
     revalidatePath("/dashboard");
