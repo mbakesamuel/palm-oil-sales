@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
 
 type TaxTypeOpt = { id: string; code: string; name: string };
 
@@ -67,6 +67,10 @@ export function TaxRegimesClient(props: {
     () => taxTypes.find((t) => t.code === VAT_TAX_CODE)?.id,
     [taxTypes],
   );
+  const satTypeId = React.useMemo(
+    () => taxTypes.find((t) => t.code === SALES_TAX_CODE)?.id,
+    [taxTypes],
+  );
 
   function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
@@ -85,6 +89,10 @@ export function TaxRegimesClient(props: {
 
   function openAddForm() {
     resetForm();
+    const defaults: string[] = [];
+    if (satTypeId) defaults.push(satTypeId);
+    if (vatTypeId) defaults.push(vatTypeId);
+    setSelectedTaxTypeIds(defaults);
     setIsFormOpen(true);
   }
 
@@ -281,8 +289,8 @@ export function TaxRegimesClient(props: {
                     <option value="REAL">Real</option>
                   </select>
                   <p className={hintClass}>
-                    Used for Sales Tax rate (unless the customer has no taxpayer id, which
-                    overrides to 10%).
+                    Simplified or Real regime selects the matching sales tax rate. Customers
+                    with no regime use the no-taxpayer-card rate (see Tax rates).
                   </p>
                 </div>
               </div>

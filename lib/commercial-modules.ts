@@ -78,6 +78,7 @@ const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> =
     "route:/setup/product-pricing",
     "route:/setup/product-variants",
     "route:/setup/sales-budget",
+    "route:/setup/tax-rates",
     "route:/users",
     "route:/tax-regimes",
     "route:/tax-types",

@@ -36,9 +36,13 @@ export default async function SetupPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">General Parameters</h1>
         <p className="text-sm opacity-75">
-          Configure company branding, headline VAT rate (with statutory
-          effective date), financial year, and appearance. Configure invoice prefix,
-          letterhead details (phone and address) and sales services under {" "}
+          Configure company branding, financial year, and appearance. Manage VAT and sales tax
+          rates under{" "}
+          <a className="underline underline-offset-4" href="/setup/tax-rates">
+            Tax rates
+          </a>
+          . Configure invoice prefix, letterhead details (phone and address) and sales services
+          under{" "}
           <a
             className="underline underline-offset-4"
             href="/setup/commercial-services"
@@ -110,6 +114,14 @@ export default async function SetupPage() {
           </div>
         </div>
 
+        <div className="rounded-md border border-border bg-foreground/[0.02] px-3 py-2 text-xs opacity-80">
+          Headline VAT rate and effective date can also be set on{" "}
+          <a className="underline underline-offset-4" href="/setup/tax-rates">
+            Tax rates
+          </a>
+          . Fields below update the same schedule when you save this form.
+        </div>
+
         <div className="grid gap-2">
           <label className="text-sm font-medium" htmlFor="vatRate">
             VAT rate (decimal)
@@ -137,8 +149,7 @@ export default async function SetupPage() {
           />
           <div className="text-xs opacity-70">
             Calendar day when this VAT rate applies for new postings (UTC date).
-            Leave blank for today. Existing invoices keep their stored tax
-            amounts.
+            Leave blank for today.
           </div>
         </div>
 

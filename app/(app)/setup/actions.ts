@@ -134,6 +134,7 @@ export async function saveCompanySettings(formData: FormData) {
   }
 
   revalidatePath("/setup");
+  revalidatePath("/setup/tax-rates");
   revalidatePath("/dashboard");
   revalidatePath("/delivery-orders");
   revalidatePath("/");

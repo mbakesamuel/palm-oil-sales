@@ -98,6 +98,7 @@ export const ROLE_ACCESS_GROUPS: readonly RoleAccessGroup[] = [
       "route:/setup/role-access",
       "route:/setup/product-pricing",
       "route:/setup/product-variants",
+      "route:/setup/tax-rates",
       "route:/users",
       "route:/customers",
       "route:/financial-years",

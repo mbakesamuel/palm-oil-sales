@@ -4,7 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyTableNotice } from "@/components/EmptyTableNotice";
-import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
+import { TAX_RATE_VARIANT_LABELS } from "@/lib/tax/variant-labels";
+import { TaxRateVariant } from "@prisma/client";
 
 type RateRow = { id: string; rate: string; effectiveFromIso: string; variant: string };
 
@@ -30,6 +32,13 @@ export function TaxTypesClient(props: {
     saveTaxRateScheduleAction,
     deleteTaxRateScheduleAction,
   } = props;
+
+  const satType = types.find((t) => t.code === SALES_TAX_CODE);
+  const satMissingVariants = React.useMemo(() => {
+    if (!satType) return ["REAL", "SIMPLIFIED", "NO_TAXPAYER_ID"] as const;
+    const have = new Set(satType.rateSchedules.map((r) => r.variant));
+    return (["REAL", "SIMPLIFIED", "NO_TAXPAYER_ID"] as const).filter((v) => !have.has(v));
+  }, [satType]);
 
   const [typeModalOpen, setTypeModalOpen] = React.useState(false);
   const [editingTypeId, setEditingTypeId] = React.useState<string | null>(null);
@@ -110,14 +119,31 @@ export function TaxTypesClient(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Tax types and rates</h1>
         <p className="text-sm opacity-75">
-          Define each tax (e.g. VAT) and schedule rates with effective dates. Link taxes to regimes
-          under{" "}
+          Advanced catalog for all tax types. For everyday VAT and sales tax changes, use{" "}
+          <Link href="/setup/tax-rates" className="underline underline-offset-4">
+            Tax rates
+          </Link>
+          . Link taxes to regimes under{" "}
           <Link href="/tax-regimes" className="underline underline-offset-4">
             Tax regimes
           </Link>
           .
         </p>
       </div>
+
+      {satMissingVariants.length > 0 ? (
+        <p className="text-sm rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2">
+          Sales tax is missing rate rows for:{" "}
+          {satMissingVariants
+            .map((v) => TAX_RATE_VARIANT_LABELS[v as TaxRateVariant])
+            .join(", ")}
+          . Add them on{" "}
+          <Link href="/setup/tax-rates" className="underline underline-offset-4 font-medium">
+            Tax rates
+          </Link>
+          .
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -242,10 +268,10 @@ export function TaxTypesClient(props: {
               onChange={(e) => setRateVariant(e.target.value)}
               className="rounded-md border border-border bg-transparent px-3 py-2"
             >
-              <option value="DEFAULT">Default</option>
-              <option value="SIMPLIFIED">Simplified</option>
-              <option value="REAL">Real</option>
-              <option value="NO_TAXPAYER_ID">No taxpayer id</option>
+              <option value="DEFAULT">{TAX_RATE_VARIANT_LABELS.DEFAULT}</option>
+              <option value="SIMPLIFIED">{TAX_RATE_VARIANT_LABELS.SIMPLIFIED}</option>
+              <option value="REAL">{TAX_RATE_VARIANT_LABELS.REAL}</option>
+              <option value="NO_TAXPAYER_ID">{TAX_RATE_VARIANT_LABELS.NO_TAXPAYER_ID}</option>
             </select>
             <p className="text-xs opacity-70">
               Use variants for Sales Tax rules. Most taxes should stay on Default.
@@ -362,7 +388,12 @@ export function TaxTypesClient(props: {
                           <span className="tabular-nums opacity-90">
                             From {r.effectiveFromIso}: {(Number.parseFloat(r.rate) * 100).toFixed(2)}%
                             {r.variant && r.variant !== "DEFAULT" ? (
-                              <span className="ml-2 text-[11px] opacity-70">({r.variant})</span>
+                              <span className="ml-2 text-[11px] opacity-70">
+                                (
+                                {TAX_RATE_VARIANT_LABELS[r.variant as TaxRateVariant] ??
+                                  r.variant}
+                                )
+                              </span>
                             ) : null}
                           </span>
                           <span className="flex gap-2">
