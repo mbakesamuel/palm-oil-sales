@@ -6,7 +6,7 @@ import {
   upsertVatScheduleForEffectiveDate,
 } from "@/lib/tax/bootstrap";
 import { revalidatePath } from "next/cache";
-import { TaxRateVariant } from "@prisma/client";
+import { Prisma, TaxRateVariant } from "@prisma/client";
 
 function parseIsoDate(raw: string): Date | null {
   const s = String(raw ?? "").trim();
@@ -28,14 +28,14 @@ function parseVatEffectiveIsoDate(raw: string): string | null {
   return s;
 }
 
-/** Accept percent (19.25) or decimal (0.1925); returns decimal string for Prisma. */
-function parseRateInput(raw: string): string | null {
+/** Accept percent (19.25) or decimal (0.1925); returns a Prisma Decimal. */
+function parseRateInput(raw: string): Prisma.Decimal | null {
   const trimmed = raw.trim().replace("%", "");
   const num = Number.parseFloat(trimmed);
   if (!Number.isFinite(num) || num < 0) return null;
   const decimal = num > 1 ? num / 100 : num;
   if (decimal >= 1) return null;
-  return decimal.toString();
+  return new Prisma.Decimal(decimal);
 }
 
 export async function saveVatRate(formData: FormData) {
