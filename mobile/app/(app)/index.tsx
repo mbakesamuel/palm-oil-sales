@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { MOBILE_REPORT_LINKS } from "@pos/shared";
+import { MOBILE_REPORT_LINKS, MOBILE_STOCK_LINKS } from "@pos/shared";
 import { useAuth } from "@/auth/AuthProvider";
 
 export default function HomeScreen() {
@@ -10,7 +10,7 @@ export default function HomeScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.greeting}>Hello, {session?.displayName}</Text>
       <Text style={styles.meta}>
-        {session?.role}
+        {session?.roleLabel ?? session?.role}
         {session?.salesPoint ? ` · ${session.salesPoint.name}` : ""}
       </Text>
 
@@ -23,13 +23,31 @@ export default function HomeScreen() {
         </Link>
       ))}
 
+      {MOBILE_STOCK_LINKS.filter((s) => hasPermission(s.permission)).length > 0 ? (
+        <>
+          <Text style={styles.section}>Stock</Text>
+          {MOBILE_STOCK_LINKS.filter((s) => hasPermission(s.permission)).map((s) => (
+            <Link key={s.id} href={`/(app)/stock/${s.id}` as never} asChild>
+              <Pressable style={styles.card}>
+                <Text style={styles.cardTitle}>{s.label}</Text>
+                <Text style={styles.cardDesc}>{s.description}</Text>
+              </Pressable>
+            </Link>
+          ))}
+        </>
+      ) : null}
+
       {hasPermission("ui:validate-documents") ||
-      hasPermission("route:/delivery-orders/validation-queue") ? (
+      hasPermission("route:/delivery-orders/validation-queue") ||
+      hasPermission("ui:validate-delivery-orders") ? (
         <>
           <Text style={styles.section}>Approvals</Text>
           <Link href="/(app)/validation" asChild>
             <Pressable style={styles.card}>
-              <Text style={styles.cardTitle}>Validation inbox</Text>
+              <Text style={styles.cardTitle}>Approvals inbox</Text>
+              <Text style={styles.cardDesc}>
+                Review sales and delivery orders before validating
+              </Text>
             </Pressable>
           </Link>
         </>
@@ -62,6 +80,7 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8e0",
   },
   cardTitle: { fontSize: 16, fontWeight: "600" },
+  cardDesc: { fontSize: 12, opacity: 0.65, marginTop: 4 },
   logout: { marginTop: 24, alignItems: "center" },
   logoutText: { color: "#b91c1c", fontWeight: "600" },
 });

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Link } from "expo-router";
 import type { MobilePendingSaleRow } from "@pos/shared";
 import { apiFetch } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
@@ -34,13 +34,16 @@ export default function ValidationScreen() {
 
   const load = useCallback(async () => {
     try {
-      if (hasPermission("route:/pos")) {
+      if (hasPermission("ui:validate-documents")) {
         const res = await apiFetch<PendingSalesResponse>(
           "/api/mobile/v1/validation/sales",
         );
         setSales(res.rows);
       }
-      if (hasPermission("route:/delivery-orders/validation-queue")) {
+      if (
+        hasPermission("route:/delivery-orders/validation-queue") ||
+        hasPermission("ui:validate-delivery-orders")
+      ) {
         const res = await apiFetch<DoQueueResponse>(
           "/api/mobile/v1/validation/delivery-orders?reviewed=all",
         );
@@ -54,47 +57,6 @@ export default function ValidationScreen() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  async function validateSale(id: string, invoiceNo: string) {
-    try {
-      await apiFetch(`/api/mobile/v1/validation/sales/${id}/validate`, {
-        method: "POST",
-      });
-      Alert.alert("Validated", `Invoice ${invoiceNo} validated.`);
-      await load();
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Validation failed.");
-    }
-  }
-
-  async function markDoReviewed(id: number) {
-    try {
-      await apiFetch("/api/mobile/v1/validation/delivery-orders/mark-reviewed", {
-        method: "POST",
-        body: JSON.stringify({ ids: [id] }),
-      });
-      await load();
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed.");
-    }
-  }
-
-  async function validateDo(id: number, doNo: string) {
-    try {
-      const res = await apiFetch<{ validated: number; errors: Array<{ error: string }> }>(
-        "/api/mobile/v1/validation/delivery-orders/validate-reviewed",
-        { method: "POST", body: JSON.stringify({ ids: [id] }) },
-      );
-      if (res.validated > 0) {
-        Alert.alert("Validated", `DO ${doNo} validated.`);
-      } else if (res.errors[0]) {
-        Alert.alert("Error", res.errors[0].error);
-      }
-      await load();
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed.");
-    }
-  }
 
   if (busy) {
     return (
@@ -117,6 +79,10 @@ export default function ValidationScreen() {
         />
       }
     >
+      <Text style={styles.hint}>
+        Open each item to review lines and totals before validating.
+      </Text>
+
       {hasPermission("ui:validate-documents") ? (
         <>
           <Text style={styles.section}>Pending sales</Text>
@@ -124,51 +90,37 @@ export default function ValidationScreen() {
             <Text style={styles.empty}>No pending invoices.</Text>
           ) : (
             sales.map((s) => (
-              <View key={s.id} style={styles.card}>
-                <Text style={styles.title}>{s.invoiceNo}</Text>
-                <Text>{s.customerName}</Text>
-                <Text style={styles.meta}>{s.totalLabel}</Text>
-                <Pressable
-                  style={styles.action}
-                  onPress={() => void validateSale(s.id, s.invoiceNo)}
-                >
-                  <Text style={styles.actionText}>Validate</Text>
+              <Link key={s.id} href={`/(app)/validation/sale/${s.id}` as never} asChild>
+                <Pressable style={styles.card}>
+                  <Text style={styles.title}>{s.invoiceNo}</Text>
+                  <Text>{s.customerName}</Text>
+                  <Text style={styles.meta}>{s.totalLabel}</Text>
+                  <Text style={styles.reviewLink}>Review →</Text>
                 </Pressable>
-              </View>
+              </Link>
             ))
           )}
         </>
       ) : null}
 
-      {hasPermission("route:/delivery-orders/validation-queue") ? (
+      {hasPermission("route:/delivery-orders/validation-queue") ||
+      hasPermission("ui:validate-delivery-orders") ? (
         <>
           <Text style={styles.section}>Delivery orders</Text>
           {dos.length === 0 ? (
             <Text style={styles.empty}>No pending DOs.</Text>
           ) : (
             dos.map((d) => (
-              <View key={d.id} style={styles.card}>
-                <Text style={styles.title}>{d.deliveryOrderNo}</Text>
-                <Text>{d.customerName}</Text>
-                <Text style={styles.meta}>
-                  {d.reviewedAtIso ? "Reviewed" : "Awaiting review"}
-                </Text>
-                {!d.reviewedAtIso ? (
-                  <Pressable
-                    style={styles.action}
-                    onPress={() => void markDoReviewed(d.id)}
-                  >
-                    <Text style={styles.actionText}>Mark reviewed</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    style={styles.action}
-                    onPress={() => void validateDo(d.id, d.deliveryOrderNo)}
-                  >
-                    <Text style={styles.actionText}>Validate</Text>
-                  </Pressable>
-                )}
-              </View>
+              <Link key={d.id} href={`/(app)/validation/do/${d.id}` as never} asChild>
+                <Pressable style={styles.card}>
+                  <Text style={styles.title}>{d.deliveryOrderNo}</Text>
+                  <Text>{d.customerName}</Text>
+                  <Text style={styles.meta}>
+                    {d.reviewedAtIso ? "Reviewed — ready to validate" : "Awaiting review"}
+                  </Text>
+                  <Text style={styles.reviewLink}>Review →</Text>
+                </Pressable>
+              </Link>
             ))
           )}
         </>
@@ -180,6 +132,7 @@ export default function ValidationScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   container: { padding: 16, gap: 10 },
+  hint: { fontSize: 13, opacity: 0.7, marginBottom: 4 },
   section: {
     fontSize: 12,
     fontWeight: "700",
@@ -198,13 +151,6 @@ const styles = StyleSheet.create({
   },
   title: { fontWeight: "700", fontSize: 16 },
   meta: { opacity: 0.65, fontSize: 12 },
+  reviewLink: { marginTop: 6, color: "#2d5016", fontWeight: "600", fontSize: 14 },
   empty: { opacity: 0.6 },
-  action: {
-    marginTop: 8,
-    backgroundColor: "#2d5016",
-    borderRadius: 8,
-    padding: 10,
-    alignItems: "center",
-  },
-  actionText: { color: "#fff", fontWeight: "600" },
 });
