@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,12 +7,14 @@ import {
   View,
 } from "react-native";
 import { useSafePadding } from "@/hooks/use-safe-padding";
+import { ButtonSkeleton, ReviewDetailSkeleton, SkeletonBlock } from "@/components/skeleton";
+import { agro } from "@/theme/agro";
 
 export function ReviewLoader() {
   return (
-    <View style={styles.center}>
-      <ActivityIndicator size="large" color="#2d5016" />
-    </View>
+    <ReviewScroll footer={<ButtonSkeleton variant="primary" />}>
+      <ReviewDetailSkeleton />
+    </ReviewScroll>
   );
 }
 
@@ -103,38 +104,50 @@ export function ReviewPrimaryButton({
   label,
   onPress,
   disabled,
+  loading,
   variant = "primary",
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  loading?: boolean;
   variant?: "primary" | "secondary";
 }) {
+  const inactive = disabled || loading;
+
   return (
     <Pressable
       style={[
         styles.primaryBtn,
         variant === "secondary" && styles.secondaryBtn,
-        disabled && styles.btnDisabled,
+        inactive && styles.btnDisabled,
       ]}
       onPress={onPress}
-      disabled={disabled}
+      disabled={inactive}
     >
-      <Text
-        style={[
-          styles.primaryBtnText,
-          variant === "secondary" && styles.secondaryBtnText,
-        ]}
-      >
-        {label}
-      </Text>
+      {loading ? (
+        <SkeletonBlock
+          width="46%"
+          height={16}
+          borderRadius={4}
+          style={variant === "secondary" ? styles.secondaryBtnSkeleton : styles.primaryBtnSkeleton}
+        />
+      ) : (
+        <Text
+          style={[
+            styles.primaryBtnText,
+            variant === "secondary" && styles.secondaryBtnText,
+          ]}
+        >
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: "#f8faf8" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  flex: { flex: 1, backgroundColor: agro.cream },
   container: { padding: 16, gap: 12, paddingBottom: 24 },
   footer: {
     padding: 16,
@@ -181,17 +194,19 @@ const styles = StyleSheet.create({
   tableCell: { flex: 1, padding: 8, fontSize: 12 },
   tableHeadText: { fontWeight: "700" },
   primaryBtn: {
-    backgroundColor: "#2d5016",
+    backgroundColor: agro.forest,
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
   },
   secondaryBtn: {
-    backgroundColor: "#fff",
+    backgroundColor: agro.panel,
     borderWidth: 1,
-    borderColor: "#2d5016",
+    borderColor: agro.forest,
   },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  secondaryBtnText: { color: "#2d5016", fontWeight: "700", fontSize: 16 },
-  btnDisabled: { opacity: 0.5 },
+  secondaryBtnText: { color: agro.forest, fontWeight: "700", fontSize: 16 },
+  primaryBtnSkeleton: { backgroundColor: "rgba(255,255,255,0.45)" },
+  secondaryBtnSkeleton: { backgroundColor: agro.border },
+  btnDisabled: { opacity: 0.85 },
 });

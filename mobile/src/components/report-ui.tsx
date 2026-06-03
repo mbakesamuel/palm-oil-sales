@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -10,23 +9,21 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafePadding } from "@/hooks/use-safe-padding";
+import { ReportScreenSkeleton } from "@/components/skeleton";
+import { agro } from "@/theme/agro";
 
 export const colors = {
-  brand: "#2d5016",
-  border: "#e2e8e0",
-  card: "#ffffff",
-  muted: "#64748b",
-  error: "#b91c1c",
-  warnBg: "#fef2f2",
+  brand: agro.forest,
+  border: agro.border,
+  card: agro.panel,
+  muted: agro.textMuted,
+  error: agro.danger,
+  warnBg: agro.dangerSoft,
   warnBorder: "#fca5a5",
 };
 
 export function ReportLoader() {
-  return (
-    <View style={styles.center}>
-      <ActivityIndicator size="large" color={colors.brand} />
-    </View>
-  );
+  return <ReportScreenSkeleton />;
 }
 
 export function ReportScroll(props: {
@@ -153,7 +150,6 @@ export function ListCard(props: {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
   container: { padding: 16, gap: 10, paddingBottom: 32 },
   section: {
     fontSize: 12,

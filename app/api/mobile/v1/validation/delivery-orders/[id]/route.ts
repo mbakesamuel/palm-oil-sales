@@ -3,6 +3,7 @@ import {
   mobileJson,
   withMobileAuth,
 } from "@/lib/api/mobile/with-mobile-auth";
+import { resolveMobileValidateDeliveryOrderPermission } from "@/lib/api/mobile/resolve-mobile-permission";
 import { loadDeliveryOrderDetailForSession } from "@/lib/services/do-validation-queue";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export async function GET(request: Request, { params }: Params) {
 
   return withMobileAuth(
     request,
-    "route:/delivery-orders/validation-queue",
+    resolveMobileValidateDeliveryOrderPermission(),
     async ({ session }) => {
       const detail = await loadDeliveryOrderDetailForSession(session, numericId);
       if (!detail) {

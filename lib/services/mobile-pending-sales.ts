@@ -8,12 +8,12 @@ import {
 } from "@/lib/access-control";
 import {
   canPickPendingPosSales,
+  canValidateDeliveryOrder,
   effectiveSessionRole,
 } from "@/lib/auth-roles";
 import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
-import { fetchActorSalesPointScope } from "@/lib/auth-sales-point-scope";
+import { actorFromAuthSession } from "@/lib/auth-sales-point-scope";
 import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
-import { UserRole } from "@/lib/domain";
 import { deliveryOrderPosUsageError } from "@/lib/delivery-order-sale-control";
 import { getPrismaClient } from "@/lib/prisma";
 import {
@@ -73,7 +73,7 @@ export async function listPendingSalesForSession(
   await assertPermissionKeyForSession(session, "route:/pos");
 
   const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) return [];
 
   const perms = await getPermissionsForSession(session);
@@ -147,7 +147,7 @@ export async function loadSaleDetailForSession(
   if (!perms["ui:validate-documents"]) return null;
 
   const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) return null;
 
   const scope = resolveServiceScope(session);
@@ -240,7 +240,7 @@ export async function validateSaleForSession(
     };
   }
 
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) {
     return { ok: false, error: "Login required." };
   }
@@ -358,7 +358,7 @@ export async function canValidateSalesForSession(
 export async function canAccessDoValidationQueue(
   session: AuthSession,
 ): Promise<boolean> {
-  if (session.role !== UserRole.MANAGER) return false;
+  if (!canValidateDeliveryOrder(effectiveSessionRole(session))) return false;
   const perms = await getPermissionsForSession(session);
-  return Boolean(perms["route:/delivery-orders/validation-queue"]);
+  return Boolean(perms["ui:validate-delivery-orders"]);
 }

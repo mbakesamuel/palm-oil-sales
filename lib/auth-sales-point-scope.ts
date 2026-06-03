@@ -1,14 +1,29 @@
 import type { PrismaClient } from "@prisma/client";
 import type { UserRole } from "@prisma/client";
-import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
+import type { AuthSession } from "@/lib/auth-session";
+import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
+import {
+  actorRequiresFixedPostingSite,
+  type ActorPostingSiteAssignmentRow,
+} from "@/lib/sales-point-assignment";
 
-export type ActorSalesPointRow = {
-  role: UserRole;
-  globalRoleDefinitionId?: string | null;
-  requiresFixedPostingSite?: boolean | null;
+export type ActorSalesPointRow = ActorPostingSiteAssignmentRow & {
   salesPointId: number | null;
   isActive: boolean;
 };
+
+/** Build actor scope from a loaded session (same rules as web). */
+export function actorFromAuthSession(session: AuthSession): ActorSalesPointRow {
+  const lineRole = session.commercialServiceRole;
+  return {
+    role: session.role,
+    globalRoleDefinitionId: lineRole ? null : (session.globalRole?.id ?? null),
+    commercialServiceRoleCode: lineRole?.code ?? null,
+    requiresFixedPostingSite: lineRole?.requiresFixedPostingSite ?? null,
+    salesPointId: session.salesPoint?.id ?? null,
+    isActive: true,
+  };
+}
 
 export async function fetchActorSalesPointScope(
   prisma: PrismaClient,
@@ -21,18 +36,37 @@ export async function fetchActorSalesPointScope(
     select: {
       role: true,
       globalRoleDefinitionId: true,
+      globalRoleDefinition: { select: { isActive: true } },
       salesPointId: true,
       isActive: true,
       commercialServiceRole: {
-        select: { requiresFixedPostingSite: true },
+        select: { code: true, requiresFixedPostingSite: true, isActive: true },
       },
     },
   });
   if (!user) return null;
+
+  const lineRole =
+    user.commercialServiceRole?.isActive === true
+      ? user.commercialServiceRole
+      : null;
+
+  const role: UserRole = lineRole
+    ? userRoleFromLineRoleCode(lineRole.code)
+    : user.role;
+
+  const globalRoleDefinitionId =
+    lineRole != null
+      ? null
+      : user.globalRoleDefinition?.isActive === true
+        ? user.globalRoleDefinitionId
+        : null;
+
   return {
-    role: user.role,
-    globalRoleDefinitionId: user.globalRoleDefinitionId,
-    requiresFixedPostingSite: user.commercialServiceRole?.requiresFixedPostingSite ?? null,
+    role,
+    globalRoleDefinitionId,
+    commercialServiceRoleCode: lineRole?.code ?? null,
+    requiresFixedPostingSite: lineRole?.requiresFixedPostingSite ?? null,
     salesPointId: user.salesPointId,
     isActive: user.isActive,
   };

@@ -84,7 +84,7 @@ export default function SaleReviewScreen() {
           <ReviewPrimaryButton
             label="Validate invoice"
             onPress={() => void onValidate()}
-            disabled={acting}
+            loading={acting}
           />
         ) : null
       }

@@ -22,15 +22,21 @@ export type PostingSiteAssignmentContext = {
   /** Line role metadata when assigned. */
   commercialServiceRole?: Pick<
     NonNullable<AuthSession["commercialServiceRole"]>,
-    "requiresFixedPostingSite"
+    "code" | "requiresFixedPostingSite"
   > | null;
 };
 
 /** Whether the user must be assigned to one sales point (or factory on factory lines). */
 export function userRequiresFixedPostingSite(ctx: PostingSiteAssignmentContext): boolean {
   if (ctx.globalRole) return false;
-  if (ctx.commercialServiceRole?.requiresFixedPostingSite != null) {
-    return ctx.commercialServiceRole.requiresFixedPostingSite;
+  const lineRole = ctx.commercialServiceRole;
+  if (lineRole) {
+    if (lineRole.requiresFixedPostingSite != null) {
+      return lineRole.requiresFixedPostingSite;
+    }
+    if (lineRole.code) {
+      return defaultRequiresFixedPostingSiteForRoleCode(lineRole.code);
+    }
   }
   return roleRequiresSalesPoint(ctx.role);
 }
@@ -47,12 +53,28 @@ export function sessionRequiresFixedPostingSite(
 
 export type ActorPostingSiteAssignmentRow = {
   role: UserRole;
+  /** Ignored when `commercialServiceRoleCode` is set (line staff). */
   globalRoleDefinitionId?: string | null;
+  commercialServiceRoleCode?: string | null;
   requiresFixedPostingSite?: boolean | null;
 };
 
 export function actorRequiresFixedPostingSite(actor: ActorPostingSiteAssignmentRow): boolean {
+  const lineCode = actor.commercialServiceRoleCode?.trim();
+  if (lineCode) {
+    if (actor.requiresFixedPostingSite != null) {
+      return actor.requiresFixedPostingSite;
+    }
+    return defaultRequiresFixedPostingSiteForRoleCode(lineCode);
+  }
   if (actor.globalRoleDefinitionId) return false;
-  if (actor.requiresFixedPostingSite != null) return actor.requiresFixedPostingSite;
   return roleRequiresSalesPoint(actor.role);
+}
+
+/** Sales point filter for list/report queries when the session is site-scoped. */
+export function scopedSalesPointIdFromSession(
+  session: Pick<AuthSession, "role" | "globalRole" | "commercialServiceRole" | "salesPoint">,
+): number | null {
+  if (!sessionRequiresFixedPostingSite(session)) return null;
+  return session.salesPoint?.id ?? null;
 }

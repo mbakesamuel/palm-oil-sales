@@ -49,7 +49,10 @@ export const ROLE_ACCESS_GROUPS: readonly RoleAccessGroup[] = [
     label: "Validate delivery orders",
     description:
       "Validate pending delivery orders and use the validation queue. Typical for managers and directors (not senior supervisors).",
-    keys: ["ui:validate-delivery-orders"],
+    keys: [
+      "route:/delivery-orders/validation-queue",
+      "ui:validate-delivery-orders",
+    ],
   },
   {
     id: "reports",
