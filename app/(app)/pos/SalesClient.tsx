@@ -158,9 +158,15 @@ function legacyAppliedTaxesFromSale(
   return [{ code: VAT_TAX_CODE, label: "VAT", rate, amount: s.vatAmount }];
 }
 
+type SaleProductModeUi = "LOOSE" | "BOTTLE";
+
 export function SalesClient(props: {
   customers: Customer[];
-  products: Product[];
+  looseProducts: Product[];
+  bottledProducts: Product[];
+  botaSalesPointId: number | null;
+  bottleOilStoreLocationId: number | null;
+  walkInCustomerId: string;
   salesPoints: Array<{ id: number; name: string }>;
   storageLocations: Array<{
     id: number;
@@ -212,11 +218,21 @@ export function SalesClient(props: {
   ) => Promise<
     { ok: true; unitPriceExTax: string } | { ok: false; error: string }
   >;
+  previewBottledUnitPriceAction: (
+    productId: string,
+    dateIso: string,
+  ) => Promise<
+    { ok: true; unitPriceExTax: string } | { ok: false; error: string }
+  >;
   initialLookupNo?: string;
 }) {
   const {
     customers,
-    products,
+    looseProducts,
+    bottledProducts,
+    botaSalesPointId,
+    bottleOilStoreLocationId,
+    walkInCustomerId,
     salesPoints,
     previewPosTaxesAction,
     previewPosLineStockAction,
@@ -230,6 +246,7 @@ export function SalesClient(props: {
     listPendingSalesAction,
     deleteSaleAction,
     previewProductUnitPriceAction,
+    previewBottledUnitPriceAction,
     initialLookupNo = "",
   } = props;
 
@@ -258,6 +275,10 @@ export function SalesClient(props: {
   const [doLookupError, setDoLookupError] = React.useState<string | null>(null);
   const [doLookupBusy, setDoLookupBusy] = React.useState(false);
   const [salesPointId, setSalesPointId] = React.useState<string>("");
+  const [saleProductMode, setSaleProductMode] =
+    React.useState<SaleProductModeUi>("LOOSE");
+  const [useWalkInCustomer, setUseWalkInCustomer] = React.useState(false);
+  const [walkInCustomerName, setWalkInCustomerName] = React.useState("");
   const effectiveSalesPointId =
     session?.salesPoint?.id != null
       ? String(session.salesPoint.id)
@@ -273,7 +294,20 @@ export function SalesClient(props: {
       .map((l) => ({ id: l.id, name: l.name, isDefault: l.isDefault }));
   }
 
+  const isBotaSalesPoint =
+    botaSalesPointId != null &&
+    effectiveSalesPointId === String(botaSalesPointId);
+  const isBottleMode = isBotaSalesPoint && saleProductMode === "BOTTLE";
+  const lineProducts = isBottleMode ? bottledProducts : looseProducts;
+
   function defaultLocationId(spId: string): string {
+    if (
+      isBottleMode &&
+      bottleOilStoreLocationId != null &&
+      String(botaSalesPointId ?? "") === spId
+    ) {
+      return String(bottleOilStoreLocationId);
+    }
     const locs = locationsForSalesPoint(spId);
     const d = locs.find((l) => l.isDefault) ?? locs[0];
     return d ? String(d.id) : "";
@@ -384,10 +418,12 @@ export function SalesClient(props: {
       return;
     }
     let alive = true;
-    void listAvailableDeliveryOrdersAction(spid).then((rows) => {
-      if (!alive) return;
-      setAvailableDos(rows);
-    });
+    void listAvailableDeliveryOrdersAction(spid)
+      .then((rows) => {
+        if (!alive) return;
+        setAvailableDos(rows);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -462,20 +498,25 @@ export function SalesClient(props: {
       setDoLookupError(null);
     });
     const t = window.setTimeout(() => {
-      void lookupDeliveryOrderAction(no, customerId).then((r) => {
-        if (!alive) return;
-        if (r.ok) {
-          setDoLookupData(r.data);
-          setDoLookupError(null);
-          if (saleId == null) {
-            setLines((prev) => mergeLinesFromDeliveryOrder(prev, r.data));
+      void lookupDeliveryOrderAction(no, customerId)
+        .then((r) => {
+          if (!alive) return;
+          if (r.ok) {
+            setDoLookupData(r.data);
+            setDoLookupError(null);
+            if (saleId == null) {
+              setLines((prev) => mergeLinesFromDeliveryOrder(prev, r.data));
+            }
+          } else {
+            setDoLookupData(null);
+            setDoLookupError(r.error);
           }
-        } else {
-          setDoLookupData(null);
-          setDoLookupError(r.error);
-        }
-        setDoLookupBusy(false);
-      });
+          setDoLookupBusy(false);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setDoLookupBusy(false);
+        });
     }, 400);
     return () => {
       alive = false;
@@ -496,10 +537,12 @@ export function SalesClient(props: {
       return;
     }
     let alive = true;
-    void listPendingSalesAction().then((rows) => {
-      if (!alive) return;
-      setPendingSales(rows);
-    });
+    void listPendingSalesAction()
+      .then((rows) => {
+        if (!alive) return;
+        setPendingSales(rows);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -527,6 +570,16 @@ export function SalesClient(props: {
   React.useEffect(() => {
     let alive = true;
     if (saleId != null) return;
+    if (isBottleMode) {
+      window.queueMicrotask(() => {
+        if (!alive) return;
+        setTaxPreviewRows([]);
+        setTaxPreviewError(null);
+      });
+      return () => {
+        alive = false;
+      };
+    }
     if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
       window.queueMicrotask(() => {
         if (!alive) return;
@@ -537,16 +590,18 @@ export function SalesClient(props: {
         alive = false;
       };
     }
-    void previewPosTaxesAction(customerId, transactionDate).then((res) => {
-      if (!alive) return;
-      if (res.ok) {
-        setTaxPreviewRows(res.taxes);
-        setTaxPreviewError(null);
-      } else {
-        setTaxPreviewRows([]);
-        setTaxPreviewError(res.error);
-      }
-    });
+    void previewPosTaxesAction(customerId, transactionDate)
+      .then((res) => {
+        if (!alive) return;
+        if (res.ok) {
+          setTaxPreviewRows(res.taxes);
+          setTaxPreviewError(null);
+        } else {
+          setTaxPreviewRows([]);
+          setTaxPreviewError(res.error);
+        }
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -557,6 +612,7 @@ export function SalesClient(props: {
     authStatus,
     session?.userId,
     previewPosTaxesAction,
+    isBottleMode,
   ]);
 
   const lineProductKey = lines.map((l) => l.productId).join(",");
@@ -566,7 +622,10 @@ export function SalesClient(props: {
     if (saleId != null) return;
     const productIdByIdx = lineProductKey.split(",");
     const hasAnyProductPicked = productIdByIdx.some((id) => id.trim() !== "");
-    if (!customerId || authStatus !== "ready" || !session?.userId?.trim()) {
+    if (
+      !isBottleMode &&
+      (!customerId || authStatus !== "ready" || !session?.userId?.trim())
+    ) {
       window.queueMicrotask(() => {
         if (!alive) return;
         if (!customerId && hasAnyProductPicked) {
@@ -597,11 +656,13 @@ export function SalesClient(props: {
           if (trimmed === "") return;
           const pid = Number.parseInt(trimmed, 10);
           if (!Number.isFinite(pid)) return;
-          const r = await previewProductUnitPriceAction(
-            customerId,
-            pid,
-            transactionDate,
-          );
+          const r = isBottleMode
+            ? await previewBottledUnitPriceAction(String(pid), transactionDate)
+            : await previewProductUnitPriceAction(
+                customerId,
+                pid,
+                transactionDate,
+              );
           if (!alive) return;
           if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
           else errs[idx] = r.error;
@@ -612,11 +673,17 @@ export function SalesClient(props: {
       setLines((prev) =>
         prev.map((row, i) =>
           priceByIdx[i] != null
-            ? { ...row, unitPricePerKg: priceByIdx[i]! }
+            ? isBottleMode
+              ? {
+                  ...row,
+                  unitPricePerUnit: priceByIdx[i]!,
+                  unitPricePerKg: "0",
+                }
+              : { ...row, unitPricePerKg: priceByIdx[i]! }
             : row,
         ),
       );
-    })();
+    })().catch(() => {});
     return () => {
       alive = false;
     };
@@ -628,6 +695,8 @@ export function SalesClient(props: {
     authStatus,
     session?.userId,
     previewProductUnitPriceAction,
+    previewBottledUnitPriceAction,
+    isBottleMode,
   ]);
 
   const lineLocationKey = lines
@@ -687,7 +756,7 @@ export function SalesClient(props: {
       );
       if (!alive) return;
       setLineStockHints(next);
-    })();
+    })().catch(() => {});
     return () => {
       alive = false;
     };
@@ -700,11 +769,19 @@ export function SalesClient(props: {
     previewPosLineStockAction,
   ]);
 
-  const customer = customers.find((c) => c.id === customerId);
-  const net = lines.reduce(
-    (sum, l) => sum + parseDec(l.qtyKg) * parseDec(l.unitPricePerKg),
-    0,
-  );
+  const customer = useWalkInCustomer
+    ? null
+    : customers.find((c) => c.id === customerId);
+  const net = lines.reduce((sum, l) => {
+    if (isBottleMode) {
+      return (
+        sum +
+        parseDec(l.qtyUnits ?? l.qtyKg) *
+          parseDec(l.unitPricePerUnit ?? l.unitPricePerKg)
+      );
+    }
+    return sum + parseDec(l.qtyKg) * parseDec(l.unitPricePerKg);
+  }, 0);
 
   const taxDisplayRows = React.useMemo(() => {
     if (saleId != null && loadedAppliedTaxes) {
@@ -744,7 +821,10 @@ export function SalesClient(props: {
       : null;
 
   const deliveryOrderControlsItems =
-    saleId == null && deliveryOrderNo.trim() !== "" && doLookupData != null;
+    !isBottleMode &&
+    saleId == null &&
+    deliveryOrderNo.trim() !== "" &&
+    doLookupData != null;
 
   const stockSaveBlock = (() => {
     if (saleId != null)
@@ -764,9 +844,12 @@ export function SalesClient(props: {
         };
       }
       const key = `${pid}:${locId}`;
+      const lineQty = isBottleMode
+        ? parseDec(l.qtyUnits ?? l.qtyKg)
+        : parseDec(l.qtyKg);
       totalsByLocation.set(
         key,
-        (totalsByLocation.get(key) ?? 0) + parseDec(l.qtyKg),
+        (totalsByLocation.get(key) ?? 0) + lineQty,
       );
     }
     for (const [key, totalQty] of totalsByLocation) {
@@ -846,6 +929,9 @@ export function SalesClient(props: {
     setValidatedByName("");
     setValidatedAtIso("");
     setCustomerId("");
+    setSaleProductMode("LOOSE");
+    setUseWalkInCustomer(false);
+    setWalkInCustomerName("");
     setLines([
       {
         productId: "",
@@ -885,7 +971,15 @@ export function SalesClient(props: {
     setSaleStatus(s.status);
     setValidatedByName(s.validatedByName ?? "");
     setValidatedAtIso(s.validatedAtIso ?? "");
-    setCustomerId(s.customerId);
+    setSaleProductMode(s.saleProductMode === "BOTTLE" ? "BOTTLE" : "LOOSE");
+    if (s.customerId === walkInCustomerId) {
+      setUseWalkInCustomer(true);
+      setWalkInCustomerName(s.customerName);
+      setCustomerId(walkInCustomerId);
+    } else {
+      setUseWalkInCustomer(false);
+      setCustomerId(s.customerId);
+    }
     setLoadedTotals({ netAmount: s.netAmount, grossAmount: s.grossAmount });
     setLines(
       s.lines.length > 0
@@ -991,18 +1085,18 @@ export function SalesClient(props: {
         });
         return;
       }
-      if (!vehicleNumber.trim()) {
+      if (!isBottleMode && !vehicleNumber.trim()) {
         setBanner({ type: "error", text: "Vehicle number is required." });
         return;
       }
-      if (!deliveryOrderNo.trim()) {
+      if (!isBottleMode && !deliveryOrderNo.trim()) {
         setBanner({
           type: "error",
           text: "Delivery Order number is required.",
         });
         return;
       }
-      if (deliveryOrderSaveBlock.block) {
+      if (!isBottleMode && deliveryOrderSaveBlock.block) {
         setBanner({
           type: "error",
           text:
@@ -1019,10 +1113,19 @@ export function SalesClient(props: {
         return;
       }
       const fd = new FormData();
-      fd.set("customerId", customerId);
-      fd.set("referenceNumber", referenceNumber);
+      fd.set("saleProductMode", saleProductMode);
+      fd.set(
+        "useWalkInCustomer",
+        isBottleMode && useWalkInCustomer ? "1" : "0",
+      );
+      fd.set("walkInCustomerName", walkInCustomerName);
+      fd.set(
+        "customerId",
+        isBottleMode && useWalkInCustomer ? walkInCustomerId : customerId,
+      );
+      fd.set("referenceNumber", isBottleMode ? "" : referenceNumber);
       fd.set("vehicleNumber", vehicleNumber);
-      fd.set("deliveryOrderNo", deliveryOrderNo.trim());
+      fd.set("deliveryOrderNo", isBottleMode ? "" : deliveryOrderNo.trim());
       fd.set(
         "salesPointId",
         session?.salesPoint?.id != null
@@ -1068,9 +1171,9 @@ export function SalesClient(props: {
         setBanner({ type: "ok", text: `Created ${r.invoiceNo}.` });
         router.refresh();
         if (effectiveSalesPointId.trim()) {
-          void listAvailableDeliveryOrdersAction(effectiveSalesPointId).then(
-            setAvailableDos,
-          );
+          void listAvailableDeliveryOrdersAction(effectiveSalesPointId)
+            .then(setAvailableDos)
+            .catch(() => {});
         }
       } else {
         setBanner({ type: "error", text: r.error });
@@ -1093,7 +1196,7 @@ export function SalesClient(props: {
     setBanner({ type: "ok", text: "Sale deleted." });
     router.refresh();
     if (canPickPendingSalesProp) {
-      void listPendingSalesAction().then(setPendingSales);
+      void listPendingSalesAction().then(setPendingSales).catch(() => {});
     }
   }
 
@@ -1113,7 +1216,7 @@ export function SalesClient(props: {
         setBanner({ type: "ok", text: "Invoice validated." });
         router.refresh();
         if (canPickPendingSalesProp) {
-          void listPendingSalesAction().then(setPendingSales);
+          void listPendingSalesAction().then(setPendingSales).catch(() => {});
         }
       } else {
         setBanner({ type: "error", text: r.error });
@@ -1340,44 +1443,156 @@ export function SalesClient(props: {
           ) : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 sm:gap-x-4">
-          <div className="grid gap-1">
-            <label className="text-xs font-medium opacity-80">Customer</label>
-            <select
-              className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              disabled={saleId != null}
-              required
-            >
-              <option value="" disabled>
-                Select customer
-              </option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <div className="text-[11px] opacity-70 leading-tight space-y-0.5">
-              <div>
-                Regime: {customer?.taxRegime?.name ?? "-"}
-                {vatChargedHint ? " · VAT may apply" : ""}
-              </div>
-              {saleId == null && taxPreviewError ? (
-                <div className="text-amber-800 dark:text-amber-300">
-                  {taxPreviewError}
-                </div>
-              ) : null}
-              {saleId == null &&
-              !taxPreviewError &&
-              customerId &&
-              taxPreviewRows.length === 0 ? (
-                <div>No taxes configured for this regime on this date.</div>
-              ) : null}
+        {isBotaSalesPoint && saleId == null ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+            <span className="text-xs font-medium opacity-80">Product sale type</span>
+            <div className="inline-flex rounded-md border border-border p-0.5">
+              <button
+                type="button"
+                className={`rounded px-3 py-1.5 text-sm font-medium ${
+                  saleProductMode === "LOOSE"
+                    ? "bg-brand text-brand-foreground"
+                    : "hover:bg-accent/20"
+                }`}
+                onClick={() => {
+                  setSaleProductMode("LOOSE");
+                  setUseWalkInCustomer(false);
+                }}
+              >
+                Loose product
+              </button>
+              <button
+                type="button"
+                className={`rounded px-3 py-1.5 text-sm font-medium ${
+                  saleProductMode === "BOTTLE"
+                    ? "bg-brand text-brand-foreground"
+                    : "hover:bg-accent/20"
+                }`}
+                onClick={() => {
+                  setSaleProductMode("BOTTLE");
+                  setDeliveryOrderNo("");
+                  setDoLookupData(null);
+                  setDoLookupError(null);
+                  setReferenceNumber("");
+                  const def = defaultLocationId(effectiveSalesPointId);
+                  setLines((prev) =>
+                    prev.map((l) => ({
+                      ...l,
+                      productId: "",
+                      qtyKg: "0",
+                      qtyUnits: "0",
+                      unitPricePerKg: "0",
+                      unitPricePerUnit: "0",
+                      storageLocationId: def,
+                    })),
+                  );
+                }}
+              >
+                Bottle product
+              </button>
             </div>
           </div>
+        ) : null}
 
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-x-4">
+          <div className="grid gap-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <label className="text-xs font-medium opacity-80">Customer</label>
+              {isBottleMode && saleId == null ? (
+                <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-normal opacity-80">
+                  <input
+                    type="checkbox"
+                    checked={useWalkInCustomer}
+                    onChange={(e) => {
+                      setUseWalkInCustomer(e.target.checked);
+                      if (e.target.checked) {
+                        setCustomerId(walkInCustomerId);
+                      } else {
+                        setCustomerId("");
+                        setWalkInCustomerName("");
+                      }
+                    }}
+                    disabled={saleId != null}
+                  />
+                  Walk-in
+                </label>
+              ) : null}
+            </div>
+            {isBottleMode ? (
+              useWalkInCustomer ? (
+                <input
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  value={walkInCustomerName}
+                  onChange={(e) => setWalkInCustomerName(e.target.value)}
+                  placeholder="Customer name"
+                  disabled={saleId != null}
+                  required
+                />
+              ) : (
+                <select
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  disabled={saleId != null}
+                  required
+                >
+                  <option value="" disabled>
+                    Select customer
+                  </option>
+                  {customers
+                    .filter((c) => c.id !== walkInCustomerId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              )
+            ) : (
+              <>
+                <select
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  disabled={saleId != null}
+                  required
+                >
+                  <option value="" disabled>
+                    Select customer
+                  </option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-[11px] opacity-70 leading-tight space-y-0.5">
+                  <div>
+                    Regime: {customer?.taxRegime?.name ?? "-"}
+                    {vatChargedHint ? " · VAT may apply" : ""}
+                  </div>
+                  {saleId == null && taxPreviewError ? (
+                    <div className="text-amber-800 dark:text-amber-300">
+                      {taxPreviewError}
+                    </div>
+                  ) : null}
+                  {saleId == null &&
+                  !taxPreviewError &&
+                  customerId &&
+                  taxPreviewRows.length === 0 ? (
+                    <div>No taxes configured for this regime on this date.</div>
+                  ) : null}
+                </div>
+              </>
+            )}
+            {isBottleMode ? (
+              <p className="text-[11px] opacity-70 leading-tight">
+                Prices are tax-inclusive; no tax is added on bottle sales.
+              </p>
+            ) : null}
+          </div>
+
+          {!isBottleMode ? (
           <div className="grid gap-1">
             <label className="text-xs font-medium opacity-80">
               Reference no.{" "}
@@ -1394,8 +1609,11 @@ export function SalesClient(props: {
               Printed as reference number.
             </p>
           </div>
+          ) : null}
 
-          <div className="grid gap-1">
+          <div
+            className={`grid gap-1${isBottleMode ? " sm:row-start-2 sm:col-start-1" : ""}`}
+          >
             <label className="text-xs font-medium opacity-80">
               Sales point
             </label>
@@ -1418,6 +1636,12 @@ export function SalesClient(props: {
                   onChange={(e) => {
                     const next = e.target.value;
                     setSalesPointId(next);
+                    if (
+                      botaSalesPointId != null &&
+                      next !== String(botaSalesPointId)
+                    ) {
+                      setSaleProductMode("LOOSE");
+                    }
                     setDeliveryOrderNo("");
                     setDoLookupData(null);
                     setDoLookupError(null);
@@ -1450,7 +1674,9 @@ export function SalesClient(props: {
             )}
           </div>
 
-          <div className="grid gap-1">
+          <div
+            className={`grid gap-1${isBottleMode ? " sm:col-start-2 sm:row-start-1" : ""}`}
+          >
             <label className="text-xs font-medium opacity-80">Sale date</label>
             <input
               type="date"
@@ -1471,9 +1697,14 @@ export function SalesClient(props: {
             </p>
           </div>
 
-          <div className="grid gap-1">
+          <div
+            className={`grid gap-1${isBottleMode ? " sm:col-start-2 sm:row-start-2" : ""}`}
+          >
             <label className="text-xs font-medium opacity-80">
               Vehicle number
+              {isBottleMode ? (
+                <span className="font-normal opacity-60"> (optional)</span>
+              ) : null}
             </label>
             <input
               className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
@@ -1481,9 +1712,15 @@ export function SalesClient(props: {
               onChange={(e) => setVehicleNumber(e.target.value)}
               placeholder="Registration / fleet id"
               disabled={saleId != null}
-              required
+              required={!isBottleMode}
             />
+            {isBottleMode ? (
+              <p className="text-[11px] opacity-70 leading-tight">
+                Optional for bottle sales.
+              </p>
+            ) : null}
           </div>
+          {!isBottleMode ? (
           <div className="grid gap-1">
             <label className="text-xs font-medium opacity-80">
               Delivery order no.
@@ -1576,8 +1813,9 @@ export function SalesClient(props: {
               ) : null}
             </div>
           </div>
+          ) : null}
 
-          {deliveryOrderNo.trim() ? (
+          {!isBottleMode && deliveryOrderNo.trim() ? (
             <div className="rounded-lg border border-border p-3 text-sm space-y-2 sm:col-span-2">
               <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
                 Delivery order control
@@ -1702,7 +1940,9 @@ export function SalesClient(props: {
             </button>
           </div>
           <p className="text-xs opacity-70">
-            Price / kg (ex tax) is resolved from{" "}
+            {isBottleMode
+              ? "Price / unit (tax-inclusive) is resolved from"
+              : "Price / kg (ex tax) is resolved from"}{" "}
             <Link
               href="/setup/product-pricing"
               className="underline underline-offset-4"
@@ -1716,8 +1956,12 @@ export function SalesClient(props: {
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium opacity-70 border-b border-border">
               <div className="col-span-4">Product</div>
               <div className="col-span-3">Location</div>
-              <div className="col-span-2">Qty (kg)</div>
-              <div className="col-span-2">Price / kg (ex tax)</div>
+              <div className="col-span-2">
+                {isBottleMode ? "Qty (units)" : "Qty (kg)"}
+              </div>
+              <div className="col-span-2">
+                {isBottleMode ? "Price / unit (incl.)" : "Price / kg (ex tax)"}
+              </div>
               <div className="col-span-1" />
             </div>
             {lines.map((l, idx) => (
@@ -1746,7 +1990,7 @@ export function SalesClient(props: {
                     <option value="" disabled>
                       Select product
                     </option>
-                    {products.map((g) => (
+                    {lineProducts.map((g) => (
                       <option key={g.productId} value={String(g.productId)}>
                         {g.productName}
                       </option>
@@ -1809,12 +2053,16 @@ export function SalesClient(props: {
                 <div className="col-span-2">
                   <input
                     className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm tabular-nums"
-                    value={l.qtyKg}
+                    value={isBottleMode ? (l.qtyUnits ?? l.qtyKg) : l.qtyKg}
                     inputMode="decimal"
                     onChange={(e) =>
                       setLines((prev) =>
                         prev.map((x, i) =>
-                          i === idx ? { ...x, qtyKg: e.target.value } : x,
+                          i === idx
+                            ? isBottleMode
+                              ? { ...x, qtyUnits: e.target.value, qtyKg: "0" }
+                              : { ...x, qtyKg: e.target.value }
+                            : x,
                         ),
                       )
                     }
@@ -1850,7 +2098,11 @@ export function SalesClient(props: {
                 <div className="col-span-2 min-w-0">
                   <input
                     className="w-full rounded-md border border-border bg-foreground/6 px-3 py-2 text-sm tabular-nums"
-                    value={l.unitPricePerKg}
+                    value={
+                      isBottleMode
+                        ? (l.unitPricePerUnit ?? l.unitPricePerKg)
+                        : l.unitPricePerKg
+                    }
                     inputMode="decimal"
                     readOnly
                     title="Resolved from product pricing schedules"
@@ -1861,7 +2113,7 @@ export function SalesClient(props: {
                     </p>
                   ) : null}
                 </div>
-                <div className="col-span-1 flex justify-end">
+                <div className="col-span-1 flex min-h-[42px] items-center justify-end self-center">
                   <button
                     type="button"
                     className="text-xs underline underline-offset-4 opacity-80"
@@ -2122,16 +2374,22 @@ export function SalesClient(props: {
           {saleId == null &&
           (deliveryOrderSaveBlock.block ||
             stockSaveBlock.block ||
-            !vehicleNumber.trim() ||
-            Boolean(taxPreviewError)) ? (
+            (!isBottleMode && !vehicleNumber.trim()) ||
+            (isBottleMode && useWalkInCustomer && !walkInCustomerName.trim()) ||
+            (isBottleMode && !useWalkInCustomer && !customerId) ||
+            (!isBottleMode && Boolean(taxPreviewError))) ? (
             <p className="text-xs text-amber-800 dark:text-amber-300 max-w-xl">
-              {taxPreviewError
+              {!isBottleMode && taxPreviewError
                 ? "Fix tax configuration before saving."
-                : !vehicleNumber.trim()
+                : !isBottleMode && !vehicleNumber.trim()
                   ? "Enter a vehicle number before saving."
-                  : (stockSaveBlock.hint ??
-                    deliveryOrderSaveBlock.hint ??
-                    "Fix delivery order validation before saving.")}
+                  : isBottleMode && useWalkInCustomer && !walkInCustomerName.trim()
+                    ? "Enter the walk-in customer name before saving."
+                    : isBottleMode && !useWalkInCustomer && !customerId
+                      ? "Select a customer before saving."
+                      : (stockSaveBlock.hint ??
+                        deliveryOrderSaveBlock.hint ??
+                        "Fix validation before saving.")}
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
@@ -2140,10 +2398,14 @@ export function SalesClient(props: {
               disabled={
                 busy !== null ||
                 saleId != null ||
-                !vehicleNumber.trim() ||
-                deliveryOrderSaveBlock.block ||
+                (!isBottleMode && !vehicleNumber.trim()) ||
+                (isBottleMode &&
+                  useWalkInCustomer &&
+                  !walkInCustomerName.trim()) ||
+                (isBottleMode && !useWalkInCustomer && !customerId) ||
+                (!isBottleMode && deliveryOrderSaveBlock.block) ||
                 stockSaveBlock.block ||
-                Boolean(taxPreviewError)
+                (!isBottleMode && Boolean(taxPreviewError))
               }
               onClick={() => void onSaveSale()}
               className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"

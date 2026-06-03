@@ -47,7 +47,17 @@ import {
   saleWhereForScope,
 } from "@/lib/service-scope";
 import type { SalePrintModel } from "@/components/SalePrint";
-import { resolveUnitPriceExTax } from "@/lib/pricing/resolve";
+import {
+  assertSaleModeForSalesPoint,
+  BOTTLE_VEHICLE_PLACEHOLDER,
+  getOrCreateWalkInCustomer,
+  normalizeSaleModeForSalesPoint,
+  parseSaleProductMode,
+  resolveBotaSalesPointId,
+  resolveBottleOilStoreLocationId,
+} from "@/lib/pos/sale-product-mode";
+import { runValidatePosSale } from "@/lib/pos/validate-pos-sale";
+import { resolveBottledUnitPriceExTax, resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import { isInsufficientStockError } from "@/lib/stock/errors";
 import {
   assertPosLocationSellable,
@@ -55,13 +65,10 @@ import {
   getLocationStockBreakdown,
   isPosLocationBlockedByUnsellableStock,
 } from "@/lib/stock/pos-location";
-import { applyMovement } from "@/lib/stock/post";
-import { resolveDefaultStorageLocationId } from "@/lib/stock/storage-location";
 import {
   PaymentMethod,
   Prisma,
-  StockCondition,
-  StockMovementKind,
+  PosSaleProductMode,
   ValidationStatus,
   UserRole,
 } from "@prisma/client";
@@ -115,6 +122,7 @@ export type LoadedSaleView = {
   vehicleNumber: string;
   dateIssuedIso: string;
   deliveryOrderNo: string | null;
+  saleProductMode: PosSaleProductMode | null;
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
@@ -178,18 +186,22 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
 
 export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const prisma = getPrismaClient();
-  const customerId = String(formData.get("customerId") ?? "");
-  const referenceNumber = String(formData.get("referenceNumber") ?? "").trim() || null;
+  const customerIdRaw = String(formData.get("customerId") ?? "").trim();
+  const useWalkIn = String(formData.get("useWalkInCustomer") ?? "") === "1";
+  const walkInCustomerName = String(formData.get("walkInCustomerName") ?? "").trim();
+  const referenceNumberRaw = String(formData.get("referenceNumber") ?? "").trim();
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
   const linesJson = String(formData.get("lines") ?? "[]");
   const paymentsJson = String(formData.get("payments") ?? "[]");
+  const saleProductModeRaw = parseSaleProductMode(
+    String(formData.get("saleProductMode") ?? ""),
+  );
 
   const lines = JSON.parse(linesJson) as PosLineInput[];
   const payments = JSON.parse(paymentsJson) as PosPaymentInput[];
-  const vehicleNumber = String(formData.get("vehicleNumber") ?? "").trim();
+  const vehicleNumberRaw = String(formData.get("vehicleNumber") ?? "").trim();
   const deliveryOrderNoRaw = String(formData.get("deliveryOrderNo") ?? "").trim();
-  const deliveryOrderNo = deliveryOrderNoRaw || null;
 
   const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
   const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
@@ -202,8 +214,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const transactionIso = normalizeIsoDateInput(transactionDateRaw) ?? utcIsoDateToday();
   const soldAt = noonUtcFromIsoDate(transactionIso);
 
-  if (!customerId) return { ok: false, error: "Customer is required." };
-  if (!vehicleNumber) return { ok: false, error: "Vehicle number is required." };
   if (salesPointRaw && !Number.isFinite(salesPointId)) {
     return { ok: false, error: "Invalid sales point." };
   }
@@ -223,8 +233,39 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   if (effectiveSalesPointId == null) {
     return { ok: false, error: "Sales point is required." };
   }
-  if (!deliveryOrderNo) {
+
+  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
+  const saleProductMode = normalizeSaleModeForSalesPoint(
+    saleProductModeRaw,
+    effectiveSalesPointId,
+    botaSalesPointId,
+  );
+  const modeErr = assertSaleModeForSalesPoint(
+    saleProductMode,
+    effectiveSalesPointId,
+    botaSalesPointId,
+  );
+  if (modeErr) return { ok: false, error: modeErr };
+
+  const isBottleMode = saleProductMode === PosSaleProductMode.BOTTLE;
+  const referenceNumber = isBottleMode ? null : referenceNumberRaw || null;
+  const deliveryOrderNo = isBottleMode ? null : deliveryOrderNoRaw || null;
+  const vehicleNumber = isBottleMode
+    ? vehicleNumberRaw || BOTTLE_VEHICLE_PLACEHOLDER
+    : vehicleNumberRaw;
+
+  if (!isBottleMode && !deliveryOrderNo) {
     return { ok: false, error: "Delivery Order number is required." };
+  }
+  if (!isBottleMode && !vehicleNumber) {
+    return { ok: false, error: "Vehicle number is required." };
+  }
+  if (isBottleMode && useWalkIn) {
+    if (!walkInCustomerName) {
+      return { ok: false, error: "Enter the walk-in customer name." };
+    }
+  } else if (!customerIdRaw) {
+    return { ok: false, error: "Customer is required." };
   }
 
   const scope = resolveServiceScope(session);
@@ -235,9 +276,32 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   if (!Array.isArray(payments) || payments.length === 0)
     return { ok: false, error: "Add at least one payment." };
 
-  const [customer, openPeriod] = await Promise.all([
-    prisma.customer.findUnique({
-      where: { id: customerId },
+  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
+
+  let customer: {
+    id: string;
+    name: string;
+    taxpayerId: string | null;
+    taxRegimeId: string | null;
+    customerType: import("@prisma/client").CustomerType;
+    commercialServiceId: string;
+  };
+  let customerNameSnapshot: string;
+
+  if (isBottleMode && useWalkIn) {
+    const walkIn = await getOrCreateWalkInCustomer(prisma, commercialService.id);
+    customer = {
+      id: walkIn.id,
+      name: walkIn.name,
+      taxpayerId: null,
+      taxRegimeId: null,
+      customerType: "RETAIL",
+      commercialServiceId: commercialService.id,
+    };
+    customerNameSnapshot = walkInCustomerName;
+  } else {
+    const row = await prisma.customer.findUnique({
+      where: { id: customerIdRaw },
       select: {
         id: true,
         name: true,
@@ -246,16 +310,16 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         customerType: true,
         commercialServiceId: true,
       },
-    }),
-    getOpenFinancialYearPeriod(),
-  ]);
+    });
+    if (!row) return { ok: false, error: "Customer not found." };
+    customer = row;
+    customerNameSnapshot = row.name;
+  }
 
-  if (!customer) return { ok: false, error: "Customer not found." };
+  const openPeriod = await getOpenFinancialYearPeriod();
 
   const custScopeErr = commercialServiceErrorForCustomer(scope, customer.commercialServiceId);
   if (custScopeErr) return { ok: false, error: custScopeErr };
-
-  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
 
   const lineMismatch = assertCustomerMatchesPostingLine(
     customer.commercialServiceId,
@@ -294,6 +358,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     storageLocationId: number;
     qtyKg: Prisma.Decimal;
     qtyUnits: Prisma.Decimal | null;
+    isBottled: boolean;
     unitPrice: Prisma.Decimal;
     lineNet: Prisma.Decimal;
   }> = [];
@@ -320,6 +385,12 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       });
       if (!product) throw new Error("Product not found.");
       const isBottled = product.productCat?.isBottled === true;
+      if (isBottleMode && !isBottled) {
+        throw new Error("Only bottled palm oil products are allowed in bottle sales mode.");
+      }
+      if (!isBottleMode && isBottled) {
+        throw new Error("Bottled products cannot be sold in loose sales mode.");
+      }
       let qtyKg: Prisma.Decimal;
       let qtyUnits: Prisma.Decimal | null;
       if (isBottled) {
@@ -332,12 +403,14 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
         qtyUnits = null;
       }
-      const priced = await resolveUnitPriceExTax(
-        prisma,
-        productId,
-        customer.customerType,
-        soldAt,
-      );
+      const priced = isBottleMode
+        ? await resolveBottledUnitPriceExTax(prisma, productId, soldAt)
+        : await resolveUnitPriceExTax(
+            prisma,
+            productId,
+            customer.customerType,
+            soldAt,
+          );
       if (!priced.ok) throw new Error(priced.error);
       const price = money2(priced.unitPriceExTax);
 
@@ -351,6 +424,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         storageLocationId,
         qtyKg,
         qtyUnits,
+        isBottled,
         unitPrice: price,
         lineNet,
       });
@@ -377,7 +451,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     const nameById = new Map(productRows.map((p) => [p.productId, p.productName]));
     const check = await validateSaleAgainstDeliveryOrder({
       deliveryOrderNo,
-      customerId,
+      customerId: customer.id,
       lines: preparedLines.map((l) => ({
         productId: l.productId,
         productName: nameById.get(l.productId) ?? `Product ${l.productId}`,
@@ -393,19 +467,20 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
       {
         productId: number;
         storageLocationId: number;
-        qtyKg: Prisma.Decimal;
+        qty: Prisma.Decimal;
       }
     >();
     for (const l of preparedLines) {
       const key = `${l.productId}:${l.storageLocationId}`;
+      const lineQty = l.isBottled ? l.qtyUnits! : l.qtyKg;
       const existing = stockByLocation.get(key);
       if (existing) {
-        existing.qtyKg = existing.qtyKg.add(l.qtyKg);
+        existing.qty = existing.qty.add(lineQty);
       } else {
         stockByLocation.set(key, {
           productId: l.productId,
           storageLocationId: l.storageLocationId,
-          qtyKg: l.qtyKg,
+          qty: lineQty,
         });
       }
     }
@@ -414,7 +489,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         salesPointId: effectiveSalesPointId,
         storageLocationId: group.storageLocationId,
         productId: group.productId,
-        qty: group.qtyKg,
+        qty: group.qty,
       });
     }
   } catch (e) {
@@ -424,43 +499,61 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid storage location." };
   }
 
-  const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
-  if (!resolved.ok) return { ok: false, error: resolved.error };
+  let appliedTaxCreates: Array<{
+    taxTypeId: string | null;
+    codeSnapshot: string;
+    labelSnapshot: string;
+    rateSnapshot: Prisma.Decimal;
+    amount: Prisma.Decimal;
+  }> = [];
+  let totalTax = d(0);
+  let vatAmount = d(0);
+  let vatRateSnapshot = d(0);
+  let gross = net;
 
-  const appliedTaxCreates = resolved.taxes.map((t) => ({
-    taxTypeId: t.taxTypeId,
-    codeSnapshot: t.code,
-    labelSnapshot: t.label,
-    rateSnapshot: t.rate,
-    amount: money2(net.mul(t.rate)),
-  }));
+  if (isBottleMode) {
+    gross = money2(net);
+  } else {
+    const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
 
-  const totalTax = appliedTaxCreates.reduce((acc, row) => acc.add(row.amount), d(0));
-  const vatAmount = appliedTaxCreates
-    .filter((r) => r.codeSnapshot === VAT_TAX_CODE)
-    .reduce((acc, r) => acc.add(r.amount), d(0));
-  const { vatRateSnapshot } = legacyVatSnapshotFromResolved(resolved.taxes);
-  const gross = money2(net.add(totalTax));
+    appliedTaxCreates = resolved.taxes.map((t) => ({
+      taxTypeId: t.taxTypeId,
+      codeSnapshot: t.code,
+      labelSnapshot: t.label,
+      rateSnapshot: t.rate,
+      amount: money2(net.mul(t.rate)),
+    }));
+
+    totalTax = appliedTaxCreates.reduce((acc, row) => acc.add(row.amount), d(0));
+    vatAmount = appliedTaxCreates
+      .filter((r) => r.codeSnapshot === VAT_TAX_CODE)
+      .reduce((acc, r) => acc.add(r.amount), d(0));
+    ({ vatRateSnapshot } = legacyVatSnapshotFromResolved(resolved.taxes));
+    gross = money2(net.add(totalTax));
+  }
 
   let lineVatRunning = d(0);
   const lineCreates = preparedLines.map((l, idx) => {
-    const isLast = idx === preparedLines.length - 1;
-    let lineVat: Prisma.Decimal;
-    if (net.lte(0)) {
-      lineVat = d(0);
-    } else if (isLast) {
-      lineVat = money2(totalTax.sub(lineVatRunning));
-    } else {
-      lineVat = money2(l.lineNet.div(net).mul(totalTax));
-      lineVatRunning = lineVatRunning.add(lineVat);
+    let lineVat = d(0);
+    if (!isBottleMode) {
+      const isLast = idx === preparedLines.length - 1;
+      if (net.lte(0)) {
+        lineVat = d(0);
+      } else if (isLast) {
+        lineVat = money2(totalTax.sub(lineVatRunning));
+      } else {
+        lineVat = money2(l.lineNet.div(net).mul(totalTax));
+        lineVatRunning = lineVatRunning.add(lineVat);
+      }
     }
     return {
       productId: l.productId,
       storageLocationId: l.storageLocationId,
       qtyKg: l.qtyKg,
       qtyUnits: l.qtyUnits,
-      unitPricePerKg: l.unitPrice,
-      unitPricePerUnit: null,
+      unitPricePerKg: l.isBottled ? d(0) : l.unitPrice,
+      unitPricePerUnit: l.isBottled ? l.unitPrice : null,
       lineNet: l.lineNet,
       lineVat,
       lineGross: money2(l.lineNet.add(lineVat)),
@@ -569,9 +662,10 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
             vehicleNumber,
             dateIssued: soldAt,
             deliveryOrderNo,
+            saleProductMode,
             status: ValidationStatus.PENDING,
-            customerNameSnapshot: customer.name,
-            taxRegimeId: customer.taxRegimeId,
+            customerNameSnapshot,
+            taxRegimeId: isBottleMode ? null : customer.taxRegimeId,
             vatRateSnapshot,
             netAmount: net,
             vatAmount,
@@ -874,7 +968,8 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     salesPointId: row.salesPointId ?? null,
     salesPointName: row.salesPoint?.name ?? null,
     customerId: row.customerId,
-    customerName: row.customer.name,
+    customerName: row.customerNameSnapshot,
+    saleProductMode: row.saleProductMode,
     taxpayerId: row.customer.taxpayerId,
     vatApplies:
       row.appliedTaxes.length > 0
@@ -1118,10 +1213,12 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   const existing = await prisma.sale.findUnique({
     where: { id },
     select: {
+      id: true,
       status: true,
       salesPointId: true,
       commercialServiceId: true,
       deliveryOrderNo: true,
+      saleProductMode: true,
       soldAt: true,
       lines: {
         select: {
@@ -1142,73 +1239,9 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
   if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
-  if (existing.salesPointId == null) {
-    return {
-      ok: false,
-      error: "This invoice has no sales point; cannot deduct stock on validation.",
-    };
-  }
-  const stockSalesPointId: number = existing.salesPointId;
-  if (!existing.deliveryOrderNo) {
-    return { ok: false, error: "Delivery Order number is required." };
-  }
 
-  const linkedDo = await prisma.deliveryOrder.findUnique({
-    where: { deliveryOrderNo: existing.deliveryOrderNo },
-    select: { status: true },
-  });
-  const doStatusErr = deliveryOrderPosUsageError(linkedDo?.status);
-  if (doStatusErr) {
-    return { ok: false, error: doStatusErr };
-  }
-
-  try {
-    await prisma.$transaction(
-      async (tx) => {
-        for (const line of existing.lines) {
-          const storageLocationId =
-            line.storageLocationId ??
-            (await resolveDefaultStorageLocationId(tx, stockSalesPointId));
-          await assertPosLocationSellable(tx, {
-            salesPointId: stockSalesPointId,
-            storageLocationId,
-            productId: line.productId,
-          });
-          const qty = line.product.productCat?.isBottled
-            ? (line.qtyUnits ?? line.qtyKg)
-            : line.qtyKg;
-          if (new Prisma.Decimal(qty).lte(0)) continue;
-          await applyMovement(tx, {
-            salesPointId: stockSalesPointId,
-            productId: line.productId,
-            storageLocationId,
-            condition: StockCondition.SELLABLE,
-            qty,
-            kind: StockMovementKind.SALE,
-            occurredAt: existing.soldAt,
-            userId: session.userId,
-            sourceKind: "SALE",
-            sourceId: id,
-          });
-        }
-
-        await tx.sale.update({
-          where: { id },
-          data: {
-            status: ValidationStatus.VALIDATED,
-            validatedAt: new Date(),
-            validatedByUserId: session.userId,
-          },
-        });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
-  } catch (e) {
-    if (isInsufficientStockError(e)) {
-      return { ok: false, error: e.message };
-    }
-    return { ok: false, error: e instanceof Error ? e.message : "Could not validate sale." };
-  }
+  const result = await runValidatePosSale(prisma, existing, session.userId);
+  if (!result.ok) return result;
 
   revalidatePath("/pos");
   revalidatePath(`/sales/${id}`);

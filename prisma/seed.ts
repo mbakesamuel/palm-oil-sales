@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient, UserRole } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureBotaPosSetup } from "../lib/pos/ensure-bota-setup";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -18,7 +19,43 @@ const TEST_ADMIN = {
   name: "Test administrator",
 } as const;
 
+async function ensureBuiltinGlobalRoles() {
+  for (const [legacyRole, displayName, sortOrder] of [
+    [UserRole.ADMIN, "Admin", 10],
+    [UserRole.DIRECTOR, "Director", 20],
+  ] as const) {
+    const existing = await prisma.globalRoleDefinition.findFirst({
+      where: { legacyRole, isActive: true },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.globalRoleDefinition.create({
+      data: {
+        code: legacyRole.toLowerCase(),
+        displayName,
+        sortOrder,
+        isActive: true,
+        legacyRole,
+      },
+    });
+  }
+}
+
+async function linkAdminGlobalRole(userId: string) {
+  const def = await prisma.globalRoleDefinition.findFirst({
+    where: { legacyRole: UserRole.ADMIN, isActive: true },
+    select: { id: true },
+  });
+  if (!def) return;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { globalRoleDefinitionId: def.id, role: UserRole.ADMIN },
+  });
+}
+
 async function main() {
+  await ensureBuiltinGlobalRoles();
+
   const existing = await prisma.user.findUnique({
     where: { username: TEST_ADMIN.username },
   });
@@ -34,9 +71,12 @@ async function main() {
         salesPointId: null,
       },
     });
+    await linkAdminGlobalRole(existing.id);
     console.log(
       `Seed: updated user "${TEST_ADMIN.username}" (password: "${TEST_ADMIN.passwordPlain}")`,
     );
+    await ensureBotaPosSetup(prisma);
+    console.log("Seed: ensured Bota sales point, Bottle Oil Store, and walk-in customer.");
     return;
   }
 
@@ -49,9 +89,17 @@ async function main() {
       salesPointId: null,
     },
   });
+  const created = await prisma.user.findUniqueOrThrow({
+    where: { username: TEST_ADMIN.username },
+    select: { id: true },
+  });
+  await linkAdminGlobalRole(created.id);
   console.log(
     `Seed: created user "${TEST_ADMIN.username}" (password: "${TEST_ADMIN.passwordPlain}")`,
   );
+
+  await ensureBotaPosSetup(prisma);
+  console.log("Seed: ensured Bota sales point, Bottle Oil Store, and walk-in customer.");
 }
 
 main()

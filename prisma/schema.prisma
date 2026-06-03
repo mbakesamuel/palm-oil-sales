@@ -52,6 +52,12 @@ enum ValidationStatus {
   REJECTED
 }
 
+/// POS header: loose bulk (kg + DO + tax) vs bottled units at Bota (tax-inclusive).
+enum PosSaleProductMode {
+  LOOSE
+  BOTTLE
+}
+
 enum TaxRegimeKind {
   SIMPLIFIED
   REAL
@@ -611,6 +617,8 @@ model Sale {
   vehicleNumber                 String
   dateIssued                    DateTime
   deliveryOrderNo               String?
+  /// LOOSE = standard POS; BOTTLE = Bota bottled palm oil (tax-inclusive). Null = legacy loose.
+  saleProductMode               PosSaleProductMode?
   createdByUserId               String
   status                        ValidationStatus   @default(PENDING)
   validatedAt                   DateTime?

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma, StockCondition, StockMovementKind, ValidationStatus } from "@prisma/client";
+import { Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
 import {
   assertPermissionKeyForSession,
@@ -14,7 +14,6 @@ import {
 import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { actorFromAuthSession } from "@/lib/auth-sales-point-scope";
 import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
-import { deliveryOrderPosUsageError } from "@/lib/delivery-order-sale-control";
 import { getPrismaClient } from "@/lib/prisma";
 import {
   commercialServiceErrorForOperations,
@@ -23,10 +22,7 @@ import {
   resolveServiceScope,
   saleWhereForScope,
 } from "@/lib/service-scope";
-import { isInsufficientStockError } from "@/lib/stock/errors";
-import { assertPosLocationSellable } from "@/lib/stock/pos-location";
-import { applyMovement } from "@/lib/stock/post";
-import { resolveDefaultStorageLocationId } from "@/lib/stock/storage-location";
+import { runValidatePosSale } from "@/lib/pos/validate-pos-sale";
 export type MobilePendingSaleRow = {
   id: string;
   invoiceNo: string;
@@ -250,10 +246,12 @@ export async function validateSaleForSession(
   const existing = await prisma.sale.findUnique({
     where: { id },
     select: {
+      id: true,
       status: true,
       salesPointId: true,
       commercialServiceId: true,
       deliveryOrderNo: true,
+      saleProductMode: true,
       soldAt: true,
       lines: {
         select: {
@@ -274,78 +272,8 @@ export async function validateSaleForSession(
   const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
   if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
-  if (existing.salesPointId == null) {
-    return {
-      ok: false,
-      error: "This invoice has no sales point; cannot deduct stock on validation.",
-    };
-  }
-  const stockSalesPointId: number = existing.salesPointId;
-  if (!existing.deliveryOrderNo) {
-    return { ok: false, error: "Delivery Order number is required." };
-  }
 
-  const linkedDo = await prisma.deliveryOrder.findUnique({
-    where: { deliveryOrderNo: existing.deliveryOrderNo },
-    select: { status: true },
-  });
-  const doStatusErr = deliveryOrderPosUsageError(linkedDo?.status);
-  if (doStatusErr) {
-    return { ok: false, error: doStatusErr };
-  }
-
-  try {
-    await prisma.$transaction(
-      async (tx) => {
-        for (const line of existing.lines) {
-          const storageLocationId =
-            line.storageLocationId ??
-            (await resolveDefaultStorageLocationId(tx, stockSalesPointId));
-          await assertPosLocationSellable(tx, {
-            salesPointId: stockSalesPointId,
-            storageLocationId,
-            productId: line.productId,
-          });
-          const qty = line.product.productCat?.isBottled
-            ? (line.qtyUnits ?? line.qtyKg)
-            : line.qtyKg;
-          if (new Prisma.Decimal(qty).lte(0)) continue;
-          await applyMovement(tx, {
-            salesPointId: stockSalesPointId,
-            productId: line.productId,
-            storageLocationId,
-            condition: StockCondition.SELLABLE,
-            qty,
-            kind: StockMovementKind.SALE,
-            occurredAt: existing.soldAt,
-            userId: session.userId,
-            sourceKind: "SALE",
-            sourceId: id,
-          });
-        }
-
-        await tx.sale.update({
-          where: { id },
-          data: {
-            status: ValidationStatus.VALIDATED,
-            validatedAt: new Date(),
-            validatedByUserId: session.userId,
-          },
-        });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
-  } catch (e) {
-    if (isInsufficientStockError(e)) {
-      return { ok: false, error: e.message };
-    }
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Could not validate sale.",
-    };
-  }
-
-  return { ok: true };
+  return runValidatePosSale(prisma, existing, session.userId);
 }
 
 export async function canValidateSalesForSession(
