@@ -81,6 +81,11 @@ export default function DeliveryOrderReviewScreen() {
                   ]);
                 } else if (res.errors[0]) {
                   Alert.alert("Error", res.errors[0].error);
+                } else {
+                  Alert.alert(
+                    "Not validated",
+                    "Mark the delivery order as reviewed first, then try again.",
+                  );
                 }
               } catch (e) {
                 Alert.alert("Error", e instanceof Error ? e.message : "Failed.");
@@ -107,13 +112,13 @@ export default function DeliveryOrderReviewScreen() {
             <ReviewPrimaryButton
               label="Validate delivery order"
               onPress={() => void onValidate()}
-              disabled={acting}
+              loading={acting}
             />
           ) : (
             <ReviewPrimaryButton
               label="Mark as reviewed"
               onPress={() => void onMarkReviewed()}
-              disabled={acting}
+              loading={acting}
               variant="secondary"
             />
           )

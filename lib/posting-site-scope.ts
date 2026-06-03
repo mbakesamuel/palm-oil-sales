@@ -7,6 +7,7 @@ import { resolveCommercialProfile, siteLabelForKind } from "@/lib/commercial-pro
 export type ActorPostingSiteRow = {
   role: string;
   globalRoleDefinitionId?: string | null;
+  commercialServiceRoleCode?: string | null;
   requiresFixedPostingSite?: boolean | null;
   salesPointId: number | null;
   factoryId: string | null;
@@ -43,6 +44,7 @@ export function postingSiteErrorForSubmitted(
     !actorRequiresFixedPostingSite({
       role: actor.role as UserRole,
       globalRoleDefinitionId: actor.globalRoleDefinitionId,
+      commercialServiceRoleCode: actor.commercialServiceRoleCode,
       requiresFixedPostingSite: actor.requiresFixedPostingSite,
     })
   ) {
@@ -84,6 +86,7 @@ export function salesPointErrorForResource(
     !actorRequiresFixedPostingSite({
       role: actor.role as UserRole,
       globalRoleDefinitionId: actor.globalRoleDefinitionId,
+      commercialServiceRoleCode: actor.commercialServiceRoleCode,
       requiresFixedPostingSite: actor.requiresFixedPostingSite,
     })
   ) {

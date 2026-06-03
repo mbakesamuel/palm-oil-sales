@@ -81,7 +81,7 @@ export default function TransferDispatchReviewScreen() {
           <ReviewPrimaryButton
             label="Dispatch transfer"
             onPress={() => void onDispatch()}
-            disabled={acting}
+            loading={acting}
           />
         ) : null
       }

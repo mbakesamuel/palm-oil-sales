@@ -11,10 +11,10 @@ import {
   getPermissionsForSession,
 } from "@/lib/access-control";
 import {
-  fetchActorSalesPointScope,
+  actorFromAuthSession,
   salesPointErrorForResource,
 } from "@/lib/auth-sales-point-scope";
-import { actorRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
+import { scopedSalesPointIdFromSession } from "@/lib/sales-point-assignment";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { prismaDateToIso } from "@/lib/posting-calendar";
@@ -99,16 +99,8 @@ function uomForBottled(isBottled: boolean): string {
   return isBottled ? "Unit" : "Kg";
 }
 
-async function scopedSalesPointIdForSession(
-  session: AuthSession,
-): Promise<number | null> {
-  const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
-  if (!actor?.isActive) return null;
-  if (actorRequiresFixedPostingSite(actor)) {
-    return actor.salesPointId ?? null;
-  }
-  return null;
+function scopedSalesPointIdForSession(session: AuthSession): number | null {
+  return scopedSalesPointIdFromSession(session);
 }
 
 export async function listDraftReceiptsForSession(
@@ -382,7 +374,7 @@ export async function postReceiptForSession(
   }
 
   const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) return { ok: false, error: "Login required." };
 
   try {
@@ -451,7 +443,7 @@ export async function dispatchTransferForSession(
   }
 
   const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) return { ok: false, error: "Login required." };
 
   try {
@@ -530,7 +522,7 @@ export async function receiveTransferForSession(
   }
 
   const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) return { ok: false, error: "Login required." };
 
   try {

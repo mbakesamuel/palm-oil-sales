@@ -1,4 +1,5 @@
 import { mobileError, mobileJson, withMobileAuth } from "@/lib/api/mobile/with-mobile-auth";
+import { resolveMobileValidateDeliveryOrderPermission } from "@/lib/api/mobile/resolve-mobile-permission";
 import { listPendingDeliveryOrdersForSession } from "@/lib/services/do-validation-queue";
 
 export const runtime = "nodejs";
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   return withMobileAuth(
     request,
-    "route:/delivery-orders/validation-queue",
+    resolveMobileValidateDeliveryOrderPermission(),
     async ({ session }) => {
       const url = new URL(request.url);
       try {

@@ -2,12 +2,9 @@ import "server-only";
 
 import { Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
+import { getPermissionsForSession } from "@/lib/access-control";
 import {
-  assertPermissionKeyForSession,
-  getPermissionsForSession,
-} from "@/lib/access-control";
-import {
-  fetchActorSalesPointScope,
+  actorFromAuthSession,
   salesPointErrorForResource,
 } from "@/lib/auth-sales-point-scope";
 import { getPrismaClient } from "@/lib/prisma";
@@ -92,14 +89,13 @@ function parseIsoDate(raw: unknown): string | null {
 }
 
 async function requireValidationQueueActor(session: AuthSession) {
-  await assertPermissionKeyForSession(session, "route:/delivery-orders/validation-queue");
   const perms = await getPermissionsForSession(session);
   if (!perms["ui:validate-delivery-orders"]) {
     throw new Error("You do not have permission to validate delivery orders.");
   }
 
   const prisma = getPrismaClient();
-  const actor = await fetchActorSalesPointScope(prisma, session.userId);
+  const actor = actorFromAuthSession(session);
   if (!actor?.isActive) throw new Error("Login required.");
   return { prisma, session, actor };
 }

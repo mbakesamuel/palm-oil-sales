@@ -81,7 +81,7 @@ export default function ReceiptReviewScreen() {
           <ReviewPrimaryButton
             label="Post receipt"
             onPress={() => void onPost()}
-            disabled={acting}
+            loading={acting}
           />
         ) : null
       }

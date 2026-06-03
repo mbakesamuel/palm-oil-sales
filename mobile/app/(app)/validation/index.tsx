@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
 } from "react-native";
 import { Link } from "expo-router";
 import type { MobilePendingSaleRow } from "@pos/shared";
-import { apiFetch } from "@/api/client";
+import { ApiError, apiFetch } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
+import {
+  canValidateDeliveryOrdersOnMobile,
+  canValidateSalesOnMobile,
+} from "@/constants/validation-access";
+import { ListScreenSkeleton } from "@/components/skeleton";
 import { useSafePadding } from "@/hooks/use-safe-padding";
 
 type PendingSalesResponse = { rows: MobilePendingSaleRow[] };
@@ -33,24 +36,31 @@ export default function ValidationScreen() {
   const [dos, setDos] = useState<DoQueueResponse["rows"]>([]);
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
-      if (hasPermission("ui:validate-documents")) {
+      if (canValidateSalesOnMobile(hasPermission)) {
         const res = await apiFetch<PendingSalesResponse>(
           "/api/mobile/v1/validation/sales",
         );
         setSales(res.rows);
       }
-      if (
-        hasPermission("route:/delivery-orders/validation-queue") ||
-        hasPermission("ui:validate-delivery-orders")
-      ) {
+      if (canValidateDeliveryOrdersOnMobile(hasPermission)) {
         const res = await apiFetch<DoQueueResponse>(
           "/api/mobile/v1/validation/delivery-orders?reviewed=all",
         );
         setDos(res.rows);
       }
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        setLoadError(e.message);
+        return;
+      }
+      setLoadError(
+        e instanceof Error ? e.message : "Could not load approval queues.",
+      );
     } finally {
       setBusy(false);
     }
@@ -61,11 +71,7 @@ export default function ValidationScreen() {
   }, [load]);
 
   if (busy) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2d5016" />
-      </View>
-    );
+    return <ListScreenSkeleton cards={5} />;
   }
 
   return (
@@ -82,10 +88,14 @@ export default function ValidationScreen() {
       }
     >
       <Text style={styles.hint}>
-        Open each item to review lines and totals before validating.
+        {canValidateDeliveryOrdersOnMobile(hasPermission) &&
+        !canValidateSalesOnMobile(hasPermission)
+          ? "Managers validate delivery orders only. Open a DO, mark it reviewed, then validate."
+          : "Open each item to review lines and totals before validating."}
       </Text>
+      {loadError ? <Text style={styles.error}>{loadError}</Text> : null}
 
-      {hasPermission("ui:validate-documents") ? (
+      {canValidateSalesOnMobile(hasPermission) ? (
         <>
           <Text style={styles.section}>Pending sales</Text>
           {sales.length === 0 ? (
@@ -105,8 +115,7 @@ export default function ValidationScreen() {
         </>
       ) : null}
 
-      {hasPermission("route:/delivery-orders/validation-queue") ||
-      hasPermission("ui:validate-delivery-orders") ? (
+      {canValidateDeliveryOrdersOnMobile(hasPermission) ? (
         <>
           <Text style={styles.section}>Delivery orders</Text>
           {dos.length === 0 ? (
@@ -132,7 +141,6 @@ export default function ValidationScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
   container: { padding: 16, gap: 10 },
   hint: { fontSize: 13, opacity: 0.7, marginBottom: 4 },
   section: {
@@ -155,4 +163,5 @@ const styles = StyleSheet.create({
   meta: { opacity: 0.65, fontSize: 12 },
   reviewLink: { marginTop: 6, color: "#2d5016", fontWeight: "600", fontSize: 14 },
   empty: { opacity: 0.6 },
+  error: { color: "#b91c1c", fontSize: 14, marginBottom: 8 },
 });

@@ -13,15 +13,13 @@ const MOBILE_ROUTE_PERMISSIONS: Array<{ prefix: string; key: PermissionKey }> = 
   { prefix: "/api/mobile/v1/reports/commitments", key: "route:/reports/do-commitment-crosstab" },
   {
     prefix: "/api/mobile/v1/validation/delivery-orders/validate-reviewed",
-    key: "route:/delivery-orders/validation-queue",
+    key: "ui:validate-delivery-orders",
   },
   {
     prefix: "/api/mobile/v1/validation/delivery-orders/mark-reviewed",
-    key: "route:/delivery-orders/validation-queue",
+    key: "ui:validate-delivery-orders",
   },
-  { prefix: "/api/mobile/v1/validation/delivery-orders", key: "route:/delivery-orders/validation-queue" },
-  { prefix: "/api/mobile/v1/validation/sales", key: "route:/pos" },
-  { prefix: "/api/mobile/v1/validation/delivery-orders", key: "route:/delivery-orders/validation-queue" },
+  { prefix: "/api/mobile/v1/validation/delivery-orders", key: "ui:validate-delivery-orders" },
   { prefix: "/api/mobile/v1/stock/receipts", key: "route:/stock" },
   { prefix: "/api/mobile/v1/stock/transfers", key: "route:/stock" },
   { prefix: "/api/mobile/v1/me", key: "route:/dashboard" },
@@ -46,4 +44,9 @@ export function resolveMobilePermissionKey(pathname: string): PermissionKey | nu
 /** POST .../validation/sales/:id/validate uses ui permission, not route. */
 export function resolveMobileValidateSalePermission(): PermissionKey {
   return "ui:validate-documents";
+}
+
+/** Delivery-order validation on mobile — capability, not the web queue route. */
+export function resolveMobileValidateDeliveryOrderPermission(): PermissionKey {
+  return "ui:validate-delivery-orders";
 }

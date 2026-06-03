@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View,
 } from "react-native";
 import { Link } from "expo-router";
 import type { MobileReceiptListRow } from "@pos/shared";
 import { apiFetch } from "@/api/client";
+import { ListScreenSkeleton } from "@/components/skeleton";
 import { useSafePadding } from "@/hooks/use-safe-padding";
 
 type ReceiptsResponse = { rows: MobileReceiptListRow[] };
@@ -35,11 +34,7 @@ export default function StockReceiptsScreen() {
   }, [load]);
 
   if (busy) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2d5016" />
-      </View>
-    );
+    return <ListScreenSkeleton cards={4} />;
   }
 
   return (
@@ -80,7 +75,6 @@ export default function StockReceiptsScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
   container: { padding: 16, gap: 10 },
   hint: { fontSize: 13, opacity: 0.7, marginBottom: 4 },
   card: {

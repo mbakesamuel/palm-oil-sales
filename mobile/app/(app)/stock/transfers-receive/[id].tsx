@@ -103,7 +103,8 @@ export default function TransferReceiveReviewScreen() {
           <ReviewPrimaryButton
             label="Confirm receipt"
             onPress={() => void onReceive()}
-            disabled={acting || !allLinesAssigned}
+            loading={acting}
+            disabled={!allLinesAssigned}
           />
         ) : null
       }

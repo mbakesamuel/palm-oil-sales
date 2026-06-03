@@ -1,6 +1,8 @@
 import { Redirect, Stack, useRootNavigationState } from "expo-router";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { useAuth } from "@/auth/AuthProvider";
+import { LoginScreenSkeleton } from "@/components/skeleton";
+import { agro } from "@/theme/agro";
 
 export default function AuthLayout() {
   const { loading, session } = useAuth();
@@ -8,8 +10,8 @@ export default function AuthLayout() {
 
   if (!nav?.key || loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#2d5016" />
+      <View style={{ flex: 1, backgroundColor: agro.cream }}>
+        <LoginScreenSkeleton />
       </View>
     );
   }
