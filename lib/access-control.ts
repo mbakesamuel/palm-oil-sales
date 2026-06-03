@@ -114,9 +114,15 @@ export async function getPermissionsForGlobalRoleDefinition(
 async function resolveGlobalRoleDefinitionId(
   session: AuthSession,
 ): Promise<string | null> {
-  if (session.globalRole?.id) return session.globalRole.id;
-  if (!roleSeesAllCommercialServices(session.role)) return null;
   const prisma = getPrismaClient();
+  if (session.globalRole?.id) {
+    const linked = await prisma.globalRoleDefinition.findUnique({
+      where: { id: session.globalRole.id },
+      select: { id: true, isActive: true },
+    });
+    if (linked?.isActive) return linked.id;
+  }
+  if (!roleSeesAllCommercialServices(session.role)) return null;
   const def = await prisma.globalRoleDefinition.findFirst({
     where: { legacyRole: session.role, isActive: true },
     select: { id: true },

@@ -3,11 +3,8 @@ import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
 import { getPermissionsForSession } from "@/lib/access-control";
-import {
-  customerWhereForScope,
-  productWhereForScope,
-  resolveServiceScope,
-} from "@/lib/service-scope";
+import { customerWhereForScope, resolveServiceScope } from "@/lib/service-scope";
+import { loadPosPageConfig } from "@/lib/pos/load-pos-page-config";
 import {
   createSale,
   deleteSale,
@@ -19,7 +16,7 @@ import {
   previewPosTaxes,
   validateSale,
 } from "./actions";
-import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
+import { previewBottledUnitPrice, previewProductUnitPrice } from "@/lib/pricing/preview-action";
 import { SalesClient } from "./SalesClient";
 import { ReportHeader } from "@/components/ReportHeader";
 import Link from "next/link";
@@ -53,10 +50,9 @@ export default async function PosPage(props: {
           commercialServiceRoleCode: session.commercialServiceRole?.code,
         })
       : false;
-  const productWhere = productWhereForScope(scope);
   const customerWhere = customerWhereForScope(scope) ?? {};
 
-  const [customers, grades, salesPoints, storageLocations] = await Promise.all([
+  const [customers, salesPoints, storageLocations, posConfig] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
         where: customerWhere,
@@ -68,17 +64,6 @@ export default async function PosPage(props: {
           taxRegimeId: true,
         },
         take: 200,
-      }),
-    ),
-    prismaRetry(() =>
-      prisma.product.findMany({
-        where: productWhere,
-        orderBy: [{ productName: "asc" }],
-        select: {
-          productId: true,
-          productName: true,
-        },
-        take: 50,
       }),
     ),
     prismaRetry(() =>
@@ -95,7 +80,17 @@ export default async function PosPage(props: {
         take: 1000,
       }),
     ),
+    session ? loadPosPageConfig(session, scope) : Promise.resolve({
+      botaSalesPointId: null,
+      bottleOilStoreLocationId: null,
+      walkInCustomerId: "",
+      looseProducts: [] as Array<{ productId: number; productName: string }>,
+      bottledProducts: [] as Array<{ productId: number; productName: string }>,
+    }),
   ]);
+
+  const hasProducts =
+    posConfig.looseProducts.length > 0 || posConfig.bottledProducts.length > 0;
 
   return (
     <div className="space-y-6">
@@ -113,14 +108,14 @@ export default async function PosPage(props: {
         Payments: cash, cheque, or bank traite (no credit sales).
       </p>
 
-      {customers.length === 0 || grades.length === 0 ? (
+      {customers.length === 0 || !hasProducts ? (
         <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
             {customers.length === 0 ? (
               <li>Add at least one customer.</li>
             ) : null}
-            {grades.length === 0 ? <li>Add at least one product.</li> : null}
+            {!hasProducts ? <li>Add at least one product.</li> : null}
           </ul>
           <div className="mt-3 flex gap-3">
             <Link className="underline underline-offset-4" href="/customers">
@@ -138,7 +133,11 @@ export default async function PosPage(props: {
         <SalesClient
           initialLookupNo={initialLookupNo}
           customers={customers}
-          products={grades}
+          looseProducts={posConfig.looseProducts}
+          bottledProducts={posConfig.bottledProducts}
+          botaSalesPointId={posConfig.botaSalesPointId}
+          bottleOilStoreLocationId={posConfig.bottleOilStoreLocationId}
+          walkInCustomerId={posConfig.walkInCustomerId}
           salesPoints={salesPoints}
           storageLocations={storageLocations}
           previewPosTaxesAction={previewPosTaxes}
@@ -150,6 +149,7 @@ export default async function PosPage(props: {
           validateSaleAction={validateSale}
           deleteSaleAction={deleteSale}
           previewProductUnitPriceAction={previewProductUnitPrice}
+          previewBottledUnitPriceAction={previewBottledUnitPrice}
           canValidateDocuments={canValidateDocuments}
           canPickPendingSales={canPickPendingSales}
           listPendingSalesAction={listPendingSales}

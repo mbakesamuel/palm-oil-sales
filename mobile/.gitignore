@@ -9,4 +9,4 @@ node_modules/
 .expo/
 dist/
 .expo-web-check/
-
+.env
