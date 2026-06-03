@@ -10,7 +10,12 @@ import {
 } from "@/contexts/WorkingPeriodContext";
 import { utcIsoDateToday } from "@/lib/posting-calendar";
 import { useAuth } from "@/contexts/AuthContext";
+import { effectiveSessionRole } from "@/lib/auth-roles";
 import { ValidationStatus } from "@/lib/domain";
+import {
+  pendingSalesValidationHint,
+  saleValidationScopeError,
+} from "@/lib/pos/sale-validation-scope";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
 import type {
@@ -820,6 +825,38 @@ export function SalesClient(props: {
       ? workingMonthDateBounds(wp.workingCalendarYear, wp.workingCalendarMonth)
       : null;
 
+  const validatorCtx = React.useMemo(
+    () =>
+      session
+        ? {
+            role: effectiveSessionRole(session),
+            commercialServiceRoleCode: session.commercialServiceRole?.code,
+          }
+        : null,
+    [session],
+  );
+
+  const saleValidateScopeError = React.useMemo(() => {
+    if (
+      saleId == null ||
+      saleStatus !== ValidationStatus.PENDING ||
+      !validatorCtx
+    ) {
+      return null;
+    }
+    const spid = Number.parseInt(salesPointId.trim(), 10);
+    if (!Number.isFinite(spid)) return null;
+    return saleValidationScopeError(spid, botaSalesPointId, validatorCtx);
+  }, [saleId, saleStatus, salesPointId, botaSalesPointId, validatorCtx]);
+
+  const pendingValidationHint = React.useMemo(
+    () =>
+      validatorCtx && canPickPendingSalesProp
+        ? pendingSalesValidationHint(validatorCtx)
+        : null,
+    [validatorCtx, canPickPendingSalesProp],
+  );
+
   const deliveryOrderControlsItems =
     !isBottleMode &&
     saleId == null &&
@@ -1258,6 +1295,9 @@ export function SalesClient(props: {
             </>
           ) : null}
         </p>
+        {pendingValidationHint ? (
+          <p className="text-xs opacity-70 mb-3">{pendingValidationHint}</p>
+        ) : null}
         <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
           <div className="grid gap-1 flex-1 min-w-0">
             <label className="text-xs font-medium opacity-70">
@@ -2417,7 +2457,7 @@ export function SalesClient(props: {
                   : "Save sale (create invoice)"}
             </button>
             {saleId && saleStatus === ValidationStatus.PENDING && session ? (
-              canValidateDocumentsProp ? (
+              canValidateDocumentsProp && !saleValidateScopeError ? (
                 <button
                   type="button"
                   disabled={busy !== null}
@@ -2426,6 +2466,10 @@ export function SalesClient(props: {
                 >
                   {busy === "validate" ? "Validating…" : "Validate invoice"}
                 </button>
+              ) : saleValidateScopeError ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 max-w-md">
+                  {saleValidateScopeError}
+                </p>
               ) : null
             ) : null}
             {saleId ? (

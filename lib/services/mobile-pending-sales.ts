@@ -23,6 +23,11 @@ import {
   saleWhereForScope,
 } from "@/lib/service-scope";
 import { runValidatePosSale } from "@/lib/pos/validate-pos-sale";
+import { resolveBotaSalesPointId } from "@/lib/pos/sale-product-mode";
+import {
+  pendingSalesPointFilter,
+  saleValidationScopeError,
+} from "@/lib/pos/sale-validation-scope";
 export type MobilePendingSaleRow = {
   id: string;
   invoiceNo: string;
@@ -86,19 +91,23 @@ export async function listPendingSalesForSession(
   const scope = resolveServiceScope(session);
   if (commercialServiceErrorForOperations(scope)) return [];
 
-  const salesPointFilter =
-    actor.salesPointId != null && actorRequiresFixedPostingSite(actor)
-      ? { salesPointId: actor.salesPointId }
-      : {};
+  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
+  const validatorCtx = {
+    role: effectiveSessionRole(session),
+    commercialServiceRoleCode: session.commercialServiceRole?.code,
+  };
+  const salesPointFilter = pendingSalesPointFilter(
+    botaSalesPointId,
+    validatorCtx,
+    actor.salesPointId,
+    actorRequiresFixedPostingSite(actor),
+  );
 
   const rows = await prisma.sale.findMany({
     where: mergeWhereWithServiceScope(
       {
         status: ValidationStatus.PENDING,
         ...salesPointFilter,
-        lines: {
-          some: { product: { productCat: { isBottled: false } } },
-        },
       },
       scope,
       saleWhereForScope,
@@ -179,12 +188,23 @@ export async function loadSaleDetailForSession(
   const csErr = commercialServiceErrorForResource(scope, row.commercialServiceId);
   if (csErr) return null;
 
+  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
+  const scopeErr = saleValidationScopeError(
+    row.salesPointId,
+    botaSalesPointId,
+    {
+      role: effectiveSessionRole(session),
+      commercialServiceRoleCode: session.commercialServiceRole?.code,
+    },
+  );
+  if (scopeErr) return null;
+
   return {
     id: row.id,
     invoiceNo: row.invoiceNo,
     soldAtIso: row.soldAt.toISOString().slice(0, 10),
     salesPointName: row.salesPoint?.name ?? null,
-    customerName: row.customer.name,
+    customerName: row.customerNameSnapshot,
     deliveryOrderNo: row.deliveryOrderNo ?? null,
     vehicleNumber: row.vehicleNumber,
     createdByName: row.createdBy.name,
@@ -272,6 +292,17 @@ export async function validateSaleForSession(
   const csErr = commercialServiceErrorForResource(scope, existing.commercialServiceId);
   if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
+
+  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
+  const scopeErr = saleValidationScopeError(
+    existing.salesPointId,
+    botaSalesPointId,
+    {
+      role: effectiveSessionRole(session),
+      commercialServiceRoleCode: session.commercialServiceRole?.code,
+    },
+  );
+  if (scopeErr) return { ok: false, error: scopeErr };
 
   return runValidatePosSale(prisma, existing, session.userId);
 }

@@ -50,9 +50,13 @@ export type SalePrintModel = {
   dateIssuedIso?: string | null;
   deliveryOrderNo?: string | null;
   customerName: string;
+  /** Walk-in bottle sale — name comes from clerk entry at checkout. */
+  isWalkInCustomer: boolean;
   taxpayerId: string | null;
   /** From invoice tax snapshots (not the customer’s current regime). */
   vatApplies: boolean;
+  /** Bottle sales use unit qty and tax-inclusive line pricing. */
+  isBottleSale: boolean;
   appliedTaxLines: Array<{
     label: string;
     ratePercentLabel: string;
@@ -62,8 +66,8 @@ export type SalePrintModel = {
     lineNo: number;
     productName: string;
     productCat: string;
-    qtyKg: string;
-    unitPricePerKg: string;
+    qty: string;
+    unitPrice: string;
     lineNet: string;
   }>;
   netAmount: string;
@@ -143,6 +147,11 @@ export function SalePrint(props: {
 
         <div className="rounded-lg border border-black/15 p-3 text-sm sm:min-w-[220px]">
           <p className="text-xs font-semibold uppercase opacity-70 mb-1">Customer</p>
+          {sale.isWalkInCustomer ? (
+            <p className="text-xs font-semibold uppercase tracking-wide opacity-70 mb-0.5">
+              Walk-in
+            </p>
+          ) : null}
           <p className="font-semibold">{sale.customerName}</p>
           {sale.taxpayerId ? <p className="opacity-80">Tax ID: {sale.taxpayerId}</p> : null}
           <p className="opacity-80">
@@ -157,8 +166,12 @@ export function SalePrint(props: {
             <tr>
               <th className="text-left border border-black/25 py-2 px-2 w-10">#</th>
               <th className="text-left border border-black/25 py-2 px-2">Product</th>
-              <th className="text-right border border-black/25 py-2 px-2">Qty (kg)</th>
-              <th className="text-right border border-black/25 py-2 px-2">Unit price</th>
+              <th className="text-right border border-black/25 py-2 px-2">
+                {sale.isBottleSale ? "Qty (units)" : "Qty (kg)"}
+              </th>
+              <th className="text-right border border-black/25 py-2 px-2">
+                {sale.isBottleSale ? "Unit price (incl.)" : "Unit price"}
+              </th>
               <th className="text-right border border-black/25 py-2 px-2">Net</th>
             </tr>
           </thead>
@@ -173,10 +186,10 @@ export function SalePrint(props: {
                   <span className="block text-xs opacity-70">{l.productCat}</span>
                 </td>
                 <td className="border border-black/10 py-2 px-2 text-right tabular-nums align-top">
-                  {l.qtyKg}
+                  {l.qty}
                 </td>
                 <td className="border border-black/10 py-2 px-2 text-right tabular-nums align-top">
-                  {moneyLabel(l.unitPricePerKg)}
+                  {moneyLabel(l.unitPrice)}
                 </td>
                 <td className="border border-black/10 py-2 px-2 text-right tabular-nums align-top">
                   {moneyLabel(l.lineNet)}
@@ -190,21 +203,28 @@ export function SalePrint(props: {
       <div className="flex justify-end mb-8">
         <div className="text-sm space-y-1 min-w-[240px]">
           <div className="flex justify-between gap-8">
-            <span className="opacity-70">Subtotal (ex tax)</span>
+            <span className="opacity-70">
+              {sale.isBottleSale ? "Total (tax-inclusive)" : "Subtotal (ex tax)"}
+            </span>
             <span className="tabular-nums">{moneyLabel(sale.netAmount)}</span>
           </div>
-          {sale.appliedTaxLines.map((t, i) => (
-            <div key={`${t.label}-${i}`} className="flex justify-between gap-8">
-              <span className="opacity-70">
-                {t.label} ({t.ratePercentLabel}%)
-              </span>
-              <span className="tabular-nums">{moneyLabel(t.amount)}</span>
-            </div>
-          ))}
+          {!sale.isBottleSale
+            ? sale.appliedTaxLines.map((t, i) => (
+                <div key={`${t.label}-${i}`} className="flex justify-between gap-8">
+                  <span className="opacity-70">
+                    {t.label} ({t.ratePercentLabel}%)
+                  </span>
+                  <span className="tabular-nums">{moneyLabel(t.amount)}</span>
+                </div>
+              ))
+            : null}
           <div className="flex justify-between gap-8 border-t border-black/20 pt-2 font-semibold">
-            <span>Grand total</span>
+            <span>{sale.isBottleSale ? "Amount due" : "Grand total"}</span>
             <span className="tabular-nums">{moneyLabel(sale.grossAmount)}</span>
           </div>
+          {sale.isBottleSale ? (
+            <p className="text-xs opacity-70 pt-1">Prices include tax; no VAT is added.</p>
+          ) : null}
         </div>
       </div>
 

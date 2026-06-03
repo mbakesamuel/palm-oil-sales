@@ -1,6 +1,10 @@
 import type { AuthSession } from "@/lib/auth-session";
 import { UserRole } from "@/lib/domain";
 import { userRoleFromLineRoleCode } from "@/lib/line-role-user-role";
+import {
+  isPlainSupervisorValidator,
+  isSeniorSupervisorValidator,
+} from "@/lib/pos/sale-validation-scope";
 
 export {
   roleRequiresCommercialServiceAssignment,
@@ -32,14 +36,15 @@ export function roleSeesOnlyValidatedDeliveryOrders(role: UserRole): boolean {
 
 /**
  * Legacy UserRole heuristic for sales-invoice validation. Runtime enforcement
- * uses permission `ui:validate-documents` (senior supervisors get it via Role
- * access; managers do not). Line supervisors validate clerk invoices.
+ * uses permission `ui:validate-documents` plus Bota sales-point split in
+ * `lib/pos/sale-validation-scope.ts` (senior supervisor → Bota; supervisor → others).
  */
 export function canValidateDocuments(role: UserRole): boolean {
   return (
     role === UserRole.ADMIN ||
     role === UserRole.DIRECTOR ||
-    role === UserRole.SUPERVISOR
+    role === UserRole.SUPERVISOR ||
+    role === UserRole.SENIOR_SUPERVISOR
   );
 }
 
@@ -71,6 +76,7 @@ export function canValidateDeliveryOrder(role: UserRole): boolean {
 /**
  * Open the POS pending-invoice picker (supervisors validate clerk drafts).
  * Prefer `ui:validate-documents` from Role access; falls back to line role code.
+ * Listing and validate actions further restrict Bota vs non-Bota by role.
  */
 export function canPickPendingPosSales(params: {
   validateDocuments: boolean;
@@ -78,17 +84,14 @@ export function canPickPendingPosSales(params: {
   commercialServiceRoleCode?: string | null;
 }): boolean {
   if (params.validateDocuments) return true;
-  if (canValidateDocuments(params.role)) return true;
-  const c = (params.commercialServiceRoleCode ?? "").toLowerCase();
-  if (c.includes("senior") && c.includes("supervisor")) return true;
-  if (
-    c.includes("supervisor") &&
-    !c.includes("senior") &&
-    !c.includes("manager")
-  ) {
+  const ctx = {
+    role: params.role,
+    commercialServiceRoleCode: params.commercialServiceRoleCode,
+  };
+  if (isSeniorSupervisorValidator(ctx) || isPlainSupervisorValidator(ctx)) {
     return true;
   }
-  return false;
+  return canValidateDocuments(params.role);
 }
 
 /** Draft vehicle consignment notes (1:1 with Sale): clerks prepare; supervisors validate. */

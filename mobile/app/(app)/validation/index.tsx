@@ -13,6 +13,8 @@ import { useAuth } from "@/auth/AuthProvider";
 import {
   canValidateDeliveryOrdersOnMobile,
   canValidateSalesOnMobile,
+  mobilePendingSalesEmptyHint,
+  mobileValidationScreenHint,
 } from "@/constants/validation-access";
 import { ListScreenSkeleton } from "@/components/skeleton";
 import { useSafePadding } from "@/hooks/use-safe-padding";
@@ -30,7 +32,7 @@ type DoQueueResponse = {
 };
 
 export default function ValidationScreen() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, session } = useAuth();
   const { scrollBottom } = useSafePadding();
   const [sales, setSales] = useState<MobilePendingSaleRow[]>([]);
   const [dos, setDos] = useState<DoQueueResponse["rows"]>([]);
@@ -88,10 +90,7 @@ export default function ValidationScreen() {
       }
     >
       <Text style={styles.hint}>
-        {canValidateDeliveryOrdersOnMobile(hasPermission) &&
-        !canValidateSalesOnMobile(hasPermission)
-          ? "Managers validate delivery orders only. Open a DO, mark it reviewed, then validate."
-          : "Open each item to review lines and totals before validating."}
+        {mobileValidationScreenHint(session, hasPermission)}
       </Text>
       {loadError ? <Text style={styles.error}>{loadError}</Text> : null}
 
@@ -99,13 +98,18 @@ export default function ValidationScreen() {
         <>
           <Text style={styles.section}>Pending sales</Text>
           {sales.length === 0 ? (
-            <Text style={styles.empty}>No pending invoices.</Text>
+            <Text style={styles.empty}>
+              {mobilePendingSalesEmptyHint(session)}
+            </Text>
           ) : (
             sales.map((s) => (
               <Link key={s.id} href={`/(app)/validation/sale/${s.id}` as never} asChild>
                 <Pressable style={styles.card}>
                   <Text style={styles.title}>{s.invoiceNo}</Text>
                   <Text>{s.customerName}</Text>
+                  {s.salesPointName ? (
+                    <Text style={styles.meta}>{s.salesPointName}</Text>
+                  ) : null}
                   <Text style={styles.meta}>{s.totalLabel}</Text>
                   <Text style={styles.reviewLink}>Review →</Text>
                 </Pressable>

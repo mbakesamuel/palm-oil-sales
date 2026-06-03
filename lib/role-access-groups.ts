@@ -41,7 +41,7 @@ export const ROLE_ACCESS_GROUPS: readonly RoleAccessGroup[] = [
     id: "validate-sales",
     label: "Validate POS sales",
     description:
-      "Validate pending sales invoices at POS. Typical for line supervisors and senior supervisors (not managers).",
+      "Validate pending sales invoices. Senior supervisors: all sales at Bota. Sales supervisors: all sales at other sales points. Managers use delivery-order validation instead.",
     keys: ["ui:validate-documents"],
   },
   {
