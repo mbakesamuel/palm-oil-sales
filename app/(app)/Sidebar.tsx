@@ -182,6 +182,7 @@ export function Sidebar(props: {
   subtitle: string;
   dashboardNav: NavItem[];
   setupNav: NavItem[];
+  setupNavSections?: NavSection[];
   operationsNav: NavItem[];
   reportNav?: NavItem[];
   reportNavSections?: NavSection[];
@@ -193,6 +194,7 @@ export function Sidebar(props: {
     subtitle,
     dashboardNav,
     setupNav,
+    setupNavSections,
     operationsNav,
     reportNav = [],
     reportNavSections,
@@ -262,16 +264,29 @@ export function Sidebar(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportNavSections, perm]);
 
+  const filteredSetupNavSections = React.useMemo(() => {
+    if (!setupNavSections?.length) return undefined;
+    return setupNavSections
+      .map((section) => ({
+        sectionLabel: section.sectionLabel,
+        items: section.items.filter((i) => canRoute(i.href)),
+      }))
+      .filter((s) => s.items.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupNavSections, perm]);
+
   const setupGroup: NavGroupConfig = React.useMemo(
     () => ({
       id: "setup",
       label: "Settings",
       items: filteredSetupNav,
+      sections: filteredSetupNavSections,
       collapsedHref: "/setup",
       collapsedTitle:
         "Settings — company, users, customers, financial years, sales points, tax, products",
+      overview: { href: "/setup", label: "Overview" },
     }),
-    [filteredSetupNav],
+    [filteredSetupNav, filteredSetupNavSections],
   );
 
   const operationsGroup: NavGroupConfig = React.useMemo(

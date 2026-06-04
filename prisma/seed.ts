@@ -16,7 +16,7 @@ const prisma = new PrismaClient({
 const TEST_ADMIN = {
   username: "puru",
   passwordPlain: "sammym1986",
-  name: "Test administrator",
+  name: "Mbake Samuel",
 } as const;
 
 async function ensureBuiltinGlobalRoles() {
