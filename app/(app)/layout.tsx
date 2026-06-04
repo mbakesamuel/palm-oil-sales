@@ -24,25 +24,8 @@ import {
 } from "@/lib/dashboard-routing";
 import { redirect } from "next/navigation";
 import { reportNavItems, reportNavSections } from "@/lib/reports-catalog";
+import { setupNavItems, setupNavSections } from "@/lib/setup-catalog";
 import { Sidebar } from "./Sidebar";
-
-const setupNav = [
-  { href: "/setup", label: "General Parameters" },
-  { href: "/setup/commercial-services", label: "Sales Services" },
-  { href: "/setup/sales-budget", label: "Sales budget Phasing" },
-  { href: "/setup/product-pricing", label: "Product pricing" },
-  { href: "/setup/tax-rates", label: "Tax rates" },
-  { href: "/setup/permissions", label: "Roles & access" },
-  { href: "/users", label: "Users" },
-  { href: "/customers", label: "Customers" },
-  { href: "/financial-years", label: "Financial years" },
-  { href: "/sales-points", label: "Sales points" },
-  { href: "/factories", label: "Factories" },
-  { href: "/tax-regimes", label: "Tax regimes" },
-  { href: "/tax-types", label: "Tax types" },
-  { href: "/product-categories", label: "Product categories" },
-  { href: "/products", label: "Products" },
-] as const;
 
 const operationsNav = [
   { href: "/rubber", label: "Rubber sales" },
@@ -125,7 +108,8 @@ export default async function AppLayout({
                   logoSrc={resolveCompanyLogoSrc(settings.logoUrl)}
                   subtitle={subtitle}
                   dashboardNav={[...dashboardNav]}
-                  setupNav={[...setupNav]}
+                  setupNav={setupNavItems()}
+                  setupNavSections={setupNavSections()}
                   operationsNav={[...operationsNav]}
                   reportNav={reportNavItems()}
                   reportNavSections={reportNavSections()}

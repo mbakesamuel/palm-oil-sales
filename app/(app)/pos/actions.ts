@@ -55,8 +55,13 @@ import {
   parseSaleProductMode,
   resolveBotaSalesPointId,
   resolveBottleOilStoreLocationId,
+  WALK_IN_CUSTOMER_NAME,
 } from "@/lib/pos/sale-product-mode";
 import { runValidatePosSale } from "@/lib/pos/validate-pos-sale";
+import {
+  pendingSalesPointFilter,
+  saleValidationScopeError,
+} from "@/lib/pos/sale-validation-scope";
 import { resolveBottledUnitPriceExTax, resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import { isInsufficientStockError } from "@/lib/stock/errors";
 import {
@@ -73,6 +78,18 @@ import {
   UserRole,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+
+function formatPrintQty(value: Prisma.Decimal): string {
+  return value.toDecimalPlaces(3).toString().replace(/\.?0+$/, "");
+}
+
+function saleLineUsesUnits(
+  saleProductMode: PosSaleProductMode | null,
+  line: { qtyUnits: Prisma.Decimal | null; qtyKg: Prisma.Decimal },
+): boolean {
+  if (saleProductMode === PosSaleProductMode.BOTTLE) return true;
+  return line.qtyUnits != null && line.qtyUnits.gt(0);
+}
 
 type PosLineInput = {
   productId: string;
@@ -877,10 +894,17 @@ export async function listPendingSales(): Promise<PendingSaleRow[]> {
   const scope = resolveServiceScope(session);
   if (commercialServiceErrorForOperations(scope)) return [];
 
-  const salesPointFilter =
-    actor.salesPointId != null && actorRequiresFixedPostingSite(actor)
-      ? { salesPointId: actor.salesPointId }
-      : {};
+  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
+  const validatorCtx = {
+    role: effectiveSessionRole(session),
+    commercialServiceRoleCode: session.commercialServiceRole?.code,
+  };
+  const salesPointFilter = pendingSalesPointFilter(
+    botaSalesPointId,
+    validatorCtx,
+    actor.salesPointId,
+    actorRequiresFixedPostingSite(actor),
+  );
 
   const rows = await prisma.sale.findMany({
     where: mergeWhereWithServiceScope(
@@ -1240,6 +1264,17 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   if (csErr) return { ok: false, error: csErr };
   if (existing.status === ValidationStatus.VALIDATED) return { ok: true };
 
+  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
+  const scopeErr = saleValidationScopeError(
+    existing.salesPointId,
+    botaSalesPointId,
+    {
+      role: effectiveSessionRole(session),
+      commercialServiceRoleCode: session.commercialServiceRole?.code,
+    },
+  );
+  if (scopeErr) return { ok: false, error: scopeErr };
+
   const result = await runValidatePosSale(prisma, existing, session.userId);
   if (!result.ok) return result;
 
@@ -1340,25 +1375,43 @@ export async function loadSalePrintById(
         )
       : (sale.customer.taxRegime?.vatApplies ?? false);
 
+  const isBottleSale = sale.saleProductMode === PosSaleProductMode.BOTTLE;
+  const isWalkInCustomer =
+    sale.customer.name.trim().toLowerCase() ===
+    WALK_IN_CUSTOMER_NAME.toLowerCase();
+  const vehicleNumber =
+    sale.vehicleNumber === BOTTLE_VEHICLE_PLACEHOLDER
+      ? null
+      : sale.vehicleNumber;
+
   const saleModel: SalePrintModel = {
     invoiceNo: sale.invoiceNo,
     status: sale.status,
     soldAtIso: sale.soldAt.toISOString(),
-    vehicleNumber: sale.vehicleNumber,
+    vehicleNumber,
     dateIssuedIso: (sale.dateIssued ?? sale.soldAt).toISOString(),
     deliveryOrderNo: sale.deliveryOrderNo,
-    customerName: sale.customer.name,
+    customerName: sale.customerNameSnapshot.trim(),
+    isWalkInCustomer,
     taxpayerId: sale.customer.taxpayerId,
     vatApplies: vatAppliesSnapshot,
+    isBottleSale,
     appliedTaxLines,
-    lines: sale.lines.map((l, idx) => ({
-      lineNo: idx + 1,
-      productName: l.product.productName,
-      productCat: l.product.productCat.productCat,
-      qtyKg: l.qtyKg.toString(),
-      unitPricePerKg: l.unitPricePerKg.toString(),
-      lineNet: l.lineNet.toString(),
-    })),
+    lines: sale.lines.map((l, idx) => {
+      const useUnits = saleLineUsesUnits(sale.saleProductMode, l);
+      return {
+        lineNo: idx + 1,
+        productName: l.product.productName,
+        productCat: l.product.productCat.productCat,
+        qty: useUnits
+          ? formatPrintQty(l.qtyUnits ?? l.qtyKg)
+          : formatPrintQty(l.qtyKg),
+        unitPrice: useUnits
+          ? (l.unitPricePerUnit ?? l.unitPricePerKg).toString()
+          : l.unitPricePerKg.toString(),
+        lineNet: l.lineNet.toString(),
+      };
+    }),
     netAmount: sale.netAmount.toString(),
     vatAmount: sale.vatAmount.toString(),
     grossAmount: sale.grossAmount.toString(),
