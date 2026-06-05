@@ -71,7 +71,11 @@ import {
   isPosLocationBlockedByUnsellableStock,
 } from "@/lib/stock/pos-location";
 import {
-  PaymentMethod,
+  assertPaymentMethodUsable,
+  validatePaymentFields,
+} from "@/lib/payment-methods/catalog";
+import type { PaymentMethodKind } from "@/lib/payment-methods/types";
+import {
   Prisma,
   PosSaleProductMode,
   ValidationStatus,
@@ -101,7 +105,7 @@ type PosLineInput = {
 };
 
 type PosPaymentInput = {
-  method: "CASH" | "CHEQUE" | "TRAITE";
+  paymentMethodId: string;
   amount: string;
   chequeNo?: string;
   bank?: string;
@@ -157,7 +161,10 @@ export type LoadedSaleView = {
     lineGross: string;
   }>;
   payments: Array<{
-    method: PaymentMethod;
+    paymentMethodId: string;
+    methodCode: string;
+    methodName: string;
+    kind: PaymentMethodKind;
     amount: string;
     chequeNo: string | null;
     bank: string | null;
@@ -579,7 +586,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
 
   let paidTotal = d(0);
   let preparedPayments: Array<{
-    method: PaymentMethod;
+    paymentMethodId: string;
     amount: Prisma.Decimal;
     chequeNo: string | null;
     bank: string | null;
@@ -588,64 +595,35 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     traiteMaturityOn: Date | null;
   }> = [];
   try {
-    preparedPayments = payments
-      .filter((p) => d(p.amount).gt(0))
-      .map((p) => {
-        const amount = money2(d(p.amount));
-        if (amount.lte(0)) throw new Error("Payment amount must be > 0.");
+    preparedPayments = await Promise.all(
+      payments
+        .filter((p) => d(p.amount).gt(0))
+        .map(async (p) => {
+          const amount = money2(d(p.amount));
+          if (amount.lte(0)) throw new Error("Payment amount must be > 0.");
 
-        const rawMethod = String(p.method ?? "").toUpperCase();
-        if (rawMethod === "CREDIT") {
-          throw new Error("Credit payments cannot be created from this screen.");
-        }
-        const method =
-          rawMethod === "CHEQUE"
-            ? PaymentMethod.CHEQUE
-            : rawMethod === "TRAITE"
-              ? PaymentMethod.TRAITE
-              : PaymentMethod.CASH;
+          const paymentMethodId = String(p.paymentMethodId ?? "").trim();
+          if (!paymentMethodId) throw new Error("Payment method is required.");
 
-        let chequeNo: string | null = null;
-        let bank: string | null = null;
-        let traiteNo: string | null = null;
-        let traiteIssuedOn: Date | null = null;
-        let traiteMaturityOn: Date | null = null;
-
-        if (method === PaymentMethod.CHEQUE) {
-          chequeNo = String(p.chequeNo ?? "").trim() || null;
-          const bankRaw = String(p.bank ?? "").trim();
-          bank = bankRaw ? bankRaw : null;
-          if (!chequeNo) {
-            throw new Error("Cheque number is required for cheque payments.");
+          const methodRow = await assertPaymentMethodUsable(paymentMethodId);
+          if (methodRow.kind === "CREDIT") {
+            throw new Error("Credit payments cannot be created from this screen.");
           }
-        } else if (method === PaymentMethod.TRAITE) {
-          traiteNo = String(p.traiteNo ?? "").trim() || null;
-          const bankRaw = String(p.bank ?? "").trim();
-          bank = bankRaw ? bankRaw : null;
-          const issuedIso = normalizeIsoDateInput(String(p.traiteIssuedOn ?? ""));
-          const maturityIso = normalizeIsoDateInput(String(p.traiteMaturityOn ?? ""));
-          if (!traiteNo) throw new Error("Traite number is required for traite payments.");
-          if (!bank) throw new Error("Bank is required for traite payments.");
-          if (!issuedIso) throw new Error("Traite date issued is required.");
-          if (!maturityIso) throw new Error("Traite maturity date is required.");
-          traiteIssuedOn = noonUtcFromIsoDate(issuedIso);
-          traiteMaturityOn = noonUtcFromIsoDate(maturityIso);
-          if (traiteMaturityOn < traiteIssuedOn) {
-            throw new Error("Traite maturity date cannot be before the date issued.");
-          }
-        }
 
-        paidTotal = paidTotal.add(amount);
-        return {
-          method,
-          amount,
-          chequeNo,
-          bank,
-          traiteNo,
-          traiteIssuedOn,
-          traiteMaturityOn,
-        };
-      });
+          const fields = validatePaymentFields(
+            methodRow.kind as PaymentMethodKind,
+            p,
+            { normalizeIsoDateInput, noonUtcFromIsoDate },
+          );
+
+          paidTotal = paidTotal.add(amount);
+          return {
+            paymentMethodId: methodRow.id,
+            amount,
+            ...fields,
+          };
+        }),
+    );
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid payments." };
   }
@@ -698,7 +676,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
             lines: { create: lineCreates },
             payments: {
               create: preparedPayments.map((p) => ({
-                method: p.method,
+                paymentMethodId: p.paymentMethodId,
                 amount: p.amount,
                 chequeNo: p.chequeNo,
                 bank: p.bank,
@@ -974,7 +952,12 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
         },
         orderBy: { id: "asc" },
       },
-      payments: { orderBy: { id: "asc" } },
+      payments: {
+        orderBy: { id: "asc" },
+        include: {
+          paymentMethod: { select: { id: true, code: true, name: true, kind: true } },
+        },
+      },
     },
   });
   if (!row) return null;
@@ -1032,7 +1015,10 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
       lineGross: l.lineGross.toString(),
     })),
     payments: row.payments.map((p) => ({
-      method: p.method,
+      paymentMethodId: p.paymentMethod.id,
+      methodCode: p.paymentMethod.code,
+      methodName: p.paymentMethod.name,
+      kind: p.paymentMethod.kind as PaymentMethodKind,
       amount: p.amount.toString(),
       chequeNo: p.chequeNo ?? null,
       bank: p.bank ?? null,
@@ -1331,7 +1317,12 @@ export async function loadSalePrintById(
         orderBy: { id: "asc" },
         include: { product: { include: { productCat: true } } },
       },
-      payments: { orderBy: { id: "asc" } },
+      payments: {
+        orderBy: { id: "asc" },
+        include: {
+          paymentMethod: { select: { name: true, kind: true } },
+        },
+      },
     },
   });
   if (!sale) return { ok: false, reason: "missing" };
@@ -1416,7 +1407,8 @@ export async function loadSalePrintById(
     vatAmount: sale.vatAmount.toString(),
     grossAmount: sale.grossAmount.toString(),
     payments: sale.payments.map((p) => ({
-      method: p.method,
+      methodName: p.paymentMethod.name,
+      kind: p.paymentMethod.kind,
       amount: p.amount.toString(),
       chequeNo: p.chequeNo ?? null,
       bank: p.bank ?? null,

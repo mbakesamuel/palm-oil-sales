@@ -4,6 +4,7 @@ import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
 import { getPermissionsForSession } from "@/lib/access-control";
 import { customerWhereForScope, resolveServiceScope } from "@/lib/service-scope";
+import { listPaymentMethodDefinitions } from "@/lib/payment-methods/catalog";
 import { loadPosPageConfig } from "@/lib/pos/load-pos-page-config";
 import {
   createSale,
@@ -52,7 +53,8 @@ export default async function PosPage(props: {
       : false;
   const customerWhere = customerWhereForScope(scope) ?? {};
 
-  const [customers, salesPoints, storageLocations, posConfig] = await Promise.all([
+  const [customers, salesPoints, storageLocations, posConfig, paymentMethods] =
+    await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
         where: customerWhere,
@@ -87,6 +89,10 @@ export default async function PosPage(props: {
       looseProducts: [] as Array<{ productId: number; productName: string }>,
       bottledProducts: [] as Array<{ productId: number; productName: string }>,
     }),
+    listPaymentMethodDefinitions({
+      activeOnly: true,
+      kinds: ["SIMPLE", "CHEQUE", "TRAITE"],
+    }),
   ]);
 
   const hasProducts =
@@ -105,7 +111,7 @@ export default async function PosPage(props: {
       <div className="print:hidden text-2xl font-bold">Sales Invoce</div>
 
       <p className="text-sm opacity-75">
-        Payments: cash, cheque, or bank traite (no credit sales).
+        Payments: {paymentMethods.map((m) => m.name).join(", ") || "configure methods in Settings"} (no credit sales).
       </p>
 
       {customers.length === 0 || !hasProducts ? (
@@ -132,6 +138,7 @@ export default async function PosPage(props: {
       ) : (
         <SalesClient
           initialLookupNo={initialLookupNo}
+          paymentMethods={paymentMethods}
           customers={customers}
           looseProducts={posConfig.looseProducts}
           bottledProducts={posConfig.bottledProducts}

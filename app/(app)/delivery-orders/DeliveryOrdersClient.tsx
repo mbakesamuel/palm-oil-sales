@@ -35,7 +35,7 @@ type LineRow = {
 };
 
 type Payment = {
-  method: "CASH" | "CHEQUE";
+  paymentMethodId: string;
   paymentDate: string;
   chequeNo: string;
   bank: string;
@@ -52,7 +52,10 @@ function parseDec(s: string) {
   return Number.isFinite(n) ? n : 0;
 }
 
+import type { PaymentMethodOption } from "@/lib/payment-methods/types";
+
 export function DeliveryOrdersClient(props: {
+  paymentMethods: PaymentMethodOption[];
   initialLookupNo?: string;
   customers: Customer[];
   products: Product[];
@@ -89,6 +92,7 @@ export function DeliveryOrdersClient(props: {
   listPendingDeliveryOrdersAction: () => Promise<PendingDeliveryOrderRow[]>;
 }) {
   const {
+    paymentMethods,
     initialLookupNo,
     customers,
     products,
@@ -136,6 +140,19 @@ export function DeliveryOrdersClient(props: {
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
   const [cancelReasonDraft, setCancelReasonDraft] = React.useState("");
   const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false);
+  const doPaymentMethods = React.useMemo(
+    () => paymentMethods.filter((m) => m.kind === "SIMPLE" || m.kind === "CHEQUE"),
+    [paymentMethods],
+  );
+  const paymentMethodById = React.useMemo(
+    () => new Map(paymentMethods.map((m) => [m.id, m])),
+    [paymentMethods],
+  );
+  const defaultDoPaymentMethodId =
+    doPaymentMethods.find((m) => m.code === "CASH")?.id ??
+    doPaymentMethods[0]?.id ??
+    "";
+
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [lines, setLines] = React.useState<LineRow[]>(() =>
     products.length > 0
@@ -392,7 +409,7 @@ export function DeliveryOrdersClient(props: {
     setPayments(
       data.payments.length > 0
         ? data.payments.map((p) => ({
-            method: p.method as Payment["method"],
+            paymentMethodId: p.paymentMethodId,
             paymentDate: p.paymentDate,
             chequeNo: p.chequeNo,
             bank: p.bank,
@@ -1483,7 +1500,7 @@ export function DeliveryOrdersClient(props: {
                   setPayments((prev) => [
                     ...prev,
                     {
-                      method: "CASH",
+                      paymentMethodId: defaultDoPaymentMethodId,
                       paymentDate: todayIsoDate(),
                       chequeNo: "",
                       bank: "",
@@ -1503,7 +1520,10 @@ export function DeliveryOrdersClient(props: {
               </p>
             ) : (
               <div className="rounded-lg border border-border overflow-hidden space-y-0">
-                {payments.map((p, idx) => (
+                {payments.map((p, idx) => {
+                  const paymentKind =
+                    paymentMethodById.get(p.paymentMethodId)?.kind ?? "SIMPLE";
+                  return (
                   <div
                     key={idx}
                     className="px-3 py-3 border-b border-border last:border-b-0"
@@ -1513,55 +1533,32 @@ export function DeliveryOrdersClient(props: {
                         <label className="text-xs font-medium opacity-70">
                           Method
                         </label>
-                        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm">
-                          <label className="inline-flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name={`do-payment-method-${idx}`}
-                              value="CASH"
-                              checked={p.method === "CASH"}
-                              disabled={paymentsReadOnly}
-                              onChange={() =>
-                                setPayments((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx
-                                      ? {
-                                          ...x,
-                                          method: "CASH",
-                                          chequeNo: "",
-                                          bank: "",
-                                        }
-                                      : x,
-                                  ),
-                                )
-                              }
-                            />
-                            Cash
-                          </label>
-                          <label className="inline-flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name={`do-payment-method-${idx}`}
-                              value="CHEQUE"
-                              checked={p.method === "CHEQUE"}
-                              disabled={paymentsReadOnly}
-                              onChange={() =>
-                                setPayments((prev) =>
-                                  prev.map((x, i) =>
-                                    i === idx
-                                      ? {
-                                          ...x,
-                                          method: "CHEQUE",
-                                          cashReceiptNo: "",
-                                        }
-                                      : x,
-                                  ),
-                                )
-                              }
-                            />
-                            Cheque
-                          </label>
-                        </div>
+                        <select
+                          className="w-full rounded-md border border-border bg-transparent px-2 py-1.5 text-sm"
+                          value={p.paymentMethodId}
+                          disabled={paymentsReadOnly}
+                          onChange={(e) =>
+                            setPayments((prev) =>
+                              prev.map((x, i) =>
+                                i === idx
+                                  ? {
+                                      ...x,
+                                      paymentMethodId: e.target.value,
+                                      chequeNo: "",
+                                      bank: "",
+                                      cashReceiptNo: "",
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                        >
+                          {doPaymentMethods.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="grid gap-1 flex-1 basis-[150px] min-w-0">
@@ -1585,7 +1582,7 @@ export function DeliveryOrdersClient(props: {
                         />
                       </div>
 
-                      {p.method === "CHEQUE" ? (
+                      {paymentKind === "CHEQUE" ? (
                         <>
                           <div className="grid gap-1 flex-1 basis-[180px] min-w-0">
                             <label className="text-xs font-medium opacity-70">
@@ -1669,7 +1666,8 @@ export function DeliveryOrdersClient(props: {
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
             )}
 

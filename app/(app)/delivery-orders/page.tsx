@@ -22,6 +22,7 @@ import {
   saveDeliveryOrder,
   validateDeliveryOrder,
 } from "./actions";
+import { listPaymentMethodDefinitions } from "@/lib/payment-methods/catalog";
 import { previewProductUnitPrice } from "@/lib/pricing/preview-action";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ export default async function DeliveryOrdersPage(props: {
   const productWhere = productWhereForScope(scope);
   const customerWhere = customerWhereForScope(scope) ?? {};
 
-  const [customers, products, salesPoints] = await Promise.all([
+  const [customers, products, salesPoints, paymentMethods] = await Promise.all([
     prismaRetry(() =>
       prisma.customer.findMany({
         where: customerWhere,
@@ -82,10 +83,15 @@ export default async function DeliveryOrdersPage(props: {
         select: { id: true, name: true },
       }),
     ),
+    listPaymentMethodDefinitions({
+      activeOnly: true,
+      kinds: ["SIMPLE", "CHEQUE"],
+    }),
   ]);
 
   return (
     <DeliveryOrdersClient
+      paymentMethods={paymentMethods}
       initialLookupNo={initialLookupNo}
       customers={customers.map((c) => ({
         id: c.id,

@@ -265,7 +265,10 @@ export async function loadDeliveryOrderDetailForSession(
           orderBy: { id: "asc" },
           include: { product: { select: { productName: true } } },
         },
-        payments: { orderBy: { id: "asc" } },
+        payments: {
+          orderBy: { id: "asc" },
+          include: { paymentMethod: { select: { name: true } } },
+        },
       },
     });
     if (!row) return null;
@@ -300,7 +303,7 @@ export async function loadDeliveryOrderDetailForSession(
         amount: d.amount != null ? d.amount.toString() : null,
       })),
       payments: row.payments.map((p) => ({
-        method: p.method,
+        method: p.paymentMethod.name,
         amount: p.paymentDate.toISOString().slice(0, 10),
         reference:
           p.chequeNo || p.bank

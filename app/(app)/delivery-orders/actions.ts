@@ -41,7 +41,9 @@ import {
   resolveServiceScope,
 } from "@/lib/service-scope";
 import type { DeliveryOrderPrintModel } from "@/components/DeliveryOrderPrint";
-import { PaymentMethod, Prisma, ValidationStatus } from "@prisma/client";
+import { assertPaymentMethodUsable } from "@/lib/payment-methods/catalog";
+import type { PaymentMethodKind } from "@/lib/payment-methods/types";
+import { Prisma, ValidationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 function money2Print(value: Prisma.Decimal) {
@@ -128,7 +130,10 @@ export type LoadedDeliveryOrderView = {
     amount: string;
   }>;
   payments: Array<{
-    method: PaymentMethod;
+    paymentMethodId: string;
+    methodCode: string;
+    methodName: string;
+    kind: PaymentMethodKind;
     paymentDate: string;
     chequeNo: string;
     bank: string;
@@ -148,7 +153,7 @@ type LineInput = {
 };
 
 type PaymentInput = {
-  method: "CASH" | "CHEQUE";
+  paymentMethodId: string;
   paymentDate: string;
   chequeNo?: string;
   bank?: string;
@@ -343,7 +348,12 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
           product: { select: { productName: true } },
         },
       },
-      payments: { orderBy: { id: "asc" } },
+      payments: {
+        orderBy: { id: "asc" },
+        include: {
+          paymentMethod: { select: { id: true, code: true, name: true, kind: true } },
+        },
+      },
       createdBy: { select: { id: true, name: true } },
       validatedBy: { select: { id: true, name: true } },
     },
@@ -392,7 +402,10 @@ export async function loadDeliveryOrderByNo(rawNo: string): Promise<LoadedDelive
       amount: det.amount != null ? det.amount.toString() : "",
     })),
     payments: order.payments.map((p) => ({
-      method: p.method,
+      paymentMethodId: p.paymentMethod.id,
+      methodCode: p.paymentMethod.code,
+      methodName: p.paymentMethod.name,
+      kind: p.paymentMethod.kind as PaymentMethodKind,
       paymentDate: p.paymentDate.toISOString().slice(0, 10),
       chequeNo: p.chequeNo ?? "",
       bank: p.bank ?? "",
@@ -638,7 +651,7 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
     }
 
     const preparedPayments: Array<{
-      method: PaymentMethod;
+      paymentMethodId: string;
       paymentDate: Date;
       chequeNo: string | null;
       bank: string | null;
@@ -646,7 +659,14 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
       receiptDate: Date | null;
     }> = [];
     for (const p of Array.isArray(payments) ? payments : []) {
-      if (!p || (p.method !== "CASH" && p.method !== "CHEQUE")) continue;
+      if (!p?.paymentMethodId) continue;
+      const methodRow = await assertPaymentMethodUsable(String(p.paymentMethodId).trim());
+      if (methodRow.kind !== "SIMPLE" && methodRow.kind !== "CHEQUE") {
+        return {
+          ok: false,
+          error: `${methodRow.name} is not allowed on delivery orders.`,
+        };
+      }
       const paymentDate = p.paymentDate
         ? new Date(`${p.paymentDate}T12:00:00`)
         : dateIssued;
@@ -659,8 +679,7 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
         if (!Number.isNaN(rd.getTime())) receiptDate = rd;
       }
       preparedPayments.push({
-        method:
-          p.method === "CHEQUE" ? PaymentMethod.CHEQUE : PaymentMethod.CASH,
+        paymentMethodId: methodRow.id,
         paymentDate,
         chequeNo: String(p.chequeNo ?? "").trim() || null,
         bank: String(p.bank ?? "").trim() || null,
@@ -990,7 +1009,10 @@ export async function loadDeliveryOrderPrintById(
           },
         },
       },
-      payments: { orderBy: { id: "asc" } },
+      payments: {
+        orderBy: { id: "asc" },
+        include: { paymentMethod: { select: { name: true } } },
+      },
     },
   });
   if (!order) return { ok: false, reason: "missing" };
@@ -1031,7 +1053,7 @@ export async function loadDeliveryOrderPrintById(
       amount: d.amount != null ? d.amount.toString() : null,
     })),
     payments: order.payments.map((p) => ({
-      method: p.method,
+      method: p.paymentMethod.name,
       paymentDateIso: p.paymentDate.toISOString(),
       chequeNo: p.chequeNo,
       bank: p.bank,

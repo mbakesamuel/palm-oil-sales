@@ -6,7 +6,7 @@ import { AutoPrint } from "@/components/AutoPrint";
 import { PrintButton } from "@/components/PrintButton";
 import { ReportFooter } from "@/components/ReportFooter";
 import { ReportHeader } from "@/components/ReportHeader";
-import { PaymentMethod, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
 import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
@@ -38,16 +38,11 @@ function fmtKg(d: Prisma.Decimal) {
   }).format(n);
 }
 
-function formatPaymentMethods(payments: { method: PaymentMethod }[]): string {
+function formatPaymentMethods(
+  payments: { paymentMethod: { name: string } }[],
+): string {
   if (payments.length === 0) return "—";
-  return payments
-    .map((p) => {
-      if (p.method === PaymentMethod.CHEQUE) return "Cheque";
-      if (p.method === PaymentMethod.CREDIT) return "Credit";
-      if (p.method === PaymentMethod.TRAITE) return "Traite";
-      return "Cash";
-    })
-    .join("; ");
+  return payments.map((p) => p.paymentMethod.name).join("; ");
 }
 
 function formatPaymentBanks(payments: { bank: string | null }[]): string {
@@ -128,7 +123,10 @@ export default async function SalesReportPrintPage() {
         lines: { select: { qtyKg: true } },
         payments: {
           orderBy: { id: "asc" },
-          select: { method: true, bank: true },
+          select: {
+            bank: true,
+            paymentMethod: { select: { name: true } },
+          },
         },
       },
     }),

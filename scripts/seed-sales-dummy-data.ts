@@ -1,13 +1,13 @@
 import "dotenv/config";
 import {
   CustomerType,
-  PaymentMethod,
   Prisma,
   PrismaClient,
   TaxRateVariant,
   TaxRegimeKind,
   ValidationStatus,
 } from "@prisma/client";
+import { ensureBuiltinPaymentMethods } from "@/lib/payment-methods/catalog";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
 
@@ -201,6 +201,12 @@ async function main() {
   });
 
   try {
+    await ensureBuiltinPaymentMethods();
+    const cashMethod = await prisma.paymentMethodDefinition.findUniqueOrThrow({
+      where: { code: "CASH" },
+      select: { id: true },
+    });
+
     const service = await prisma.commercialService.findFirst({
       where: { isActive: true, siteKind: "SALES_POINT" },
       select: { id: true, name: true, phone: true, address: true },
@@ -375,7 +381,7 @@ async function main() {
           payments: {
             create: [
               {
-                method: PaymentMethod.CASH,
+                paymentMethodId: cashMethod.id,
                 amount: gross,
                 paidAt: soldAt,
               },

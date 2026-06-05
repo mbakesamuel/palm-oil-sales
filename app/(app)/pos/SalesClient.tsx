@@ -18,6 +18,7 @@ import {
 } from "@/lib/pos/sale-validation-scope";
 import type { DeliveryOrderLookupDto } from "@/lib/delivery-order-sale-control";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import type { PaymentMethodOption } from "@/lib/payment-methods/types";
 import type {
   AvailableDeliveryOrderRow,
   LoadedSaleView,
@@ -49,7 +50,7 @@ type Line = {
 };
 
 type Payment = {
-  method: "CASH" | "CHEQUE" | "TRAITE" | "CREDIT";
+  paymentMethodId: string;
   amount: string;
   chequeNo?: string;
   bank?: string;
@@ -57,6 +58,16 @@ type Payment = {
   traiteIssuedOn?: string;
   traiteMaturityOn?: string;
 };
+
+function posSelectablePaymentMethods(methods: PaymentMethodOption[]) {
+  return methods.filter((m) => m.kind !== "CREDIT");
+}
+
+function defaultPaymentMethodId(methods: PaymentMethodOption[]) {
+  const cash = methods.find((m) => m.code === "CASH");
+  if (cash) return cash.id;
+  return posSelectablePaymentMethods(methods)[0]?.id ?? "";
+}
 
 function parseDec(s: string) {
   const n = Number.parseFloat(String(s ?? "").replace(",", "."));
@@ -166,6 +177,7 @@ function legacyAppliedTaxesFromSale(
 type SaleProductModeUi = "LOOSE" | "BOTTLE";
 
 export function SalesClient(props: {
+  paymentMethods: PaymentMethodOption[];
   customers: Customer[];
   looseProducts: Product[];
   bottledProducts: Product[];
@@ -232,6 +244,7 @@ export function SalesClient(props: {
   initialLookupNo?: string;
 }) {
   const {
+    paymentMethods,
     customers,
     looseProducts,
     bottledProducts,
@@ -332,8 +345,21 @@ export function SalesClient(props: {
       storageLocationId: "",
     },
   ]);
+  const selectablePaymentMethods = React.useMemo(
+    () => posSelectablePaymentMethods(paymentMethods),
+    [paymentMethods],
+  );
+  const paymentMethodById = React.useMemo(
+    () => new Map(paymentMethods.map((m) => [m.id, m])),
+    [paymentMethods],
+  );
+  const defaultPayMethodId = React.useMemo(
+    () => defaultPaymentMethodId(paymentMethods),
+    [paymentMethods],
+  );
+
   const [payments, setPayments] = React.useState<Payment[]>(() => [
-    { method: "CASH", amount: "0" },
+    { paymentMethodId: defaultPaymentMethodId(paymentMethods), amount: "0" },
   ]);
   const [transactionDate, setTransactionDate] = React.useState(utcIsoDateToday);
 
@@ -979,7 +1005,7 @@ export function SalesClient(props: {
         ),
       },
     ]);
-    setPayments([{ method: "CASH", amount: "0" }]);
+    setPayments([{ paymentMethodId: defaultPayMethodId, amount: "0" }]);
     setTransactionDate(utcIsoDateToday());
     setLoadedAppliedTaxes(null);
     setTaxPreviewRows([]);
@@ -1045,14 +1071,7 @@ export function SalesClient(props: {
     setPayments(
       s.payments.length > 0
         ? s.payments.map((p) => ({
-            method:
-              p.method === "CHEQUE"
-                ? "CHEQUE"
-                : p.method === "TRAITE"
-                  ? "TRAITE"
-                  : p.method === "CREDIT"
-                    ? "CREDIT"
-                    : "CASH",
+            paymentMethodId: p.paymentMethodId,
             amount: p.amount,
             chequeNo: p.chequeNo ?? undefined,
             bank: p.bank ?? undefined,
@@ -1060,7 +1079,7 @@ export function SalesClient(props: {
             traiteIssuedOn: p.traiteIssuedOn ?? undefined,
             traiteMaturityOn: p.traiteMaturityOn ?? undefined,
           }))
-        : [{ method: "CASH", amount: "0" }],
+        : [{ paymentMethodId: defaultPayMethodId, amount: "0" }],
     );
     setLoadedAppliedTaxes(legacyAppliedTaxesFromSale(s));
     setTaxPreviewError(null);
@@ -2203,7 +2222,7 @@ export function SalesClient(props: {
               onClick={() =>
                 setPayments((prev) => [
                   ...prev,
-                  { method: "CASH", amount: "0" },
+                  { paymentMethodId: defaultPayMethodId, amount: "0" },
                 ])
               }
             >
@@ -2218,20 +2237,23 @@ export function SalesClient(props: {
               <div className="col-span-5">Instrument / bank</div>
               <div className="col-span-1" />
             </div>
-            {payments.map((p, idx) => (
+            {payments.map((p, idx) => {
+              const selectedMethod = paymentMethodById.get(p.paymentMethodId);
+              const paymentKind = selectedMethod?.kind ?? "SIMPLE";
+              return (
               <div key={idx} className="px-3 py-3 space-y-2 text-sm">
                 <div className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-3">
                     <select
                       className="w-full rounded-md border border-border bg-transparent px-2 py-1"
-                      value={p.method}
+                      value={p.paymentMethodId}
                       onChange={(e) =>
                         setPayments((prev) =>
                           prev.map((x, i) =>
                             i === idx
                               ? {
                                   ...x,
-                                  method: e.target.value as Payment["method"],
+                                  paymentMethodId: e.target.value,
                                   chequeNo: undefined,
                                   bank: undefined,
                                   traiteNo: undefined,
@@ -2243,12 +2265,11 @@ export function SalesClient(props: {
                         )
                       }
                     >
-                      <option value="CASH">Cash</option>
-                      <option value="CHEQUE">Cheque</option>
-                      <option value="TRAITE">Traite</option>
-                      <option value="CREDIT" disabled>
-                        Credit
-                      </option>
+                      {selectablePaymentMethods.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="col-span-3">
@@ -2266,11 +2287,11 @@ export function SalesClient(props: {
                     />
                   </div>
                   <div className="col-span-5 text-xs opacity-70 pt-0.5">
-                    {p.method === "CHEQUE"
+                    {paymentKind === "CHEQUE"
                       ? "Cheque number and drawee bank below."
-                      : p.method === "TRAITE"
+                      : paymentKind === "TRAITE"
                         ? "Traite details and bank below."
-                        : "No instrument fields for cash."}
+                        : "No instrument fields for this method."}
                   </div>
                   <div className="col-span-1 flex justify-end">
                     <button
@@ -2285,7 +2306,7 @@ export function SalesClient(props: {
                     </button>
                   </div>
                 </div>
-                {p.method === "CHEQUE" ? (
+                {paymentKind === "CHEQUE" ? (
                   <div className="grid grid-cols-12 gap-2 items-center pl-0 sm:pl-1">
                     <div className="col-span-12 sm:col-span-4">
                       <label className="text-[10px] font-medium opacity-70 block mb-0.5">
@@ -2325,7 +2346,7 @@ export function SalesClient(props: {
                     </div>
                   </div>
                 ) : null}
-                {p.method === "TRAITE" ? (
+                {paymentKind === "TRAITE" ? (
                   <div className="grid grid-cols-12 gap-2 items-end pl-0 sm:pl-1">
                     <div className="col-span-12 sm:col-span-3">
                       <label className="text-[10px] font-medium opacity-70 block mb-0.5">
@@ -2404,7 +2425,8 @@ export function SalesClient(props: {
                   </div>
                 ) : null}
               </div>
-            ))}
+            );
+            })}
           </div>
         </section>
 
