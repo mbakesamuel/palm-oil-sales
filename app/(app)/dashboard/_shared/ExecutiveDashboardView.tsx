@@ -40,14 +40,28 @@ function ExecutiveDashboardBody(props: { data: ExecutiveDashboardData }) {
           metrics={<DashboardMetricGrid tiles={tiles} />}
           charts={
             <>
-              <DashboardChartCard title="Sales value (last 12 months)" subtitle="All lines · gross XAF">
+              <DashboardChartCard
+                title="Sales value (current financial year)"
+                subtitle={
+                  data.monthFilter
+                    ? `FY ${data.monthFilter.financialYear} · all lines · gross XAF`
+                    : "No financial year open"
+                }
+              >
                 <DashboardLineChart
                   data={data.salesTrend}
                   valueLabel="Gross XAF"
                   formatValue={formatXaf}
                 />
               </DashboardChartCard>
-              <DashboardChartCard title="Delivery orders (last 12 months)" subtitle="All lines">
+              <DashboardChartCard
+                title="Delivery orders (current financial year)"
+                subtitle={
+                  data.monthFilter
+                    ? `FY ${data.monthFilter.financialYear} · all lines`
+                    : "No financial year open"
+                }
+              >
                 <DashboardLineChart data={data.doTrend} valueLabel="Orders" />
               </DashboardChartCard>
               <DashboardChartCard title="Sales validation mix" subtitle="Working month · all lines">

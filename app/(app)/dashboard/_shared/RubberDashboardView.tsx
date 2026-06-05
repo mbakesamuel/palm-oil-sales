@@ -59,7 +59,14 @@ function RubberDashboardBody(props: { data: RubberDashboardData }) {
             metrics={<DashboardMetricGrid tiles={tiles} />}
             charts={
               <>
-                <DashboardChartCard title="Stock transfers (last 12 months)" subtitle="Created transfers">
+                <DashboardChartCard
+                  title="Stock transfers (current financial year)"
+                  subtitle={
+                    data.monthFilter
+                      ? `FY ${data.monthFilter.financialYear} · created transfers`
+                      : "No financial year open"
+                  }
+                >
                   <DashboardLineChart data={data.transferTrend} valueLabel="Transfers" />
                 </DashboardChartCard>
                 <DashboardChartCard title="Transfer status mix" subtitle="Current scope">

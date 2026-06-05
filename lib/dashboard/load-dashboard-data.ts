@@ -96,8 +96,8 @@ export async function loadPalmOilDashboardData(
     incomingTransfers,
   ] = await Promise.all([
     getDashboardKpis(scope, monthFilter, salesPointId),
-    getSalesTrendByMonth(scope, salesPointId),
-    getDeliveryOrderTrendByMonth(scope, salesPointId),
+    getSalesTrendByMonth(scope, monthFilter, salesPointId),
+    getDeliveryOrderTrendByMonth(scope, monthFilter, salesPointId),
     getSalesStatusBreakdown(scope, monthFilter, salesPointId),
     getDeliveryOrderStatusBreakdown(scope, monthFilter, salesPointId),
     showStock ? getStockKpis(salesPointId, scopeHint) : Promise.resolve(null),
@@ -200,8 +200,8 @@ export async function loadExecutiveDashboardData(): Promise<ExecutiveDashboardDa
     lineShare,
   ] = await Promise.all([
     getDashboardKpis(scope, monthFilter),
-    getSalesTrendByMonth(scope),
-    getDeliveryOrderTrendByMonth(scope),
+    getSalesTrendByMonth(scope, monthFilter),
+    getDeliveryOrderTrendByMonth(scope, monthFilter),
     getSalesStatusBreakdown(scope, monthFilter),
     getDeliveryOrderStatusBreakdown(scope, monthFilter),
     getLineSalesShare(monthFilter),
@@ -241,7 +241,7 @@ export async function loadRubberDashboardData(
 
   const [stock, transferTrend, transferStatus, incomingTransfers] = await Promise.all([
     showStock ? getStockKpis(salesPointId, scopeHint) : Promise.resolve(null),
-    showStock ? getTransferTrendByMonth(salesPointId) : Promise.resolve([]),
+    showStock ? getTransferTrendByMonth(monthFilter, salesPointId) : Promise.resolve([]),
     showStock ? getTransferStatusBreakdown(salesPointId) : Promise.resolve([]),
     showStock ? getIncomingTransfers(salesPointId) : Promise.resolve([]),
   ]);

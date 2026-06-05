@@ -1,7 +1,14 @@
 import "server-only";
 
 import { Prisma, StockDocStatus, ValidationStatus } from "@prisma/client";
+import { getFinancialYearPeriodByYear } from "@/lib/financial-year";
 import { getPrismaClient } from "@/lib/prisma";
+import {
+  listSelectableCalendarMonths,
+  prismaDateToIso,
+  utcInstantAfterIsoDate,
+  type IsoDate,
+} from "@/lib/posting-calendar";
 import type { ReportMonthFilter } from "@/lib/report-working-month-filter";
 import {
   deliveryOrderWhereForScope,
@@ -25,22 +32,19 @@ export type {
 } from "@/lib/dashboard/types";
 export { formatXaf } from "@/lib/dashboard/format";
 
-function last12MonthBuckets(): Array<{ year: number; month: number; label: string }> {
-  const buckets: Array<{ year: number; month: number; label: string }> = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    buckets.push({
-      year: d.getUTCFullYear(),
-      month: d.getUTCMonth() + 1,
-      label: d.toLocaleString("en-GB", {
-        month: "short",
-        year: "2-digit",
-        timeZone: "UTC",
-      }),
-    });
-  }
-  return buckets;
+type TrendMonthBucket = { year: number; month: number; label: string };
+
+async function resolveFinancialYearBuckets(
+  monthFilter: ReportMonthFilter | null,
+): Promise<{ buckets: TrendMonthBucket[]; fyStart: IsoDate; fyEnd: IsoDate } | null> {
+  if (!monthFilter) return null;
+  const period = await getFinancialYearPeriodByYear(monthFilter.financialYear);
+  if (!period) return null;
+  const fyStart = prismaDateToIso(period.startDate);
+  const fyEnd = prismaDateToIso(period.endDate);
+  const buckets = listSelectableCalendarMonths(fyStart, fyEnd);
+  if (buckets.length === 0) return null;
+  return { buckets, fyStart, fyEnd };
 }
 
 function monthKey(year: number, month: number) {
@@ -62,6 +66,11 @@ function monthFilterWhere(monthFilter: ReportMonthFilter | null) {
     postingCalendarYear: monthFilter.postingCalendarYear,
     financialMonth: monthFilter.financialMonth,
   };
+}
+
+function financialYearWhere(monthFilter: ReportMonthFilter | null) {
+  if (!monthFilter) return {};
+  return { financialYear: monthFilter.financialYear };
 }
 
 export async function getDashboardKpis(
@@ -124,15 +133,20 @@ export async function getDashboardKpis(
 
 export async function getSalesTrendByMonth(
   scope: ServiceScope,
+  monthFilter: ReportMonthFilter | null,
   salesPointId?: number | null,
 ): Promise<TrendPoint[]> {
+  const fyBuckets = await resolveFinancialYearBuckets(monthFilter);
+  if (!fyBuckets) return [];
+
   const prisma = getPrismaClient();
-  const buckets = last12MonthBuckets();
+  const { buckets } = fyBuckets;
   const bucketSet = new Set(buckets.map((b) => monthKey(b.year, b.month)));
 
   const saleBase: Prisma.SaleWhereInput = {
     vehicleNumber: { not: "BPO-OUTBOUND" },
     ...(salesPointId != null ? { salesPointId } : {}),
+    ...financialYearWhere(monthFilter),
     postingCalendarYear: { not: null },
     financialMonth: { not: null },
   };
@@ -166,14 +180,19 @@ export async function getSalesTrendByMonth(
 
 export async function getDeliveryOrderTrendByMonth(
   scope: ServiceScope,
+  monthFilter: ReportMonthFilter | null,
   salesPointId?: number | null,
 ): Promise<TrendPoint[]> {
+  const fyBuckets = await resolveFinancialYearBuckets(monthFilter);
+  if (!fyBuckets) return [];
+
   const prisma = getPrismaClient();
-  const buckets = last12MonthBuckets();
+  const { buckets } = fyBuckets;
   const bucketSet = new Set(buckets.map((b) => monthKey(b.year, b.month)));
 
   const doBase: Prisma.DeliveryOrderWhereInput = {
     ...(salesPointId != null ? { salesPointId } : {}),
+    ...financialYearWhere(monthFilter),
     postingCalendarYear: { not: null },
     financialMonth: { not: null },
   };
@@ -355,17 +374,20 @@ export async function getIncomingTransfers(
 }
 
 export async function getTransferTrendByMonth(
+  monthFilter: ReportMonthFilter | null,
   scopedSalesPointId: number | null,
 ): Promise<TrendPoint[]> {
+  const fyBuckets = await resolveFinancialYearBuckets(monthFilter);
+  if (!fyBuckets) return [];
+
   const prisma = getPrismaClient();
-  const buckets = last12MonthBuckets();
-  const since = new Date(
-    Date.UTC(buckets[0]!.year, buckets[0]!.month - 1, 1),
-  );
+  const { buckets, fyStart, fyEnd } = fyBuckets;
+  const since = new Date(`${fyStart}T00:00:00.000Z`);
+  const until = utcInstantAfterIsoDate(fyEnd);
 
   const transfers = await prisma.stockTransfer.findMany({
     where: {
-      createdAt: { gte: since },
+      createdAt: { gte: since, lt: until },
       ...(scopedSalesPointId != null
         ? {
             OR: [
