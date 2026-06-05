@@ -14,6 +14,7 @@ export const PERMISSION_KEYS = [
   "route:/setup/product-variants",
   "route:/setup/sales-budget",
   "route:/setup/tax-rates",
+  "route:/setup/payment-methods",
   "route:/users",
   "route:/customers",
   "route:/financial-years",

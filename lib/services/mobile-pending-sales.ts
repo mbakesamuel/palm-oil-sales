@@ -179,7 +179,12 @@ export async function loadSaleDetailForSession(
         },
         orderBy: { id: "asc" },
       },
-      payments: { orderBy: { id: "asc" } },
+      payments: {
+        orderBy: { id: "asc" },
+        include: {
+          paymentMethod: { select: { name: true, kind: true } },
+        },
+      },
     },
   });
   if (!row) return null;
@@ -227,12 +232,12 @@ export async function loadSaleDetailForSession(
       };
     }),
     payments: row.payments.map((p) => ({
-      method: p.method,
+      method: p.paymentMethod.name,
       amount: p.amount.toString(),
       reference:
-        p.method === "CHEQUE"
+        p.paymentMethod.kind === "CHEQUE"
           ? [p.chequeNo, p.bank].filter(Boolean).join(" · ") || null
-          : p.method === "TRAITE"
+          : p.paymentMethod.kind === "TRAITE"
             ? p.traiteNo
             : null,
     })),

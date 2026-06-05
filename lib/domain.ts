@@ -24,13 +24,14 @@ export const ValidationStatus = {
 export type ValidationStatus =
   (typeof ValidationStatus)[keyof typeof ValidationStatus];
 
-export const PaymentMethod = {
-  CASH: "CASH",
+export const PaymentMethodKind = {
+  SIMPLE: "SIMPLE",
   CHEQUE: "CHEQUE",
-  CREDIT: "CREDIT",
   TRAITE: "TRAITE",
+  CREDIT: "CREDIT",
 } as const;
-export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
+export type PaymentMethodKind =
+  (typeof PaymentMethodKind)[keyof typeof PaymentMethodKind];
 
 export const FinancialYearStatus = {
   OPEN: "OPEN",

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient, UserRole } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureBuiltinPaymentMethods } from "../lib/payment-methods/catalog";
 import { ensureBotaPosSetup } from "../lib/pos/ensure-bota-setup";
 
 const connectionString = process.env.DATABASE_URL;
@@ -55,6 +56,7 @@ async function linkAdminGlobalRole(userId: string) {
 
 async function main() {
   await ensureBuiltinGlobalRoles();
+  await ensureBuiltinPaymentMethods();
 
   const existing = await prisma.user.findUnique({
     where: { username: TEST_ADMIN.username },

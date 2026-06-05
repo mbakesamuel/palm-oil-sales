@@ -5,6 +5,7 @@ export type SetupGroupId =
   | "access"
   | "sites"
   | "tax"
+  | "payment"
   | "products"
   | "customers";
 
@@ -21,6 +22,7 @@ export const SETUP_GROUP_ORDER: { id: SetupGroupId; label: string }[] = [
   { id: "access", label: "Access & users" },
   { id: "sites", label: "Sites & periods" },
   { id: "tax", label: "Tax" },
+  { id: "payment", label: "Payment methods" },
   { id: "products", label: "Products & pricing" },
   { id: "customers", label: "Customers" },
 ];
@@ -88,6 +90,13 @@ export const SETUP_NAV: SetupNavDefinition[] = [
     href: "/setup/tax-rates",
     label: "Tax rates",
     permissionKey: "route:/setup/tax-rates",
+  },
+  {
+    group: "payment",
+    groupLabel: "Payment methods",
+    href: "/setup/payment-methods",
+    label: "Payment methods",
+    permissionKey: "route:/setup/payment-methods",
   },
   {
     group: "products",

@@ -75,7 +75,8 @@ export type SalePrintModel = {
   vatAmount: string;
   grossAmount: string;
   payments: Array<{
-    method: string;
+    methodName: string;
+    kind: string;
     amount: string;
     chequeNo: string | null;
     bank: string | null;
@@ -243,23 +244,13 @@ export function SalePrint(props: {
             <tbody>
               {sale.payments.map((p, i) => (
                 <tr key={i} className="border-b border-black/10">
-                  <td className="py-2">
-                    {p.method === "TRAITE"
-                      ? "Traite"
-                      : p.method === "CHEQUE"
-                        ? "Cheque"
-                        : p.method === "CREDIT"
-                          ? "Credit"
-                          : p.method === "CASH"
-                            ? "Cash"
-                            : p.method}
-                  </td>
+                  <td className="py-2">{p.methodName}</td>
                   <td className="py-2">{formatDisplayDate(p.paidAtIso)}</td>
                   <td className="py-2 text-right tabular-nums">{moneyLabel(p.amount)}</td>
                   <td className="py-2 text-xs opacity-90">
                     {(() => {
                       const bits: string[] = [];
-                      if (p.method === "TRAITE") {
+                      if (p.kind === "TRAITE") {
                         if (p.traiteNo) bits.push(`Traite: ${p.traiteNo}`);
                         if (p.bank) bits.push(`Bank: ${p.bank}`);
                         if (p.traiteIssuedOn)

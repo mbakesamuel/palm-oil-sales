@@ -70,7 +70,11 @@ function NavGroup(props: {
     <>
       <Link
         href={collapsedHref}
-        className={[RAIL_LINK, groupActive ? "bg-brand/15" : "", "lg:hidden"].join(" ")}
+        className={[
+          RAIL_LINK,
+          groupActive ? "bg-brand/15" : "",
+          "lg:hidden",
+        ].join(" ")}
         title={collapsedTitle}
         aria-label={collapsedTitle}
       >
@@ -84,7 +88,11 @@ function NavGroup(props: {
         {collapsed ? (
           <Link
             href={collapsedHref}
-            className={[RAIL_LINK, "w-full lg:py-2", groupActive ? "bg-brand/15" : ""].join(" ")}
+            className={[
+              RAIL_LINK,
+              "w-full lg:py-2",
+              groupActive ? "bg-brand/15" : "",
+            ].join(" ")}
             title={collapsedTitle}
             aria-label={collapsedTitle}
           >
@@ -113,7 +121,9 @@ function NavGroup(props: {
                     href={overview.href}
                     className={[
                       "rounded-md px-3 py-1.5 text-sm hover:bg-foreground/5",
-                      pathname === overview.href ? "bg-brand/15 font-medium" : "",
+                      pathname === overview.href
+                        ? "bg-brand/15 font-medium"
+                        : "",
                     ].join(" ")}
                   >
                     {overview.label}
@@ -121,7 +131,10 @@ function NavGroup(props: {
                 ) : null}
                 {sections && sections.length > 0
                   ? sections.map((section) => (
-                      <div key={section.sectionLabel} className="pt-1 first:pt-0">
+                      <div
+                        key={section.sectionLabel}
+                        className="pt-1 first:pt-0"
+                      >
                         <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide opacity-60">
                           {section.sectionLabel}
                         </div>
@@ -161,7 +174,10 @@ function NavGroup(props: {
                               : "",
                           ].join(" ")}
                         >
-                          <ItemIcon className="size-4 shrink-0 opacity-80" aria-hidden />
+                          <ItemIcon
+                            className="size-4 shrink-0 opacity-80"
+                            aria-hidden
+                          />
                           <span>{item.label}</span>
                         </Link>
                       );
@@ -375,7 +391,7 @@ export function Sidebar(props: {
       >
         <div className="flex w-full items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element -- settings may point to /public or http(s) URLs */}
-          <img
+           <img
             src={logoSrc}
             alt=""
             className="h-6 max-h-6 w-auto max-w-[72px] shrink-0 object-contain"
@@ -383,13 +399,15 @@ export function Sidebar(props: {
         </div>
         {!collapsed ? (
           <div className="hidden lg:block min-w-0 w-full">
-            <div className="text-sm font-semibold leading-tight truncate">{brand}</div>
+            <div className="text-sm font-semibold leading-tight truncate">
+              {brand}
+            </div>
             {department ? (
               <div className="text-[11px] opacity-70 mt-0.5 leading-snug truncate">
                 {department}
               </div>
             ) : null}
-            <div className="text-xs opacity-70 mt-1 truncate">{subtitle}</div>
+           {/*  <div className="text-xs opacity-70 mt-1 truncate">{subtitle}</div> */}
           </div>
         ) : null}
       </div>
@@ -483,7 +501,10 @@ export function Sidebar(props: {
               className="flex flex-row gap-1 items-center shrink-0 lg:hidden"
               title={`${session.displayName} · ${sessionRoleLabel(session)}`}
             >
-              <div className={[RAIL_LINK, "border border-transparent"].join(" ")} aria-hidden>
+              <div
+                className={[RAIL_LINK, "border border-transparent"].join(" ")}
+                aria-hidden
+              >
                 <UserRound className="size-5 shrink-0 opacity-90" />
               </div>
               <SignOutButton variant="icon" />
@@ -498,7 +519,8 @@ export function Sidebar(props: {
               <div className="font-medium truncate" title={session.displayName}>
                 {session.displayName}
               </div>
-              {(session.commercialService?.name?.trim() || session.service?.trim()) ? (
+              {session.commercialService?.name?.trim() ||
+              session.service?.trim() ? (
                 <div
                   className="opacity-70 truncate text-[11px]"
                   title={

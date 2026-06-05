@@ -573,24 +573,45 @@ model SaleLine {
   @@index([storageLocationId])
 }
 
+/// Configurable payment method (Cash, Cheque, custom Mobile Money, etc.).
+model PaymentMethodDefinition {
+  id                   String                        @id @default(cuid())
+  /// Stable key (e.g. CASH, MOBILE_MONEY).
+  code                 String                        @unique
+  name                 String
+  kind                 PaymentMethodKind
+  sortOrder            Int                           @default(0)
+  isActive             Boolean                       @default(true)
+  /// Built-ins (CASH, CHEQUE, TRAITE, CREDIT) — code/kind cannot be changed; no delete.
+  isSystem             Boolean                       @default(false)
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  payments             Payment[]
+  deliveryOrderPayments DeliveryOrderPaymentDetails[]
+
+  @@index([isActive, sortOrder])
+  @@map("PaymentMethodDefinition")
+}
+
 model Payment {
-  id               String        @id @default(cuid())
+  id               String                  @id @default(cuid())
   saleId           String
-  method           PaymentMethod
-  amount           Decimal       @db.Decimal(14, 2)
+  paymentMethodId  String
+  amount           Decimal                 @db.Decimal(14, 2)
   chequeNo         String?
-  paidAt           DateTime      @default(now())
-  createdAt        DateTime      @default(now())
+  paidAt           DateTime                @default(now())
+  createdAt        DateTime                @default(now())
   /// Drawee bank (cheque or traite); optional, mainly for reporting
   bank             String?
   /// Bank traite / bill reference when method is TRAITE
   traiteNo         String?
-  traiteIssuedOn   DateTime?     @db.Date
-  traiteMaturityOn DateTime?     @db.Date
-  sale             Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  traiteIssuedOn   DateTime?               @db.Date
+  traiteMaturityOn DateTime?               @db.Date
+  paymentMethod    PaymentMethodDefinition @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  sale             Sale                    @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
-  @@index([method, paidAt])
+  @@index([paymentMethodId, paidAt])
 }
 
 model SalesPoint {
@@ -707,15 +728,16 @@ model DeliveryOrderDetails {
 }
 
 model DeliveryOrderPaymentDetails {
-  id              Int           @id @default(autoincrement())
-  deliveryOrderId Int
-  method          PaymentMethod
-  paymentDate     DateTime
-  chequeNo        String?
-  bank            String?
-  cashReceiptNo   String?
-  receiptDate     DateTime?
-  deliveryOrder   DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  id                Int                     @id @default(autoincrement())
+  deliveryOrderId   Int
+  paymentMethodId   String
+  paymentDate       DateTime
+  chequeNo          String?
+  bank              String?
+  cashReceiptNo     String?
+  receiptDate       DateTime?
+  paymentMethod     PaymentMethodDefinition @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  deliveryOrder     DeliveryOrder           @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
 
   @@index([deliveryOrderId])
   @@map("DeliveryOrderPaymentDetails")
@@ -962,11 +984,11 @@ model StockAdjustmentLine {
   @@map("StockAdjustmentLine")
 }
 
-enum PaymentMethod {
-  CASH
+enum PaymentMethodKind {
+  SIMPLE
   CHEQUE
-  CREDIT
   TRAITE
+  CREDIT
 }
 
 enum UserRole {

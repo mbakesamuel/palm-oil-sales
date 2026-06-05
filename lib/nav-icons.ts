@@ -39,6 +39,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/setup/sales-budget": Target,
   "/setup/product-pricing": Tags,
   "/setup/product-variants": Layers,
+  "/setup/payment-methods": CircleDollarSign,
   "/setup/permissions": Shield,
   "/setup/role-access": Shield,
   "/users": Users,
