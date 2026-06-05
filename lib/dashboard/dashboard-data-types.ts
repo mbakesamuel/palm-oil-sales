@@ -24,6 +24,7 @@ export type PalmOilDashboardData = {
   incomingTransfers: IncomingTransferRow[];
   showStock: boolean;
   scopedSalesPointId: number | null;
+  scopeHint: string;
   serviceName: string;
   enabledModules: readonly CommercialModuleKey[];
 };
@@ -51,6 +52,7 @@ export type ExecutiveDashboardData = {
 };
 
 export type RubberDashboardData = {
+  scopeError: string | null;
   monthFilter: DashboardMonthFilter | null;
   hasOpenFy: boolean;
   stock: StockKpis | null;
@@ -59,6 +61,7 @@ export type RubberDashboardData = {
   incomingTransfers: IncomingTransferRow[];
   showStock: boolean;
   scopedSalesPointId: number | null;
+  scopeHint: string;
   serviceName: string;
   enabledModules: readonly CommercialModuleKey[];
 };

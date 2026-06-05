@@ -3,7 +3,10 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { getPermissionsForSession } from "@/lib/access-control";
 import { getServerSession } from "@/lib/auth-server";
-import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
+import {
+  NO_SALES_POINT_MSG,
+  resolveDashboardDataScope,
+} from "@/lib/sales-point-assignment";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
 import {
   commercialServiceErrorForOperations,
@@ -56,15 +59,14 @@ export async function loadPalmOilDashboardData(
   const perms = await getPermissionsForSession(session);
   const showStock = Boolean(perms["route:/stock"]);
 
-  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
-  const salesPointId =
-    scopedToSalesPoint && session.salesPoint?.id != null ? session.salesPoint.id : null;
+  const { salesPointId, scopeHint, missingRequiredSalesPoint } =
+    resolveDashboardDataScope(session);
 
   const { monthFilter, hasOpenFy } = await resolveReportWorkingMonthFilter();
 
-  if (scopeError) {
+  if (scopeError || missingRequiredSalesPoint) {
     return {
-      scopeError,
+      scopeError: scopeError ?? NO_SALES_POINT_MSG,
       monthFilter,
       hasOpenFy,
       kpis: null,
@@ -76,15 +78,11 @@ export async function loadPalmOilDashboardData(
       incomingTransfers: [],
       showStock,
       scopedSalesPointId: salesPointId,
+      scopeHint,
       serviceName,
       enabledModules,
     };
   }
-
-  const scopeHint =
-    salesPointId != null
-      ? (session.salesPoint?.name ?? "Your sales point")
-      : "All sales points";
 
   const [
     kpis,
@@ -117,6 +115,7 @@ export async function loadPalmOilDashboardData(
     incomingTransfers,
     showStock,
     scopedSalesPointId: salesPointId,
+    scopeHint,
     serviceName,
     enabledModules,
   };
@@ -229,15 +228,26 @@ export async function loadRubberDashboardData(
 
   const perms = await getPermissionsForSession(session);
   const showStock = Boolean(perms["route:/stock"]);
-  const scopedToSalesPoint = sessionRequiresFixedPostingSite(session);
-  const salesPointId =
-    scopedToSalesPoint && session.salesPoint?.id != null ? session.salesPoint.id : null;
+  const { salesPointId, scopeHint, missingRequiredSalesPoint } =
+    resolveDashboardDataScope(session);
   const { monthFilter, hasOpenFy } = await resolveReportWorkingMonthFilter();
 
-  const scopeHint =
-    salesPointId != null
-      ? (session.salesPoint?.name ?? "Your sales point")
-      : "All sales points";
+  if (missingRequiredSalesPoint) {
+    return {
+      scopeError: NO_SALES_POINT_MSG,
+      monthFilter,
+      hasOpenFy,
+      stock: null,
+      transferTrend: [],
+      transferStatus: [],
+      incomingTransfers: [],
+      showStock,
+      scopedSalesPointId: salesPointId,
+      scopeHint,
+      serviceName,
+      enabledModules,
+    };
+  }
 
   const [stock, transferTrend, transferStatus, incomingTransfers] = await Promise.all([
     showStock ? getStockKpis(salesPointId, scopeHint) : Promise.resolve(null),
@@ -247,6 +257,7 @@ export async function loadRubberDashboardData(
   ]);
 
   return {
+    scopeError: null,
     monthFilter,
     hasOpenFy,
     stock,
@@ -255,6 +266,7 @@ export async function loadRubberDashboardData(
     incomingTransfers,
     showStock,
     scopedSalesPointId: salesPointId,
+    scopeHint,
     serviceName,
     enabledModules,
   };

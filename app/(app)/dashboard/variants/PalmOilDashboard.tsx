@@ -17,7 +17,7 @@ export async function PalmOilDashboard(props: {
     profile.enabledModules,
   );
 
-  const scopeLabel = data.stock?.scopeHint ?? serviceName;
+  const scopeLabel = data.scopeHint;
 
   return (
     <DashboardPageLayout
