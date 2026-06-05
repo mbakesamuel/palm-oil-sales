@@ -22,7 +22,7 @@ export async function RubberDashboard(props: {
         <DashboardFilterPanel
           monthFilter={data.monthFilter}
           hasOpenFy={data.hasOpenFy}
-          scopeLabel={data.stock?.scopeHint ?? serviceName}
+          scopeLabel={data.scopeHint}
           quickLinks={quickLinksForModules(profile.enabledModules)}
         />
       }

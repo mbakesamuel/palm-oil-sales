@@ -13,9 +13,23 @@ import { DashboardFitGrid } from "./DashboardFitGrid";
 import { DashboardCompactLink } from "./DashboardCompactLink";
 import { DashboardTransfersTable } from "./DashboardTransfersTable";
 
+function chartScopeLabel(scopeHint: string, scopedSalesPointId: number | null): string {
+  return scopedSalesPointId != null ? scopeHint : "All sales points";
+}
+
 function RubberDashboardBody(props: { data: RubberDashboardData }) {
   const { data } = props;
+
+  if (data.scopeError) {
+    return (
+      <div className="rounded-md border border-amber-600/40 bg-amber-600/5 px-2 py-1.5 text-[10px] sm:text-xs">
+        {data.scopeError}
+      </div>
+    );
+  }
+
   const stock = data.stock;
+  const scopeLabel = chartScopeLabel(data.scopeHint, data.scopedSalesPointId);
 
   const tiles: MetricTile[] = stock
     ? [
@@ -63,13 +77,16 @@ function RubberDashboardBody(props: { data: RubberDashboardData }) {
                   title="Stock transfers (current financial year)"
                   subtitle={
                     data.monthFilter
-                      ? `FY ${data.monthFilter.financialYear} · created transfers`
+                      ? `FY ${data.monthFilter.financialYear} · ${scopeLabel} · created transfers`
                       : "No financial year open"
                   }
                 >
                   <DashboardLineChart data={data.transferTrend} valueLabel="Transfers" />
                 </DashboardChartCard>
-                <DashboardChartCard title="Transfer status mix" subtitle="Current scope">
+                <DashboardChartCard
+                  title="Transfer status mix"
+                  subtitle={scopeLabel}
+                >
                   <DashboardDonutChart data={data.transferStatus} />
                 </DashboardChartCard>
               </>
@@ -90,7 +107,7 @@ function RubberDashboardBody(props: { data: RubberDashboardData }) {
               <DashboardTransfersTable
                 transfers={data.incomingTransfers}
                 scopedSalesPointId={data.scopedSalesPointId}
-                scopeLabel={stock.scopeHint}
+                scopeLabel={data.scopeHint}
               />
               <DashboardFitGrid className="shrink-0 sm:max-h-[40%]">
                 {links.slice(0, 4).map((link) => (

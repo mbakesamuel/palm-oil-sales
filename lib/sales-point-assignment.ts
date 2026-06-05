@@ -78,3 +78,29 @@ export function scopedSalesPointIdFromSession(
   if (!sessionRequiresFixedPostingSite(session)) return null;
   return session.salesPoint?.id ?? null;
 }
+
+export type DashboardDataScope = {
+  /** Set when the session is limited to one sales point; null = all sales points. */
+  salesPointId: number | null;
+  scopeHint: string;
+  missingRequiredSalesPoint: boolean;
+};
+
+const NO_SALES_POINT_MSG =
+  "No sales point is assigned to your account. Ask an administrator to assign one.";
+
+/** Chart/KPI scope for dashboard loaders: site-scoped roles vs global / roaming roles. */
+export function resolveDashboardDataScope(
+  session: Pick<AuthSession, "role" | "globalRole" | "commercialServiceRole" | "salesPoint">,
+): DashboardDataScope {
+  const salesPointId = scopedSalesPointIdFromSession(session);
+  const scopeHint =
+    salesPointId != null
+      ? (session.salesPoint?.name ?? "Your sales point")
+      : "All sales points";
+  const missingRequiredSalesPoint =
+    sessionRequiresFixedPostingSite(session) && salesPointId == null;
+  return { salesPointId, scopeHint, missingRequiredSalesPoint };
+}
+
+export { NO_SALES_POINT_MSG };

@@ -14,6 +14,10 @@ import { DashboardFitGrid } from "./DashboardFitGrid";
 import { DashboardCompactLink } from "./DashboardCompactLink";
 import { DashboardTransfersTable } from "./DashboardTransfersTable";
 
+function chartScopeLabel(scopeHint: string, scopedSalesPointId: number | null): string {
+  return scopedSalesPointId != null ? scopeHint : "All sales points";
+}
+
 function PalmOilDashboardBody(props: { data: PalmOilDashboardData }) {
   const { data } = props;
 
@@ -26,6 +30,7 @@ function PalmOilDashboardBody(props: { data: PalmOilDashboardData }) {
   }
 
   const kpis = data.kpis!;
+  const scopeLabel = chartScopeLabel(data.scopeHint, data.scopedSalesPointId);
   const tiles: MetricTile[] = [
     {
       label: "Sales this month",
@@ -96,7 +101,7 @@ function PalmOilDashboardBody(props: { data: PalmOilDashboardData }) {
                 title="Sales value (current financial year)"
                 subtitle={
                   data.monthFilter
-                    ? `FY ${data.monthFilter.financialYear} · gross XAF by posting month`
+                    ? `FY ${data.monthFilter.financialYear} · ${scopeLabel} · gross XAF by posting month`
                     : "No financial year open"
                 }
               >
@@ -110,16 +115,22 @@ function PalmOilDashboardBody(props: { data: PalmOilDashboardData }) {
                 title="Delivery orders (current financial year)"
                 subtitle={
                   data.monthFilter
-                    ? `FY ${data.monthFilter.financialYear} · count by posting month`
+                    ? `FY ${data.monthFilter.financialYear} · ${scopeLabel} · count by posting month`
                     : "No financial year open"
                 }
               >
                 <DashboardLineChart data={data.doTrend} valueLabel="Orders" />
               </DashboardChartCard>
-              <DashboardChartCard title="Sales validation mix" subtitle="Working month">
+              <DashboardChartCard
+                title="Sales validation mix"
+                subtitle={`Working month · ${scopeLabel}`}
+              >
                 <DashboardDonutChart data={data.salesStatus} />
               </DashboardChartCard>
-              <DashboardChartCard title="Delivery order status" subtitle="Working month">
+              <DashboardChartCard
+                title="Delivery order status"
+                subtitle={`Working month · ${scopeLabel}`}
+              >
                 <DashboardDonutChart data={data.doStatus} />
               </DashboardChartCard>
             </>
@@ -156,7 +167,7 @@ function PalmOilDashboardBody(props: { data: PalmOilDashboardData }) {
                 <DashboardTransfersTable
                   transfers={data.incomingTransfers}
                   scopedSalesPointId={data.scopedSalesPointId}
-                  scopeLabel={data.stock.scopeHint}
+                  scopeLabel={data.scopeHint}
                 />
                 <DashboardFitGrid className="shrink-0 sm:max-h-[35%]">
                   {opLinks.slice(0, 4).map((link) => (
