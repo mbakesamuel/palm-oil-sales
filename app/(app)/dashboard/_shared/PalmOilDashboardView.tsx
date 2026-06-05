@@ -92,14 +92,28 @@ function PalmOilDashboardBody(props: { data: PalmOilDashboardData }) {
           metrics={<DashboardMetricGrid tiles={tiles} />}
           charts={
             <>
-              <DashboardChartCard title="Sales value (last 12 months)" subtitle="Gross XAF by posting month">
+              <DashboardChartCard
+                title="Sales value (current financial year)"
+                subtitle={
+                  data.monthFilter
+                    ? `FY ${data.monthFilter.financialYear} · gross XAF by posting month`
+                    : "No financial year open"
+                }
+              >
                 <DashboardLineChart
                   data={data.salesTrend}
                   valueLabel="Gross XAF"
                   formatValue={formatXaf}
                 />
               </DashboardChartCard>
-              <DashboardChartCard title="Delivery orders (last 12 months)" subtitle="Count by posting month">
+              <DashboardChartCard
+                title="Delivery orders (current financial year)"
+                subtitle={
+                  data.monthFilter
+                    ? `FY ${data.monthFilter.financialYear} · count by posting month`
+                    : "No financial year open"
+                }
+              >
                 <DashboardLineChart data={data.doTrend} valueLabel="Orders" />
               </DashboardChartCard>
               <DashboardChartCard title="Sales validation mix" subtitle="Working month">
