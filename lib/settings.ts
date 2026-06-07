@@ -1,26 +1,50 @@
 import "server-only";
 
+import { DEFAULT_COMMERCIAL_SERVICE_CODE } from "@/lib/commercial-service";
+import { defaultModulesForSiteKind } from "@/lib/commercial-modules";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { DEFAULTS, getVatRateDecimal } from "@/lib/env";
 import { ensureTaxCatalogSynced } from "@/lib/tax/bootstrap";
+import { CommercialSiteKind } from "@prisma/client";
 
 /** Neon cold start / pooler blips can exceed a few quick retries. */
 const SETTINGS_DB_RETRY = { retries: 5, baseDelayMs: 400 } as const;
 
+async function repairLegacyCommercialServiceCode() {
+  const prisma = getPrismaClient();
+  const [legacy, canonical] = await Promise.all([
+    prisma.commercialService.findUnique({
+      where: { code: "palm-oil-sales" },
+      select: { id: true },
+    }),
+    prisma.commercialService.findUnique({
+      where: { code: DEFAULT_COMMERCIAL_SERVICE_CODE },
+      select: { id: true },
+    }),
+  ]);
+  if (legacy && !canonical) {
+    await prisma.commercialService.update({
+      where: { id: legacy.id },
+      data: { code: DEFAULT_COMMERCIAL_SERVICE_CODE },
+    });
+  }
+}
+
 async function ensureMinimalCommercialService() {
   const prisma = getPrismaClient();
-  const count = await prisma.commercialService.count();
-  if (count > 0) return;  //there is a record in the commercialservice table
+  await repairLegacyCommercialServiceCode();
 
-  const row = await prisma.companySettings.findUnique({ where: { id: "default" } });
+  const count = await prisma.commercialService.count();
+  if (count > 0) return;
 
   await prisma.commercialService.create({
     data: {
-      code: "palm-oil-sales",
-    /*   name: row?.companyName?.trim() ? row.companyName.trim() : "Palm Oil Sales", */
+      code: DEFAULT_COMMERCIAL_SERVICE_CODE,
       name: "Palm Oil Sales",
       invoicePrefix: DEFAULTS.invoicePrefix,
+      siteKind: CommercialSiteKind.SALES_POINT,
+      enabledModules: defaultModulesForSiteKind(CommercialSiteKind.SALES_POINT),
     },
   });
 }
