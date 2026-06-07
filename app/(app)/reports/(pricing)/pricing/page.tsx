@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { listCustomerTypeDefinitions } from "@/lib/customer-types/catalog";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getServerSession } from "@/lib/auth-server";
@@ -39,26 +40,31 @@ export default async function PricingReportPage() {
   }
 
   const prisma = getPrismaClient();
-  const schedules = await prismaRetry(() =>
-    prisma.productUnitPriceSchedule.findMany({
-      where: {
-        effectiveFrom: { gte: openFy.startDate, lte: openFy.endDate },
-      },
-      orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
-      include: {
-        product: {
-          select: { productName: true, productCatId: true },
+  const [schedules, customerTypeOptions] = await Promise.all([
+    prismaRetry(() =>
+      prisma.productUnitPriceSchedule.findMany({
+        where: {
+          effectiveFrom: { gte: openFy.startDate, lte: openFy.endDate },
         },
-      },
-    }),
-  );
+        orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
+        include: {
+          product: {
+            select: { productName: true, productCatId: true },
+          },
+          customerTypeDefinition: { select: { id: true, code: true, name: true } },
+        },
+      }),
+    ),
+    listCustomerTypeDefinitions({ activeOnly: true }),
+  ]);
 
   const scheduleModels: PricingScheduleRow[] = schedules.map((r) => ({
     id: r.id,
     productId: r.productId,
     productName: r.product.productName,
     productCatId: r.product.productCatId,
-    customerType: r.customerType,
+    customerTypeId: r.customerTypeId,
+    customerTypeName: r.customerTypeDefinition?.name ?? null,
     effectiveFromIso: r.effectiveFrom.toISOString().slice(0, 10),
     unitPriceExTax: r.unitPriceExTax.toString(),
   }));
@@ -77,6 +83,7 @@ export default async function PricingReportPage() {
 
       <PricingReport
         schedules={scheduleModels}
+        customerTypeOptions={customerTypeOptions}
         printHref="/reports/pricing/print"
       />
     </div>

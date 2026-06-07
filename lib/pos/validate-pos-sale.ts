@@ -5,9 +5,14 @@ import {
   StockCondition,
   StockMovementKind,
   ValidationStatus,
+  type PosSaleDisposition,
   type PosSaleProductMode,
 } from "@prisma/client";
 import { deliveryOrderPosUsageError } from "@/lib/delivery-order-sale-control";
+import {
+  effectiveSaleDisposition,
+  isNoDeliveryOrderDisposition,
+} from "@/lib/pos/sale-disposition";
 import { isInsufficientStockError } from "@/lib/stock/errors";
 import { assertPosLocationSellable } from "@/lib/stock/pos-location";
 import { applyMovement } from "@/lib/stock/post";
@@ -20,6 +25,7 @@ export type SaleForValidation = {
   salesPointId: number | null;
   deliveryOrderNo: string | null;
   saleProductMode: PosSaleProductMode | null;
+  saleDisposition: PosSaleDisposition | null;
   soldAt: Date;
   lines: Array<{
     productId: number;
@@ -44,12 +50,12 @@ export async function validatePosSaleInTransaction(
   }
 
   const mode = effectiveSaleProductMode(sale.saleProductMode);
+  const disposition = effectiveSaleDisposition(sale.saleDisposition);
   const stockSalesPointId = sale.salesPointId;
+  const skipDo = isBottleSaleMode(mode) || isNoDeliveryOrderDisposition(disposition);
 
-  if (isBottleSaleMode(mode)) {
-    if (!sale.deliveryOrderNo) {
-      /* bottle sales: delivery order not required */
-    } else {
+  if (skipDo) {
+    if (sale.deliveryOrderNo) {
       const linkedDo = await tx.deliveryOrder.findUnique({
         where: { deliveryOrderNo: sale.deliveryOrderNo },
         select: { status: true },

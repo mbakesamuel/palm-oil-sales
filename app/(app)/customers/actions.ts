@@ -8,9 +8,10 @@ import {
   assertTaxRegimeForCommercialLine,
   resolveCustomerCommercialServiceId,
 } from "@/lib/customer-commercial";
+import { assertCustomerTypeUsable } from "@/lib/customer-types/catalog";
 import { parseCustomerTaxFieldsFromForm } from "@/lib/customers/parse-tax-fields";
 import { resolveServiceScope } from "@/lib/service-scope";
-import { CustomerResidency, CustomerType } from "@prisma/client";
+import { CustomerResidency } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomer(formData: FormData) {
@@ -24,10 +25,12 @@ export async function createCustomer(formData: FormData) {
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const email = String(formData.get("email") ?? "").trim() || null;
   const address = String(formData.get("address") ?? "").trim() || null;
-  const customerTypeRaw = String(formData.get("customerType") ?? "INDUSTRY");
+  const customerTypeId = String(formData.get("customerTypeId") ?? "").trim();
   const residencyRaw = String(formData.get("residency") ?? "LOCAL");
 
   if (!name) throw new Error("Customer name is required.");
+  if (!customerTypeId) throw new Error("Customer type is required.");
+  await assertCustomerTypeUsable(customerTypeId);
 
   const commercialServiceId = resolveCustomerCommercialServiceId(
     scope,
@@ -46,11 +49,6 @@ export async function createCustomer(formData: FormData) {
     await assertTaxRegimeForCommercialLine(prisma, tax.taxRegimeId, commercialServiceId);
   }
 
-  const customerType =
-    customerTypeRaw in CustomerType
-      ? (customerTypeRaw as CustomerType)
-      : CustomerType.INDUSTRY;
-
   const residency =
     residencyRaw in CustomerResidency
       ? (residencyRaw as CustomerResidency)
@@ -67,11 +65,12 @@ export async function createCustomer(formData: FormData) {
       hasTaxpayerId: tax.hasTaxpayerId,
       taxpayerId: tax.taxpayerId,
       taxRegimeId: tax.taxRegimeId,
-      customerType,
+      customerTypeId,
     },
   });
 
   revalidatePath("/customers");
+  revalidatePath("/setup/customer-types");
   revalidatePath("/dashboard");
   revalidatePath("/pos");
   revalidatePath("/delivery-orders");
@@ -89,11 +88,13 @@ export async function updateCustomer(formData: FormData) {
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const email = String(formData.get("email") ?? "").trim() || null;
   const address = String(formData.get("address") ?? "").trim() || null;
-  const customerTypeRaw = String(formData.get("customerType") ?? "INDUSTRY");
+  const customerTypeId = String(formData.get("customerTypeId") ?? "").trim();
   const residencyRaw = String(formData.get("residency") ?? "LOCAL");
 
   if (!id) throw new Error("Missing customer id.");
   if (!name) throw new Error("Customer name is required.");
+  if (!customerTypeId) throw new Error("Customer type is required.");
+  await assertCustomerTypeUsable(customerTypeId);
 
   const existing = await assertCustomerAccessible(prisma, session, scope, id);
   const commercialServiceId = existing.commercialServiceId;
@@ -102,11 +103,6 @@ export async function updateCustomer(formData: FormData) {
   if (tax.taxRegimeId) {
     await assertTaxRegimeForCommercialLine(prisma, tax.taxRegimeId, commercialServiceId);
   }
-
-  const customerType =
-    customerTypeRaw in CustomerType
-      ? (customerTypeRaw as CustomerType)
-      : CustomerType.INDUSTRY;
 
   const residency =
     residencyRaw in CustomerResidency
@@ -124,11 +120,12 @@ export async function updateCustomer(formData: FormData) {
       hasTaxpayerId: tax.hasTaxpayerId,
       taxpayerId: tax.taxpayerId,
       taxRegimeId: tax.taxRegimeId,
-      customerType,
+      customerTypeId,
     },
   });
 
   revalidatePath("/customers");
+  revalidatePath("/setup/customer-types");
   revalidatePath("/dashboard");
   revalidatePath("/pos");
   revalidatePath("/delivery-orders");

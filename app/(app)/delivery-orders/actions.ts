@@ -586,7 +586,7 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
       resolveTaxesForCustomer(prisma, customerId, dateIssued),
       prisma.customer.findUnique({
         where: { id: customerId },
-        select: { customerType: true },
+        select: { customerTypeId: true },
       }),
     ]);
     if (!resolvedTaxes.ok) return { ok: false, error: resolvedTaxes.error };
@@ -624,7 +624,7 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
       const priced = await resolveUnitPriceExTax(
         prisma,
         productId,
-        customer.customerType,
+        customer.customerTypeId,
         dateIssued,
       );
       if (!priced.ok) return { ok: false, error: priced.error };

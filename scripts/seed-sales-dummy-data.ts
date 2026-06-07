@@ -1,6 +1,5 @@
 import "dotenv/config";
 import {
-  CustomerType,
   Prisma,
   PrismaClient,
   TaxRateVariant,
@@ -8,6 +7,10 @@ import {
   ValidationStatus,
 } from "@prisma/client";
 import { ensureBuiltinPaymentMethods } from "@/lib/payment-methods/catalog";
+import {
+  ensureBuiltinCustomerTypes,
+  getCustomerTypeIdByCode,
+} from "@/lib/customer-types/catalog";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
 
@@ -66,7 +69,7 @@ async function resolveTaxesForCustomer(
     where: { id: customerId },
     select: {
       residency: true,
-      customerType: true,
+      customerTypeDefinition: { select: { code: true } },
       hasTaxpayerId: true,
       taxRegimeId: true,
       taxRegime: { select: { kind: true } },
@@ -95,7 +98,7 @@ async function resolveTaxesForCustomer(
 
     if (link.taxType.code === SALES_TAX_CODE) {
       if (customer.residency !== "LOCAL") continue;
-      if (customer.customerType === CustomerType.INDUSTRY) continue;
+      if (customer.customerTypeDefinition.code === "INDUSTRY") continue;
 
       const variant = !customer.hasTaxpayerId
         ? TaxRateVariant.NO_TAXPAYER_ID
@@ -146,7 +149,7 @@ async function resolveTaxesForCustomer(
 }
 
 const DEMO_CUSTOMERS: Array<{
-  customerType: CustomerType;
+  customerTypeCode: "INDUSTRY" | "WHOLE_SALE" | "RETAIL" | "WORKER";
   name: string;
   refKey: string;
   qtyKg: number;
@@ -155,7 +158,7 @@ const DEMO_CUSTOMERS: Array<{
   vehicleNumber: string;
 }> = [
   {
-    customerType: CustomerType.INDUSTRY,
+    customerTypeCode: "INDUSTRY",
     name: "[DEMO] Industry Customer",
     refKey: "INDUSTRY",
     qtyKg: 1200,
@@ -164,7 +167,7 @@ const DEMO_CUSTOMERS: Array<{
     vehicleNumber: "DEMO-IND-01",
   },
   {
-    customerType: CustomerType.WHOLE_SALE,
+    customerTypeCode: "WHOLE_SALE",
     name: "[DEMO] Wholesale Customer",
     refKey: "WHOLE_SALE",
     qtyKg: 800,
@@ -173,7 +176,7 @@ const DEMO_CUSTOMERS: Array<{
     vehicleNumber: "DEMO-WHL-01",
   },
   {
-    customerType: CustomerType.RETAIL,
+    customerTypeCode: "RETAIL",
     name: "[DEMO] Retail Customer",
     refKey: "RETAIL",
     qtyKg: 350,
@@ -182,7 +185,7 @@ const DEMO_CUSTOMERS: Array<{
     vehicleNumber: "DEMO-RTL-01",
   },
   {
-    customerType: CustomerType.WORKER,
+    customerTypeCode: "WORKER",
     name: "[DEMO] Worker Customer",
     refKey: "WORKER",
     qtyKg: 200,
@@ -202,6 +205,7 @@ async function main() {
 
   try {
     await ensureBuiltinPaymentMethods();
+    await ensureBuiltinCustomerTypes();
     const cashMethod = await prisma.paymentMethodDefinition.findUniqueOrThrow({
       where: { code: "CASH" },
       select: { id: true },
@@ -276,6 +280,11 @@ async function main() {
     console.log(`Sales point: ${salesPoint.name} · Product: ${product.productName}`);
 
     for (const demo of DEMO_CUSTOMERS) {
+      const customerTypeId = await getCustomerTypeIdByCode(demo.customerTypeCode);
+      if (!customerTypeId) {
+        throw new Error(`Customer type ${demo.customerTypeCode} is not configured.`);
+      }
+
       const referenceNumber = `${SEED_REF_PREFIX}-${demo.refKey}`;
       if (existingRefs.has(referenceNumber)) {
         const row = existing.find((s) => s.referenceNumber === referenceNumber);
@@ -286,7 +295,7 @@ async function main() {
       let customer = await prisma.customer.findFirst({
         where: {
           commercialServiceId: service.id,
-          customerType: demo.customerType,
+          customerTypeId,
           name: demo.name,
         },
         select: { id: true, name: true, taxRegimeId: true },
@@ -297,14 +306,14 @@ async function main() {
           data: {
             commercialServiceId: service.id,
             name: demo.name,
-            customerType: demo.customerType,
+            customerTypeId,
             residency: "LOCAL",
             taxRegimeId: templateCustomer.taxRegimeId,
-            hasTaxpayerId: demo.customerType === CustomerType.INDUSTRY,
+            hasTaxpayerId: demo.customerTypeCode === "INDUSTRY",
           },
           select: { id: true, name: true, taxRegimeId: true },
         });
-        console.log(`  created customer: ${customer.name} (${demo.customerType})`);
+        console.log(`  created customer: ${customer.name} (${demo.customerTypeCode})`);
       }
 
       const taxesResolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
@@ -396,7 +405,7 @@ async function main() {
         .join(", ");
 
       console.log(
-        `  created ${demo.customerType}: ${sale.invoiceNo} · ${customer.name} · ${demo.qtyKg} kg · gross ${sale.grossAmount.toString()} XAF · ${demo.status} · taxes: ${taxSummary || "none"}`,
+        `  created ${demo.customerTypeCode}: ${sale.invoiceNo} · ${customer.name} · ${demo.qtyKg} kg · gross ${sale.grossAmount.toString()} XAF · ${demo.status} · taxes: ${taxSummary || "none"}`,
       );
     }
 

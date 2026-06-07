@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { OpenReportButton } from "@/components/OpenReportButton";
-import { CustomerType } from "@/lib/domain";
+import { customerTypeSortRank } from "@/lib/customer-types/types";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
+import { labelCustomerTypeRow } from "@/lib/pricing-report";
 
 type ProductOpt = {
   productId: number;
@@ -21,17 +23,11 @@ type ScheduleRow = {
   productName: string;
   productCatId: number;
   isMainCategory: boolean;
-  customerType: string | null;
+  customerTypeId: string | null;
+  customerTypeName: string | null;
   effectiveFromIso: string;
   unitPriceExTax: string;
 };
-
-const CUSTOMER_TYPE_OPTIONS = [
-  CustomerType.INDUSTRY,
-  CustomerType.WHOLE_SALE,
-  CustomerType.RETAIL,
-  CustomerType.WORKER,
-] as const;
 
 const inputClass =
   "h-8 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm";
@@ -47,35 +43,6 @@ const fieldLabelClass = [
 ].join(" ");
 const fieldControlClass = "min-w-0 flex-1";
 
-function labelCustomerType(ct: string | null) {
-  if (!ct) return "Direct price";
-  switch (ct) {
-    case CustomerType.INDUSTRY:
-      return "Industry";
-    case CustomerType.WHOLE_SALE:
-      return "Wholesale";
-    case CustomerType.RETAIL:
-      return "Retail";
-    case CustomerType.WORKER:
-      return "Worker";
-    default:
-      return ct;
-  }
-}
-
-/** Canonical order for customer-type sub-rows within a product group. */
-const CUSTOMER_TYPE_RANK: Record<string, number> = {
-  [CustomerType.INDUSTRY]: 0,
-  [CustomerType.WHOLE_SALE]: 1,
-  [CustomerType.RETAIL]: 2,
-  [CustomerType.WORKER]: 3,
-};
-
-function customerTypeRank(ct: string | null): number {
-  if (!ct) return -1;
-  return CUSTOMER_TYPE_RANK[ct] ?? 99;
-}
-
 type ScheduleGroup = {
   productId: number;
   productName: string;
@@ -84,7 +51,10 @@ type ScheduleGroup = {
   rows: ScheduleRow[];
 };
 
-function groupSchedulesByProduct(rows: ScheduleRow[]): ScheduleGroup[] {
+function groupSchedulesByProduct(
+  rows: ScheduleRow[],
+  customerTypeOptions: CustomerTypeOption[],
+): ScheduleGroup[] {
   const byProduct = new Map<number, ScheduleGroup>();
   for (const r of rows) {
     const existing = byProduct.get(r.productId);
@@ -105,7 +75,9 @@ function groupSchedulesByProduct(rows: ScheduleRow[]): ScheduleGroup[] {
   const groups = [...byProduct.values()];
   for (const g of groups) {
     g.rows.sort(
-      (a, b) => customerTypeRank(a.customerType) - customerTypeRank(b.customerType),
+      (a, b) =>
+        customerTypeSortRank(a.customerTypeId, customerTypeOptions) -
+        customerTypeSortRank(b.customerTypeId, customerTypeOptions),
     );
   }
   groups.sort((a, b) =>
@@ -117,6 +89,7 @@ function groupSchedulesByProduct(rows: ScheduleRow[]): ScheduleGroup[] {
 export function ProductPricingClient(props: {
   products: ProductOpt[];
   schedules: ScheduleRow[];
+  customerTypeOptions: CustomerTypeOption[];
   saveScheduleAction: (formData: FormData) => void | Promise<void>;
   deleteScheduleAction: (formData: FormData) => void | Promise<void>;
   /** When true, omit page title (used inside ProductPricingHub). */
@@ -125,6 +98,7 @@ export function ProductPricingClient(props: {
   const {
     products,
     schedules,
+    customerTypeOptions,
     saveScheduleAction,
     deleteScheduleAction,
     embedded = false,
@@ -134,7 +108,7 @@ export function ProductPricingClient(props: {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [productId, setProductId] = React.useState("");
-  const [customerType, setCustomerType] = React.useState("");
+  const [customerTypeId, setCustomerTypeId] = React.useState("");
   const [effectiveFrom, setEffectiveFrom] = React.useState("");
   const [unitPriceExTax, setUnitPriceExTax] = React.useState("");
   const [banner, setBanner] = React.useState<{ type: "error" | "ok"; text: string } | null>(
@@ -151,8 +125,8 @@ export function ProductPricingClient(props: {
   const isMainProduct = selectedProduct?.isMainCategory === true;
 
   const scheduleGroups = React.useMemo(
-    () => groupSchedulesByProduct(schedules),
-    [schedules],
+    () => groupSchedulesByProduct(schedules, customerTypeOptions),
+    [schedules, customerTypeOptions],
   );
 
   /** Distinct categories present in the product list, sorted by name. */
@@ -186,7 +160,7 @@ export function ProductPricingClient(props: {
     if (!productId) return;
     if (filteredProducts.some((p) => String(p.productId) === productId)) return;
     setProductId("");
-    setCustomerType("");
+    setCustomerTypeId("");
   }, [filteredProducts, productId]);
 
   function toggleCategoryFilter(catId: number) {
@@ -205,7 +179,7 @@ export function ProductPricingClient(props: {
   function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
     setProductId("");
-    setCustomerType("");
+    setCustomerTypeId("");
     setEffectiveFrom("");
     setUnitPriceExTax("");
     if (opts?.clearBanner !== false) setBanner(null);
@@ -225,7 +199,7 @@ export function ProductPricingClient(props: {
   function startEdit(row: ScheduleRow) {
     setEditingId(row.id);
     setProductId(String(row.productId));
-    setCustomerType(row.customerType ?? "");
+    setCustomerTypeId(row.customerTypeId ?? "");
     setEffectiveFrom(row.effectiveFromIso);
     setUnitPriceExTax(row.unitPriceExTax);
     setBanner(null);
@@ -243,7 +217,7 @@ export function ProductPricingClient(props: {
     setBanner(null);
     const fd = new FormData(e.currentTarget);
     if (editingId) fd.set("id", editingId);
-    if (!isMainProduct) fd.set("customerType", "");
+    if (!isMainProduct) fd.set("customerTypeId", "");
 
     const wasEdit = editingId != null;
     try {
@@ -407,7 +381,7 @@ export function ProductPricingClient(props: {
                       const picked = products.find(
                         (p) => String(p.productId) === e.target.value,
                       );
-                      if (!picked?.isMainCategory) setCustomerType("");
+                      if (!picked?.isMainCategory) setCustomerTypeId("");
                     }}
                     className={selectClass}
                     required
@@ -433,13 +407,13 @@ export function ProductPricingClient(props: {
                 </label>
                 <div className={fieldControlClass}>
                   {!isMainProduct ? (
-                    <input type="hidden" name="customerType" value="" />
+                    <input type="hidden" name="customerTypeId" value="" />
                   ) : null}
                   <select
                     id="pp-customer-type"
-                    name="customerType"
-                    value={isMainProduct ? customerType : ""}
-                    onChange={(e) => setCustomerType(e.target.value)}
+                    name="customerTypeId"
+                    value={isMainProduct ? customerTypeId : ""}
+                    onChange={(e) => setCustomerTypeId(e.target.value)}
                     className={selectClass}
                     disabled={!productId || !isMainProduct}
                     required={!!productId && isMainProduct}
@@ -451,9 +425,9 @@ export function ProductPricingClient(props: {
                           ? "Select type…"
                           : "N/A (not Main category)"}
                     </option>
-                    {CUSTOMER_TYPE_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {labelCustomerType(c)}
+                    {customerTypeOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
                       </option>
                     ))}
                   </select>
@@ -525,6 +499,7 @@ export function ProductPricingClient(props: {
               <OpenReportButton
                 href="/setup/product-pricing/print"
                 label="Print report"
+                sameTab
               />
               <button
                 type="button"
@@ -578,7 +553,7 @@ export function ProductPricingClient(props: {
                         ].join(" ")}
                       >
                         <td className="p-2 pl-6 opacity-90">
-                          {labelCustomerType(r.customerType)}
+                          {labelCustomerTypeRow(r)}
                         </td>
                         <td className="p-2 tabular-nums text-right">
                           {r.unitPriceExTax}
@@ -599,7 +574,7 @@ export function ProductPricingClient(props: {
                               onClick={() =>
                                 setPendingDelete({
                                   id: r.id,
-                                  label: `${r.productName} · ${labelCustomerType(r.customerType)} · ${r.effectiveFromIso}`,
+                                  label: `${r.productName} · ${labelCustomerTypeRow(r)} · ${r.effectiveFromIso}`,
                                 })
                               }
                               className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"

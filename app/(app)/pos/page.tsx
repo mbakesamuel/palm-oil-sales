@@ -4,7 +4,10 @@ import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
 import { getPermissionsForSession } from "@/lib/access-control";
 import { customerWhereForScope, resolveServiceScope } from "@/lib/service-scope";
-import { listPaymentMethodDefinitions } from "@/lib/payment-methods/catalog";
+import {
+  ensureBuiltinPaymentMethods,
+  listPaymentMethodDefinitions,
+} from "@/lib/payment-methods/catalog";
 import { loadPosPageConfig } from "@/lib/pos/load-pos-page-config";
 import {
   createSale,
@@ -62,6 +65,7 @@ export default async function PosPage(props: {
         select: {
           id: true,
           name: true,
+          customerTypeId: true,
           taxRegime: { select: { name: true, vatApplies: true } },
           taxRegimeId: true,
         },
@@ -86,13 +90,17 @@ export default async function PosPage(props: {
       botaSalesPointId: null,
       bottleOilStoreLocationId: null,
       walkInCustomerId: "",
+      rationCustomerId: "",
+      publicRelationCustomerId: "",
       looseProducts: [] as Array<{ productId: number; productName: string }>,
       bottledProducts: [] as Array<{ productId: number; productName: string }>,
     }),
-    listPaymentMethodDefinitions({
-      activeOnly: true,
-      kinds: ["SIMPLE", "CHEQUE", "TRAITE"],
-    }),
+    ensureBuiltinPaymentMethods().then(() =>
+      listPaymentMethodDefinitions({
+        activeOnly: true,
+        kinds: ["SIMPLE", "CHEQUE", "TRAITE"],
+      }),
+    ),
   ]);
 
   const hasProducts =
@@ -111,10 +119,24 @@ export default async function PosPage(props: {
       <div className="print:hidden text-2xl font-bold">Sales Invoce</div>
 
       <p className="text-sm opacity-75">
-        Payments: {paymentMethods.map((m) => m.name).join(", ") || "configure methods in Settings"} (no credit sales).
+        Payments:{" "}
+        {paymentMethods.length > 0
+          ? `${paymentMethods.map((m) => m.name).join(", ")} (no credit sales).`
+          : (
+              <>
+                none active — configure under{" "}
+                <Link
+                  className="underline underline-offset-4"
+                  href="/setup/payment-methods"
+                >
+                  Payment methods
+                </Link>
+                .
+              </>
+            )}
       </p>
 
-      {customers.length === 0 || !hasProducts ? (
+      {customers.length === 0 || !hasProducts || paymentMethods.length === 0 ? (
         <div className="rounded-lg border border-border p-4 text-sm">
           <div className="font-medium">Setup required</div>
           <ul className="list-disc pl-5 opacity-80 mt-2 space-y-1">
@@ -122,6 +144,9 @@ export default async function PosPage(props: {
               <li>Add at least one customer.</li>
             ) : null}
             {!hasProducts ? <li>Add at least one product.</li> : null}
+            {paymentMethods.length === 0 ? (
+              <li>Activate at least one payment method (Cash, Cheque, or Traite).</li>
+            ) : null}
           </ul>
           <div className="mt-3 flex gap-3">
             <Link className="underline underline-offset-4" href="/customers">
@@ -129,6 +154,9 @@ export default async function PosPage(props: {
             </Link>
             <Link className="underline underline-offset-4" href="/products">
               Products
+            </Link>
+            <Link className="underline underline-offset-4" href="/setup/payment-methods">
+              Payment methods
             </Link>
             <Link className="underline underline-offset-4" href="/setup">
               Setup
@@ -145,6 +173,8 @@ export default async function PosPage(props: {
           botaSalesPointId={posConfig.botaSalesPointId}
           bottleOilStoreLocationId={posConfig.bottleOilStoreLocationId}
           walkInCustomerId={posConfig.walkInCustomerId}
+          rationCustomerId={posConfig.rationCustomerId}
+          publicRelationCustomerId={posConfig.publicRelationCustomerId}
           salesPoints={salesPoints}
           storageLocations={storageLocations}
           previewPosTaxesAction={previewPosTaxes}

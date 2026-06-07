@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import type { CustomerResidency, CustomerType } from "@/lib/domain";
+import type { CustomerResidency } from "@/lib/domain";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -27,7 +28,8 @@ type CustomerRow = {
   phone: string | null;
   email: string | null;
   address: string | null;
-  customerType: CustomerType;
+  customerTypeId: string;
+  customerTypeDefinition: CustomerTypeOption;
   residency: CustomerResidency;
   taxpayerId: string | null;
   commercialServiceId: string;
@@ -60,18 +62,12 @@ const fieldLabelClass = [
 ].join(" ");
 const fieldControlClass = "min-w-0 flex-1";
 
-const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
-  INDUSTRY: "Industry",
-  WHOLE_SALE: "Whole sale",
-  RETAIL: "Retail",
-  WORKER: "Worker",
-};
-
 export function CustomersClient(props: {
   scopeMode: "all" | "single" | "none";
   defaultCommercialServiceId: string;
   commercialServices: Array<{ id: string; name: string; code: string }>;
   taxRegimes: TaxRegime[];
+  customerTypeOptions: CustomerTypeOption[];
   rateHints: RateHints;
   customers: CustomerRow[];
   saveCustomerAction: (formData: FormData) => void | Promise<void>;
@@ -82,6 +78,7 @@ export function CustomersClient(props: {
     defaultCommercialServiceId,
     commercialServices,
     taxRegimes,
+    customerTypeOptions,
     rateHints,
     customers,
     saveCustomerAction,
@@ -99,13 +96,18 @@ export function CustomersClient(props: {
     type: "error" | "ok";
     text: string;
   } | null>(null);
+  const defaultCustomerTypeId =
+    customerTypeOptions.find((o) => o.code === "INDUSTRY")?.id ??
+    customerTypeOptions[0]?.id ??
+    "";
+
   const [form, setForm] = React.useState({
     commercialServiceId: defaultCommercialServiceId,
     name: "",
     phone: "",
     email: "",
     address: "",
-    customerType: "INDUSTRY" as CustomerType,
+    customerTypeId: defaultCustomerTypeId,
     residency: "LOCAL" as CustomerResidency,
     taxRegimeId: NO_TAX_REGIME_VALUE,
     taxpayerId: "",
@@ -132,7 +134,7 @@ export function CustomersClient(props: {
       phone: "",
       email: "",
       address: "",
-      customerType: "INDUSTRY",
+      customerTypeId: defaultCustomerTypeId,
       residency: "LOCAL",
       taxRegimeId: NO_TAX_REGIME_VALUE,
       taxpayerId: "",
@@ -159,7 +161,7 @@ export function CustomersClient(props: {
       phone: row.phone ?? "",
       email: row.email ?? "",
       address: row.address ?? "",
-      customerType: row.customerType,
+      customerTypeId: row.customerTypeId,
       residency: row.residency,
       taxRegimeId: row.taxRegime?.id ?? NO_TAX_REGIME_VALUE,
       taxpayerId,
@@ -421,26 +423,31 @@ export function CustomersClient(props: {
               </div>
 
               <div className={fieldRowClass}>
-                <label className={fieldLabelClass} htmlFor="customerType">
+                <label className={fieldLabelClass} htmlFor="customerTypeId">
                   Type
                 </label>
                 <div className={fieldControlClass}>
                   <select
-                    id="customerType"
-                    name="customerType"
-                    value={form.customerType}
+                    id="customerTypeId"
+                    name="customerTypeId"
+                    value={form.customerTypeId}
                     onChange={(e) =>
                       setForm((p) => ({
                         ...p,
-                        customerType: e.target.value as CustomerType,
+                        customerTypeId: e.target.value,
                       }))
                     }
                     className={selectClass}
+                    required
                   >
-                    <option value="INDUSTRY">Industry</option>
-                    <option value="WHOLE_SALE">Whole sale</option>
-                    <option value="RETAIL">Retail</option>
-                    <option value="WORKER">Worker</option>
+                    {customerTypeOptions.length === 0 ? (
+                      <option value="">No customer types configured</option>
+                    ) : null}
+                    {customerTypeOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -511,7 +518,7 @@ export function CustomersClient(props: {
                   </select>
                   <p className={hintClass}>
                     {hasTaxRegime
-                      ? "Registered taxpayer: sales tax follows the regime (Real or Simplified)."
+                      ? "Registered taxpayer: sales tax tier is fixed by the chosen regime."
                       : rateHints.satNoTpnPct != null
                         ? `No regime: treated as no taxpayer card (${rateHints.satNoTpnPct}% sales tax when applicable).`
                         : "No regime: no taxpayer card sales tax rate applies when eligible."}
@@ -624,7 +631,7 @@ export function CustomersClient(props: {
                     ) : null}
                     <td className="p-2 text-xs opacity-80">{c.phone ?? "—"}</td>
                     <td className="p-2 text-xs opacity-80">
-                      {CUSTOMER_TYPE_LABELS[c.customerType] ?? c.customerType}
+                      {c.customerTypeDefinition.name}
                     </td>
                     <td className="p-2 text-xs opacity-80">
                       {c.residency === "OVERSEAS" ? "Overseas" : "Local"}

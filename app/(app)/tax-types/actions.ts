@@ -2,7 +2,7 @@
 
 import { assertPermissionKey } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
-import { VAT_TAX_CODE } from "@/lib/tax/constants";
+import { isOperationalTaxCode } from "@/lib/tax/constants";
 import { revalidatePath } from "next/cache";
 import { TaxRateVariant } from "@prisma/client";
 
@@ -56,8 +56,8 @@ export async function deleteTaxType(formData: FormData) {
     where: { id },
     select: { code: true },
   });
-  if (row?.code === VAT_TAX_CODE) {
-    throw new Error("The standard VAT tax type cannot be deleted.");
+  if (row && isOperationalTaxCode(row.code)) {
+    throw new Error(`${row.code} is a built-in tax type and cannot be deleted.`);
   }
 
   await prisma.taxType.delete({ where: { id } });
@@ -65,6 +65,22 @@ export async function deleteTaxType(formData: FormData) {
   revalidatePath("/tax-types");
   revalidatePath("/tax-regimes");
   revalidatePath("/pos");
+}
+
+async function assertCustomTaxTypeForRateEdit(
+  prisma: ReturnType<typeof getPrismaClient>,
+  taxTypeId: string,
+) {
+  const row = await prisma.taxType.findUnique({
+    where: { id: taxTypeId },
+    select: { code: true },
+  });
+  if (!row) throw new Error("Tax type not found.");
+  if (isOperationalTaxCode(row.code)) {
+    throw new Error(
+      `Rates for ${row.code} are managed on Setup → Tax rates. Use that page instead.`,
+    );
+  }
 }
 
 export async function saveTaxRateSchedule(formData: FormData) {
@@ -77,6 +93,7 @@ export async function saveTaxRateSchedule(formData: FormData) {
   const rateRaw = String(formData.get("rate") ?? "").trim();
 
   if (!taxTypeId) throw new Error("Tax type is required.");
+  await assertCustomTaxTypeForRateEdit(prisma, taxTypeId);
   const variant =
     variantRaw in TaxRateVariant
       ? (variantRaw as TaxRateVariant)
@@ -107,6 +124,17 @@ export async function deleteTaxRateSchedule(formData: FormData) {
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "").trim();
   if (!id) throw new Error("Missing id.");
+
+  const row = await prisma.taxRateSchedule.findUnique({
+    where: { id },
+    select: { taxType: { select: { code: true } } },
+  });
+  if (!row) throw new Error("Rate row not found.");
+  if (isOperationalTaxCode(row.taxType.code)) {
+    throw new Error(
+      `Rates for ${row.taxType.code} are managed on Setup → Tax rates. Use that page instead.`,
+    );
+  }
 
   await prisma.taxRateSchedule.delete({ where: { id } });
 

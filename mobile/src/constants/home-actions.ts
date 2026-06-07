@@ -22,6 +22,7 @@ const reportToneById: Record<string, AgroIconTone> = {
   "stock-inquiry": "palm",
   "daily-sales-summary": "harvest",
   commitments: "sun",
+  "bota-bottle-stock": "amber",
 };
 
 const stockToneById: Record<string, AgroIconTone> = {
@@ -35,6 +36,7 @@ const reportIcons: Record<string, ComponentProps<typeof Ionicons>["name"]> = {
   "stock-inquiry": "search-outline",
   "daily-sales-summary": "calendar-outline",
   commitments: "git-compare-outline",
+  "bota-bottle-stock": "water-outline",
 };
 
 export const homeReportActions: HomeAction[] = reportLinks.map((r) => ({

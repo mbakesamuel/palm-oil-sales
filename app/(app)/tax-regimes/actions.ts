@@ -92,13 +92,10 @@ export async function updateTaxRegime(formData: FormData) {
   const prisma = getPrismaClient();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  const kindRaw = String(formData.get("kind") ?? "SIMPLIFIED").trim();
   const vatAppliesCheckbox = String(formData.get("vatApplies") ?? "") === "on";
 
   if (!id) throw new Error("Missing id.");
   if (!name) throw new Error("Name is required.");
-  const kind =
-    kindRaw in TaxRegimeKind ? (kindRaw as TaxRegimeKind) : TaxRegimeKind.SIMPLIFIED;
 
   const { merged, vatApplies } = await mergedTaxTypeIdsForRegime(
     prisma,
@@ -110,7 +107,6 @@ export async function updateTaxRegime(formData: FormData) {
     where: { id },
     data: {
       name,
-      kind,
       vatApplies,
       commercialServiceId: commercialServiceIdFromForm(formData),
     },

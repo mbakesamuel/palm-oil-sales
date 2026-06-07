@@ -57,6 +57,8 @@ export type SalePrintModel = {
   vatApplies: boolean;
   /** Bottle sales use unit qty and tax-inclusive line pricing. */
   isBottleSale: boolean;
+  /** NORMAL, RATION, or PUBLIC_RELATION — null/legacy = normal. */
+  saleDisposition?: string | null;
   appliedTaxLines: Array<{
     label: string;
     ratePercentLabel: string;
@@ -143,6 +145,11 @@ export function SalePrint(props: {
               <span className="opacity-70">Delivery order</span>{" "}
               <span className="font-medium tabular-nums">{sale.deliveryOrderNo}</span>
             </p>
+          ) : null}
+          {sale.saleDisposition === "RATION" ? (
+            <p className="text-sm font-medium">Worker ration — payment not collected</p>
+          ) : sale.saleDisposition === "PUBLIC_RELATION" ? (
+            <p className="text-sm font-medium">Public relation — complimentary issue</p>
           ) : null}
         </div>
 

@@ -1,5 +1,6 @@
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { listCustomerTypeDefinitions } from "@/lib/customer-types/catalog";
 import {
   deleteProductUnitPriceSchedule,
   saveProductUnitPriceSchedule,
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
 
 export default async function ProductPricingPage() {
   const prisma = getPrismaClient();
-  const [schedules, products] = await Promise.all([
+  const [schedules, products, customerTypeOptions] = await Promise.all([
     prismaRetry(() =>
       prisma.productUnitPriceSchedule.findMany({
         orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
@@ -23,6 +24,7 @@ export default async function ProductPricingPage() {
               productCat: { select: { isMain: true, isBottled: true } },
             },
           },
+          customerTypeDefinition: { select: { id: true, code: true, name: true } },
         },
       }),
     ),
@@ -37,6 +39,7 @@ export default async function ProductPricingPage() {
         },
       }),
     ),
+    listCustomerTypeDefinitions({ activeOnly: true }),
   ]);
 
   const scheduleModels = schedules.map((r) => ({
@@ -45,7 +48,8 @@ export default async function ProductPricingPage() {
     productName: r.product.productName,
     productCatId: r.product.productCatId,
     isMainCategory: r.product.productCat?.isMain === true,
-    customerType: r.customerType,
+    customerTypeId: r.customerTypeId,
+    customerTypeName: r.customerTypeDefinition?.name ?? null,
     effectiveFromIso: r.effectiveFrom.toISOString().slice(0, 10),
     unitPriceExTax: r.unitPriceExTax.toString(),
   }));
@@ -63,6 +67,7 @@ export default async function ProductPricingPage() {
       <ProductPricingClient
         products={productOpts}
         schedules={scheduleModels}
+        customerTypeOptions={customerTypeOptions}
         saveScheduleAction={saveProductUnitPriceSchedule}
         deleteScheduleAction={deleteProductUnitPriceSchedule}
       />

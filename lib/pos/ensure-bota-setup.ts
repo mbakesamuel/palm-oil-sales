@@ -1,5 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import {
+  ensureBuiltinCustomerTypes,
+  getCustomerTypeIdByCode,
+} from "@/lib/customer-types/catalog";
+import {
   BOTA_SALES_POINT_NAME,
   BOTTLE_OIL_STORE_LOCATION_NAME,
   WALK_IN_CUSTOMER_NAME,
@@ -10,6 +14,10 @@ import {
  * Safe to call from seed or one-off setup scripts.
  */
 export async function ensureBotaPosSetup(prisma: PrismaClient) {
+  await ensureBuiltinCustomerTypes();
+  const retailCustomerTypeId = await getCustomerTypeIdByCode("RETAIL");
+  if (!retailCustomerTypeId) return;
+
   const service = await prisma.commercialService.findFirst({
     orderBy: { name: "asc" },
     select: { id: true },
@@ -60,7 +68,7 @@ export async function ensureBotaPosSetup(prisma: PrismaClient) {
       data: {
         commercialServiceId: service.id,
         name: WALK_IN_CUSTOMER_NAME,
-        customerType: "RETAIL",
+        customerTypeId: retailCustomerTypeId,
         hasTaxpayerId: false,
       },
     });

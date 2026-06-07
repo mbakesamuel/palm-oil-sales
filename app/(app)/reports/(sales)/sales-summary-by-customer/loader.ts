@@ -1,5 +1,10 @@
-import { CustomerType, Prisma, ValidationStatus } from "@prisma/client";
+import { Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
+import {
+  listCustomerTypeDefinitions,
+  resolveDefaultCustomerTypeId,
+} from "@/lib/customer-types/catalog";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
 import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { loadPhasedBudgetByProductForRange } from "@/lib/sales-budget-for-period";
 import {
@@ -24,13 +29,9 @@ import {
 } from "@/lib/service-scope";
 import { utcIsoWeekYearAndWeek } from "@/lib/sales-budget-phase";
 import { getOrInitCompanySettings } from "@/lib/settings";
-import {
-  DAILY_SALES_CUSTOMER_TYPE_LABELS,
-  DAILY_SALES_TYPE_ORDER,
-  fmtKg,
-} from "../daily-sales-summary/loader";
+import { fmtKg } from "../daily-sales-summary/loader";
 
-export { DAILY_SALES_CUSTOMER_TYPE_LABELS, DAILY_SALES_TYPE_ORDER, fmtKg };
+export { fmtKg };
 
 export type SalesSummaryInterval = "daily" | "weekly" | "monthly" | "yearly";
 
@@ -63,7 +64,7 @@ export type BudgetVsActualSlice = {
 export type ProductSummaryBlock = {
   productId: number;
   productName: string;
-  byType: Record<CustomerType, CustomerTypeCell>;
+  byType: Record<string, CustomerTypeCell>;
   total: CustomerTypeCell;
   budgetVsActual: BudgetVsActualSlice | null;
 };
@@ -95,9 +96,10 @@ export type SalesSummaryByCustomerData = {
   dateToIso: string | null;
   dateInvalid: boolean;
   periodLabel: string;
+  customerTypeOptions: CustomerTypeOption[];
   products: ProductSummaryBlock[];
   grandTotal: CustomerTypeCell;
-  grandByType: Record<CustomerType, CustomerTypeCell>;
+  grandByType: Record<string, CustomerTypeCell>;
   grandBudgetVsActual: BudgetVsActualSlice | null;
 };
 
@@ -107,13 +109,10 @@ function emptyCell(): CustomerTypeCell {
   return { qtyKg: z, revenueNet: z };
 }
 
-function emptyByType(): Record<CustomerType, CustomerTypeCell> {
-  return {
-    [CustomerType.INDUSTRY]: emptyCell(),
-    [CustomerType.WHOLE_SALE]: emptyCell(),
-    [CustomerType.RETAIL]: emptyCell(),
-    [CustomerType.WORKER]: emptyCell(),
-  };
+function emptyByType(options: CustomerTypeOption[]): Record<string, CustomerTypeCell> {
+  const out: Record<string, CustomerTypeCell> = {};
+  for (const opt of options) out[opt.id] = emptyCell();
+  return out;
 }
 
 function addCell(a: CustomerTypeCell, b: CustomerTypeCell): CustomerTypeCell {
@@ -373,12 +372,15 @@ export async function loadSalesSummaryByCustomer(
   const assignedSalesPointName = session.salesPoint?.name ?? null;
   const interval = parseInterval(rawParams?.interval);
 
-  const [{ monthFilter, hasOpenFy }, openFy, prisma, settings] = await Promise.all([
-    resolveReportWorkingMonthFilter(),
-    getOpenFinancialYearPeriod(),
-    getPrismaClient(),
-    getOrInitCompanySettings(),
-  ]);
+  const [{ monthFilter, hasOpenFy }, openFy, prisma, settings, customerTypeOptions, defaultCustomerTypeId] =
+    await Promise.all([
+      resolveReportWorkingMonthFilter(),
+      getOpenFinancialYearPeriod(),
+      getPrismaClient(),
+      getOrInitCompanySettings(),
+      listCustomerTypeDefinitions({ activeOnly: true }),
+      resolveDefaultCustomerTypeId(),
+    ]);
 
   const monthFirstIso = monthFilter
     ? firstDayOfCalendarMonth(
@@ -435,9 +437,10 @@ export async function loadSalesSummaryByCustomer(
     dateToIso,
     dateInvalid,
     periodLabel,
+    customerTypeOptions,
     products: [],
     grandTotal: emptyCell(),
-    grandByType: emptyByType(),
+    grandByType: emptyByType(customerTypeOptions),
     grandBudgetVsActual: null,
   });
 
@@ -463,7 +466,12 @@ export async function loadSalesSummaryByCustomer(
         saleWhereForScope,
       ),
       select: {
-        customer: { select: { customerType: true } },
+        customer: {
+          select: {
+            customerTypeId: true,
+            customerTypeDefinition: { select: { id: true, code: true, name: true } },
+          },
+        },
         lines: {
           where: { product: { productCat: { isBottled: false } } },
           select: {
@@ -481,19 +489,20 @@ export async function loadSalesSummaryByCustomer(
     number,
     {
       productName: string;
-      byType: Record<CustomerType, CustomerTypeCell>;
+      byType: Record<string, CustomerTypeCell>;
     }
   >();
 
   for (const sale of sales) {
-    const customerType = sale.customer?.customerType ?? CustomerType.INDUSTRY;
+    const customerTypeId =
+      sale.customer?.customerTypeId ?? defaultCustomerTypeId;
     for (const line of sale.lines) {
       const existing = byProduct.get(line.productId) ?? {
         productName: line.product.productName,
-        byType: emptyByType(),
+        byType: emptyByType(customerTypeOptions),
       };
-      const cell = existing.byType[customerType];
-      existing.byType[customerType] = {
+      const cell = existing.byType[customerTypeId] ?? emptyCell();
+      existing.byType[customerTypeId] = {
         qtyKg: cell.qtyKg.add(line.qtyKg),
         revenueNet: cell.revenueNet.add(line.lineNet),
       };
@@ -504,8 +513,8 @@ export async function loadSalesSummaryByCustomer(
   const productRows = [...byProduct.entries()]
     .map(([productId, row]) => {
       let total = emptyCell();
-      for (const t of DAILY_SALES_TYPE_ORDER) {
-        total = addCell(total, row.byType[t]);
+      for (const opt of customerTypeOptions) {
+        total = addCell(total, row.byType[opt.id] ?? emptyCell());
       }
       return {
         productId,
@@ -575,11 +584,11 @@ export async function loadSalesSummaryByCustomer(
     return { ...row, budgetVsActual };
   });
 
-  const grandByType = emptyByType();
+  const grandByType = emptyByType(customerTypeOptions);
   let grandTotal = emptyCell();
   for (const p of products) {
-    for (const t of DAILY_SALES_TYPE_ORDER) {
-      grandByType[t] = addCell(grandByType[t], p.byType[t]);
+    for (const opt of customerTypeOptions) {
+      grandByType[opt.id] = addCell(grandByType[opt.id] ?? emptyCell(), p.byType[opt.id] ?? emptyCell());
     }
     grandTotal = addCell(grandTotal, p.total);
   }
@@ -622,6 +631,7 @@ export async function loadSalesSummaryByCustomer(
     dateToIso,
     dateInvalid,
     periodLabel,
+    customerTypeOptions,
     products,
     grandTotal,
     grandByType,

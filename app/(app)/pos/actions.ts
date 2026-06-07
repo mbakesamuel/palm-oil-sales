@@ -48,11 +48,21 @@ import {
 } from "@/lib/service-scope";
 import type { SalePrintModel } from "@/components/SalePrint";
 import {
+  assertDispositionForSaleMode,
+  isNoDeliveryOrderDisposition,
+  isNoTaxDisposition,
+  isNonPaymentDisposition,
+  parseSaleDisposition,
+} from "@/lib/pos/sale-disposition";
+import {
   assertSaleModeForSalesPoint,
   BOTTLE_VEHICLE_PLACEHOLDER,
+  getOrCreatePosPlaceholderCustomer,
   getOrCreateWalkInCustomer,
   normalizeSaleModeForSalesPoint,
   parseSaleProductMode,
+  PUBLIC_RELATION_POS_CUSTOMER_NAME,
+  RATION_POS_CUSTOMER_NAME,
   resolveBotaSalesPointId,
   resolveBottleOilStoreLocationId,
   WALK_IN_CUSTOMER_NAME,
@@ -62,6 +72,7 @@ import {
   pendingSalesPointFilter,
   saleValidationScopeError,
 } from "@/lib/pos/sale-validation-scope";
+import { getCustomerTypeIdByCode } from "@/lib/customer-types/catalog";
 import { resolveBottledUnitPriceExTax, resolveUnitPriceExTax } from "@/lib/pricing/resolve";
 import { isInsufficientStockError } from "@/lib/stock/errors";
 import {
@@ -77,6 +88,7 @@ import {
 import type { PaymentMethodKind } from "@/lib/payment-methods/types";
 import {
   Prisma,
+  PosSaleDisposition,
   PosSaleProductMode,
   ValidationStatus,
   UserRole,
@@ -84,7 +96,10 @@ import {
 import { revalidatePath } from "next/cache";
 
 function formatPrintQty(value: Prisma.Decimal): string {
-  return value.toDecimalPlaces(3).toString().replace(/\.?0+$/, "");
+  const s = value.toDecimalPlaces(3).toString();
+  if (!s.includes(".")) return s;
+  const trimmed = s.replace(/0+$/, "").replace(/\.$/, "");
+  return trimmed || "0";
 }
 
 function saleLineUsesUnits(
@@ -144,6 +159,7 @@ export type LoadedSaleView = {
   dateIssuedIso: string;
   deliveryOrderNo: string | null;
   saleProductMode: PosSaleProductMode | null;
+  saleDisposition: PosSaleDisposition | null;
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
@@ -213,6 +229,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const customerIdRaw = String(formData.get("customerId") ?? "").trim();
   const useWalkIn = String(formData.get("useWalkInCustomer") ?? "") === "1";
   const walkInCustomerName = String(formData.get("walkInCustomerName") ?? "").trim();
+  const typedCustomerName = String(formData.get("typedCustomerName") ?? "").trim();
   const referenceNumberRaw = String(formData.get("referenceNumber") ?? "").trim();
   const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
   const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
@@ -220,6 +237,9 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const paymentsJson = String(formData.get("payments") ?? "[]");
   const saleProductModeRaw = parseSaleProductMode(
     String(formData.get("saleProductMode") ?? ""),
+  );
+  const saleDisposition = parseSaleDisposition(
+    String(formData.get("saleDisposition") ?? ""),
   );
 
   const lines = JSON.parse(linesJson) as PosLineInput[];
@@ -271,20 +291,35 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   );
   if (modeErr) return { ok: false, error: modeErr };
 
+  const dispositionErr = assertDispositionForSaleMode(
+    saleDisposition,
+    saleProductMode,
+  );
+  if (dispositionErr) return { ok: false, error: dispositionErr };
+
   const isBottleMode = saleProductMode === PosSaleProductMode.BOTTLE;
+  const skipDo = isBottleMode || isNoDeliveryOrderDisposition(saleDisposition);
+  const skipTax = isBottleMode || isNoTaxDisposition(saleDisposition);
+  const skipPayment = isNonPaymentDisposition(saleDisposition);
   const referenceNumber = isBottleMode ? null : referenceNumberRaw || null;
-  const deliveryOrderNo = isBottleMode ? null : deliveryOrderNoRaw || null;
+  const deliveryOrderNo = skipDo ? null : deliveryOrderNoRaw || null;
   const vehicleNumber = isBottleMode
     ? vehicleNumberRaw || BOTTLE_VEHICLE_PLACEHOLDER
     : vehicleNumberRaw;
 
-  if (!isBottleMode && !deliveryOrderNo) {
+  if (!skipDo && !deliveryOrderNo) {
     return { ok: false, error: "Delivery Order number is required." };
   }
   if (!isBottleMode && !vehicleNumber) {
     return { ok: false, error: "Vehicle number is required." };
   }
-  if (isBottleMode && useWalkIn) {
+  const usesTypedCustomerName =
+    saleDisposition === "RATION" || saleDisposition === "PUBLIC_RELATION";
+  if (usesTypedCustomerName) {
+    if (!typedCustomerName) {
+      return { ok: false, error: "Enter the customer name." };
+    }
+  } else if (isBottleMode && useWalkIn) {
     if (!walkInCustomerName) {
       return { ok: false, error: "Enter the walk-in customer name." };
     }
@@ -297,7 +332,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   if (csOpErr) return { ok: false, error: csOpErr };
 
   if (!Array.isArray(lines) || lines.length === 0) return { ok: false, error: "Add at least one line." };
-  if (!Array.isArray(payments) || payments.length === 0)
+  if (!skipPayment && (!Array.isArray(payments) || payments.length === 0))
     return { ok: false, error: "Add at least one payment." };
 
   const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
@@ -307,19 +342,67 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     name: string;
     taxpayerId: string | null;
     taxRegimeId: string | null;
-    customerType: import("@prisma/client").CustomerType;
+    customerTypeId: string;
     commercialServiceId: string;
   };
   let customerNameSnapshot: string;
 
-  if (isBottleMode && useWalkIn) {
-    const walkIn = await getOrCreateWalkInCustomer(prisma, commercialService.id);
+  if (saleDisposition === "RATION") {
+    const workerTypeId = await getCustomerTypeIdByCode("WORKER");
+    if (!workerTypeId) {
+      return { ok: false, error: "Worker customer type is not configured." };
+    }
+    const placeholder = await getOrCreatePosPlaceholderCustomer(
+      prisma,
+      commercialService.id,
+      RATION_POS_CUSTOMER_NAME,
+      workerTypeId,
+    );
+    customer = {
+      id: placeholder.id,
+      name: placeholder.name,
+      taxpayerId: null,
+      taxRegimeId: null,
+      customerTypeId: placeholder.customerTypeId,
+      commercialServiceId: commercialService.id,
+    };
+    customerNameSnapshot = typedCustomerName;
+  } else if (saleDisposition === "PUBLIC_RELATION") {
+    const workerTypeId = await getCustomerTypeIdByCode("WORKER");
+    if (!workerTypeId) {
+      return { ok: false, error: "Worker customer type is not configured." };
+    }
+    const placeholder = await getOrCreatePosPlaceholderCustomer(
+      prisma,
+      commercialService.id,
+      PUBLIC_RELATION_POS_CUSTOMER_NAME,
+      workerTypeId,
+    );
+    customer = {
+      id: placeholder.id,
+      name: placeholder.name,
+      taxpayerId: null,
+      taxRegimeId: null,
+      customerTypeId: placeholder.customerTypeId,
+      commercialServiceId: commercialService.id,
+    };
+    customerNameSnapshot = typedCustomerName;
+  } else if (isBottleMode && useWalkIn) {
+    const retailCustomerTypeId = await getCustomerTypeIdByCode("RETAIL");
+    if (!retailCustomerTypeId) {
+      return { ok: false, error: "Retail customer type is not configured." };
+    }
+    const walkIn = await getOrCreateWalkInCustomer(
+      prisma,
+      commercialService.id,
+      retailCustomerTypeId,
+    );
     customer = {
       id: walkIn.id,
       name: walkIn.name,
       taxpayerId: null,
       taxRegimeId: null,
-      customerType: "RETAIL",
+      customerTypeId: walkIn.customerTypeId,
       commercialServiceId: commercialService.id,
     };
     customerNameSnapshot = walkInCustomerName;
@@ -331,7 +414,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         name: true,
         taxpayerId: true,
         taxRegimeId: true,
-        customerType: true,
+        customerTypeId: true,
         commercialServiceId: true,
       },
     });
@@ -427,16 +510,23 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
         if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
         qtyUnits = null;
       }
-      const priced = isBottleMode
-        ? await resolveBottledUnitPriceExTax(prisma, productId, soldAt)
-        : await resolveUnitPriceExTax(
-            prisma,
-            productId,
-            customer.customerType,
-            soldAt,
-          );
-      if (!priced.ok) throw new Error(priced.error);
-      const price = money2(priced.unitPriceExTax);
+      let price: Prisma.Decimal;
+      if (saleDisposition === "PUBLIC_RELATION") {
+        price = d(0);
+      } else if (isBottleMode && saleDisposition !== "RATION") {
+        const priced = await resolveBottledUnitPriceExTax(prisma, productId, soldAt);
+        if (!priced.ok) throw new Error(priced.error);
+        price = money2(priced.unitPriceExTax);
+      } else {
+        const priced = await resolveUnitPriceExTax(
+          prisma,
+          productId,
+          customer.customerTypeId,
+          soldAt,
+        );
+        if (!priced.ok) throw new Error(priced.error);
+        price = money2(priced.unitPriceExTax);
+      }
 
       if (price.lt(0)) throw new Error("Unit price must be >= 0.");
       const lineQty = isBottled ? qtyUnits! : qtyKg;
@@ -535,7 +625,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   let vatRateSnapshot = d(0);
   let gross = net;
 
-  if (isBottleMode) {
+  if (skipTax) {
     gross = money2(net);
   } else {
     const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
@@ -560,7 +650,7 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   let lineVatRunning = d(0);
   const lineCreates = preparedLines.map((l, idx) => {
     let lineVat = d(0);
-    if (!isBottleMode) {
+    if (!skipTax) {
       const isLast = idx === preparedLines.length - 1;
       if (net.lte(0)) {
         lineVat = d(0);
@@ -594,43 +684,45 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     traiteIssuedOn: Date | null;
     traiteMaturityOn: Date | null;
   }> = [];
-  try {
-    preparedPayments = await Promise.all(
-      payments
-        .filter((p) => d(p.amount).gt(0))
-        .map(async (p) => {
-          const amount = money2(d(p.amount));
-          if (amount.lte(0)) throw new Error("Payment amount must be > 0.");
+  if (!skipPayment) {
+    try {
+      preparedPayments = await Promise.all(
+        payments
+          .filter((p) => d(p.amount).gt(0))
+          .map(async (p) => {
+            const amount = money2(d(p.amount));
+            if (amount.lte(0)) throw new Error("Payment amount must be > 0.");
 
-          const paymentMethodId = String(p.paymentMethodId ?? "").trim();
-          if (!paymentMethodId) throw new Error("Payment method is required.");
+            const paymentMethodId = String(p.paymentMethodId ?? "").trim();
+            if (!paymentMethodId) throw new Error("Payment method is required.");
 
-          const methodRow = await assertPaymentMethodUsable(paymentMethodId);
-          if (methodRow.kind === "CREDIT") {
-            throw new Error("Credit payments cannot be created from this screen.");
-          }
+            const methodRow = await assertPaymentMethodUsable(paymentMethodId);
+            if (methodRow.kind === "CREDIT") {
+              throw new Error("Credit payments cannot be created from this screen.");
+            }
 
-          const fields = validatePaymentFields(
-            methodRow.kind as PaymentMethodKind,
-            p,
-            { normalizeIsoDateInput, noonUtcFromIsoDate },
-          );
+            const fields = validatePaymentFields(
+              methodRow.kind as PaymentMethodKind,
+              p,
+              { normalizeIsoDateInput, noonUtcFromIsoDate },
+            );
 
-          paidTotal = paidTotal.add(amount);
-          return {
-            paymentMethodId: methodRow.id,
-            amount,
-            ...fields,
-          };
-        }),
-    );
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid payments." };
-  }
+            paidTotal = paidTotal.add(amount);
+            return {
+              paymentMethodId: methodRow.id,
+              amount,
+              ...fields,
+            };
+          }),
+      );
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Invalid payments." };
+    }
 
-  if (preparedPayments.length === 0) return { ok: false, error: "Payment amount must be > 0." };
-  if (!paidTotal.equals(gross)) {
-    return { ok: false, error: "No credit sales: payment total must equal gross amount." };
+    if (preparedPayments.length === 0) return { ok: false, error: "Payment amount must be > 0." };
+    if (!paidTotal.equals(gross)) {
+      return { ok: false, error: "No credit sales: payment total must equal gross amount." };
+    }
   }
 
   const invoiceNo = await allocateInvoiceNo(prisma, commercialService.id, soldAt);
@@ -658,9 +750,10 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
             dateIssued: soldAt,
             deliveryOrderNo,
             saleProductMode,
+            saleDisposition,
             status: ValidationStatus.PENDING,
             customerNameSnapshot,
-            taxRegimeId: isBottleMode ? null : customer.taxRegimeId,
+            taxRegimeId: skipTax ? null : customer.taxRegimeId,
             vatRateSnapshot,
             netAmount: net,
             vatAmount,
@@ -674,18 +767,20 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
             commercialServiceNameSnapshot: commercialService.name,
             appliedTaxes: { create: appliedTaxCreates },
             lines: { create: lineCreates },
-            payments: {
-              create: preparedPayments.map((p) => ({
-                paymentMethodId: p.paymentMethodId,
-                amount: p.amount,
-                chequeNo: p.chequeNo,
-                bank: p.bank,
-                traiteNo: p.traiteNo,
-                traiteIssuedOn: p.traiteIssuedOn,
-                traiteMaturityOn: p.traiteMaturityOn,
-                paidAt: soldAt,
-              })),
-            },
+            payments: skipPayment
+              ? undefined
+              : {
+                  create: preparedPayments.map((p) => ({
+                    paymentMethodId: p.paymentMethodId,
+                    amount: p.amount,
+                    chequeNo: p.chequeNo,
+                    bank: p.bank,
+                    traiteNo: p.traiteNo,
+                    traiteIssuedOn: p.traiteIssuedOn,
+                    traiteMaturityOn: p.traiteMaturityOn,
+                    paidAt: soldAt,
+                  })),
+                },
           },
           select: { id: true, invoiceNo: true, soldAt: true },
         });
@@ -977,6 +1072,7 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
     customerId: row.customerId,
     customerName: row.customerNameSnapshot,
     saleProductMode: row.saleProductMode,
+    saleDisposition: row.saleDisposition,
     taxpayerId: row.customer.taxpayerId,
     vatApplies:
       row.appliedTaxes.length > 0
@@ -1229,6 +1325,7 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
       commercialServiceId: true,
       deliveryOrderNo: true,
       saleProductMode: true,
+      saleDisposition: true,
       soldAt: true,
       lines: {
         select: {
@@ -1367,6 +1464,7 @@ export async function loadSalePrintById(
       : (sale.customer.taxRegime?.vatApplies ?? false);
 
   const isBottleSale = sale.saleProductMode === PosSaleProductMode.BOTTLE;
+  const saleDisposition = sale.saleDisposition;
   const isWalkInCustomer =
     sale.customer.name.trim().toLowerCase() ===
     WALK_IN_CUSTOMER_NAME.toLowerCase();
@@ -1387,6 +1485,7 @@ export async function loadSalePrintById(
     taxpayerId: sale.customer.taxpayerId,
     vatApplies: vatAppliesSnapshot,
     isBottleSale,
+    saleDisposition,
     appliedTaxLines,
     lines: sale.lines.map((l, idx) => {
       const useUnits = saleLineUsesUnits(sale.saleProductMode, l);

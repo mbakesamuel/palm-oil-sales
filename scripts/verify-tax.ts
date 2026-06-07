@@ -147,12 +147,28 @@ async function main() {
       });
     }
 
+    const retailTypeId = (
+      await prisma.customerTypeDefinition.findUnique({
+        where: { code: "RETAIL" },
+        select: { id: true },
+      })
+    )?.id;
+    const industryTypeId = (
+      await prisma.customerTypeDefinition.findUnique({
+        where: { code: "INDUSTRY" },
+        select: { id: true },
+      })
+    )?.id;
+    if (!retailTypeId || !industryTypeId) {
+      throw new Error("Built-in customer types RETAIL/INDUSTRY are not configured.");
+    }
+
     // Create customers to validate resolver outcomes
     const c1 = await prisma.customer.create({
       data: {
         commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_Simplified_WithTPN",
-        customerType: "RETAIL",
+        customerTypeId: retailTypeId,
         residency: "LOCAL",
         taxRegimeId: simplifiedRegime.id,
         hasTaxpayerId: true,
@@ -166,7 +182,7 @@ async function main() {
       data: {
         commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_Real_Regime",
-        customerType: "RETAIL",
+        customerTypeId: retailTypeId,
         residency: "LOCAL",
         taxRegimeId: realRegime.id,
         hasTaxpayerId: true,
@@ -180,7 +196,7 @@ async function main() {
       data: {
         commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_No_Regime",
-        customerType: "RETAIL",
+        customerTypeId: retailTypeId,
         residency: "LOCAL",
         taxRegimeId: null,
         hasTaxpayerId: false,
@@ -194,7 +210,7 @@ async function main() {
       data: {
         commercialServiceId: defaultLine.id,
         name: "__tax_verify__Local_Industry",
-        customerType: "INDUSTRY",
+        customerTypeId: industryTypeId,
         residency: "LOCAL",
         taxRegimeId: simplifiedRegime.id,
         hasTaxpayerId: true,

@@ -36,7 +36,7 @@ const operationsNav = [
     label: "DO validation queue",
   },
   { href: "/consignment-notes", label: "Vehicle Consignment" },
-  { href: "/pos", label: "Sales Invoice" },
+  { href: "/pos", label: "Sales/Invoice" },
   { href: "/pos/list", label: "Sales list" },
   { href: "/stock", label: "Stock" },
 ] as const;
@@ -120,7 +120,8 @@ export default async function AppLayout({
             </div>
           </div>
           <AppShellFooter line={footerLine} />
-        </div>      </WorkingPeriodProvider>
+        </div>{" "}
+      </WorkingPeriodProvider>
     </BrandingProvider>
   );
 }

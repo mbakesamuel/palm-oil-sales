@@ -1,11 +1,13 @@
-import { CustomerType } from "@/lib/domain";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
+import { customerTypeSortRank } from "@/lib/customer-types/types";
 
 export type PricingScheduleRow = {
   id: string;
   productId: number;
   productName: string;
   productCatId: number;
-  customerType: string | null;
+  customerTypeId: string | null;
+  customerTypeName: string | null;
   effectiveFromIso: string;
   unitPriceExTax: string;
 };
@@ -18,40 +20,43 @@ export type PricingProductGroup = {
   rows: PricingScheduleRow[];
 };
 
-export function labelCustomerType(ct: string | null): string {
+export function labelCustomerTypeRow(row: {
+  customerTypeId: string | null;
+  customerTypeName?: string | null;
+}): string {
+  if (!row.customerTypeId) return "Direct price";
+  return row.customerTypeName?.trim() || row.customerTypeId;
+}
+
+/** @deprecated Use labelCustomerTypeRow — kept for string code/id fallbacks. */
+export function labelCustomerType(
+  ct: string | null,
+  options?: CustomerTypeOption[],
+): string {
   if (!ct) return "Direct price";
+  const byId = options?.find((o) => o.id === ct);
+  if (byId) return byId.name;
+  const byCode = options?.find((o) => o.code === ct);
+  if (byCode) return byCode.name;
   switch (ct) {
-    case CustomerType.INDUSTRY:
+    case "INDUSTRY":
       return "Industry";
-    case CustomerType.WHOLE_SALE:
+    case "WHOLE_SALE":
       return "Wholesale";
-    case CustomerType.RETAIL:
+    case "RETAIL":
       return "Retail";
-    case CustomerType.WORKER:
+    case "WORKER":
       return "Worker";
     default:
       return ct;
   }
 }
 
-/** Stable ordering for customer-type rows within a product group. */
-const CUSTOMER_TYPE_RANK: Record<string, number> = {
-  [CustomerType.INDUSTRY]: 0,
-  [CustomerType.WHOLE_SALE]: 1,
-  [CustomerType.RETAIL]: 2,
-  [CustomerType.WORKER]: 3,
-};
-
-function customerTypeRank(ct: string | null): number {
-  if (!ct) return -1;
-  return CUSTOMER_TYPE_RANK[ct] ?? 99;
-}
-
 /** Reduces a flat list of price-schedule rows to the latest row per (product, customerType). */
 export function pickLatestPricingRows<T extends PricingScheduleRow>(rows: T[]): T[] {
   const bestByKey = new Map<string, T>();
   for (const r of rows) {
-    const k = `${r.productId}:${r.customerType ?? ""}`;
+    const k = `${r.productId}:${r.customerTypeId ?? ""}`;
     const prev = bestByKey.get(k);
     if (!prev) {
       bestByKey.set(k, r);
@@ -62,7 +67,10 @@ export function pickLatestPricingRows<T extends PricingScheduleRow>(rows: T[]): 
   return [...bestByKey.values()];
 }
 
-export function buildPricingGroups(rows: PricingScheduleRow[]): PricingProductGroup[] {
+export function buildPricingGroups(
+  rows: PricingScheduleRow[],
+  customerTypeOptions: CustomerTypeOption[] = [],
+): PricingProductGroup[] {
   const byProduct = new Map<number, PricingProductGroup>();
   for (const r of rows) {
     const existing = byProduct.get(r.productId);
@@ -83,7 +91,9 @@ export function buildPricingGroups(rows: PricingScheduleRow[]): PricingProductGr
   const groups = [...byProduct.values()];
   for (const g of groups) {
     g.rows.sort(
-      (a, b) => customerTypeRank(a.customerType) - customerTypeRank(b.customerType),
+      (a, b) =>
+        customerTypeSortRank(a.customerTypeId, customerTypeOptions) -
+        customerTypeSortRank(b.customerTypeId, customerTypeOptions),
     );
   }
   groups.sort((a, b) =>

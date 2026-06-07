@@ -11,6 +11,7 @@ const MOBILE_ROUTE_PERMISSIONS: Array<{ prefix: string; key: PermissionKey }> = 
   { prefix: "/api/mobile/v1/reports/stock-inquiry", key: "route:/reports/stock-inquiry" },
   { prefix: "/api/mobile/v1/reports/daily-sales-summary", key: "route:/reports/daily-sales-summary" },
   { prefix: "/api/mobile/v1/reports/commitments", key: "route:/reports/do-commitment-crosstab" },
+  { prefix: "/api/mobile/v1/reports/bota-bottle-stock", key: "route:/reports/bota-bottle-stock" },
   {
     prefix: "/api/mobile/v1/validation/delivery-orders/validate-reviewed",
     key: "ui:validate-delivery-orders",

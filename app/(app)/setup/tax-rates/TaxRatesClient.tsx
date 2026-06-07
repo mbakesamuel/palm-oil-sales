@@ -18,6 +18,22 @@ type SalesTaxSection = {
   history: ScheduleRow[];
 };
 
+const inputClass =
+  "h-8 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm";
+const labelClass = "text-xs font-medium";
+const hintClass = "text-[11px] opacity-70 mt-0.5";
+const fieldRowClass = "flex items-start gap-2";
+const fieldLabelClass = [
+  labelClass,
+  "shrink-0 w-[7.25rem] h-8",
+  "flex items-center justify-end px-2",
+  "rounded-md border border-border",
+  "bg-sidebar text-sidebar-foreground",
+].join(" ");
+const fieldControlClass = "min-w-0 flex-1";
+const formActionsClass =
+  "flex flex-wrap items-center justify-end gap-2 pt-1 pl-[7.25rem]";
+
 export function TaxRatesClient(props: {
   vatCurrentPercent: string | null;
   vatHistory: ScheduleRow[];
@@ -40,12 +56,16 @@ export function TaxRatesClient(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Tax rates</h1>
         <p className="text-sm opacity-75">
-          Schedule VAT and sales tax rates with effective dates. POS and delivery orders use the
-          rate in force on the transaction date. Assign customers to regimes under{" "}
+          Set VAT and sales tax percentages with effective dates. This is the only
+          place to change rates for the built-in{" "}
+          <span className="font-medium">VAT</span> and{" "}
+          <span className="font-medium">Sales tax</span> types. POS and delivery
+          orders use the rate in force on the transaction date. Link taxes to
+          regimes on{" "}
           <Link href="/tax-regimes" className="underline underline-offset-4">
             Tax regimes
-          </Link>{" "}
-          and{" "}
+          </Link>
+          ; assign customers on{" "}
           <Link href="/customers" className="underline underline-offset-4">
             Customers
           </Link>
@@ -70,41 +90,48 @@ export function TaxRatesClient(props: {
           )}
         </div>
 
-        <form
-          action={saveVatRateAction}
-          className="grid gap-3 sm:grid-cols-2 max-w-xl"
-        >
-          <div className="grid gap-1">
-            <label className="text-sm font-medium" htmlFor="vat-rate">
-              New rate (%)
+        <form action={saveVatRateAction} className="max-w-xl space-y-1.5">
+          <div className={fieldRowClass}>
+            <label className={fieldLabelClass} htmlFor="vat-rate">
+              New rate
             </label>
-            <input
-              id="vat-rate"
-              name="ratePercent"
-              type="text"
-              inputMode="decimal"
-              placeholder={vatCurrentPercent ?? "19.25"}
-              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-              required
-            />
+            <div className={fieldControlClass}>
+              <div className="flex h-8 items-center gap-2">
+                <input
+                  id="vat-rate"
+                  name="ratePercent"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={vatCurrentPercent ?? "19.25"}
+                  className={`${inputClass} max-w-28`}
+                  required
+                />
+                <span className="text-xs opacity-70 shrink-0">%</span>
+              </div>
+              <p className={hintClass}>Percentage applied to eligible local sales.</p>
+            </div>
           </div>
-          <div className="grid gap-1">
-            <label className="text-sm font-medium" htmlFor="vat-effective">
-              Effective from
+
+          <div className={fieldRowClass}>
+            <label className={fieldLabelClass} htmlFor="vat-effective">
+              Effective
             </label>
-            <input
-              id="vat-effective"
-              name="effectiveFrom"
-              type="date"
-              defaultValue={today}
-              className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-            />
-            <p className="text-[11px] opacity-70">Leave blank on General Parameters = today.</p>
+            <div className={fieldControlClass}>
+              <input
+                id="vat-effective"
+                name="effectiveFrom"
+                type="date"
+                defaultValue={today}
+                className={`${inputClass} max-w-44`}
+              />
+              <p className={hintClass}>Leave blank to use today.</p>
+            </div>
           </div>
-          <div className="sm:col-span-2">
+
+          <div className={formActionsClass}>
             <button
               type="submit"
-              className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
+              className="rounded-md bg-brand text-brand-foreground px-3 py-1.5 text-xs font-medium"
             >
               Save VAT rate
             </button>
@@ -145,36 +172,55 @@ export function TaxRatesClient(props: {
               )}
             </div>
 
-            <form
-              action={saveSalesTaxRateAction}
-              className="grid gap-3 sm:grid-cols-2 max-w-xl"
-            >
+            <form action={saveSalesTaxRateAction} className="max-w-xl space-y-1.5">
               <input type="hidden" name="variant" value={section.variant} />
-              <div className="grid gap-1">
-                <label className="text-sm font-medium">New rate (%)</label>
-                <input
-                  name="ratePercent"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder={section.currentRatePercent ?? "5"}
-                  className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-                  required
-                />
+
+              <div className={fieldRowClass}>
+                <label
+                  className={fieldLabelClass}
+                  htmlFor={`sat-rate-${section.variant}`}
+                >
+                  New rate
+                </label>
+                <div className={fieldControlClass}>
+                  <div className="flex h-8 items-center gap-2">
+                    <input
+                      id={`sat-rate-${section.variant}`}
+                      name="ratePercent"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder={section.currentRatePercent ?? "5"}
+                      className={`${inputClass} max-w-28`}
+                      required
+                    />
+                    <span className="text-xs opacity-70 shrink-0">%</span>
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-1">
-                <label className="text-sm font-medium">Effective from</label>
-                <input
-                  name="effectiveFrom"
-                  type="date"
-                  defaultValue={today}
-                  className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
-                  required
-                />
+
+              <div className={fieldRowClass}>
+                <label
+                  className={fieldLabelClass}
+                  htmlFor={`sat-effective-${section.variant}`}
+                >
+                  Effective
+                </label>
+                <div className={fieldControlClass}>
+                  <input
+                    id={`sat-effective-${section.variant}`}
+                    name="effectiveFrom"
+                    type="date"
+                    defaultValue={today}
+                    className={`${inputClass} max-w-44`}
+                    required
+                  />
+                </div>
               </div>
-              <div className="sm:col-span-2">
+
+              <div className={formActionsClass}>
                 <button
                   type="submit"
-                  className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
+                  className="rounded-md bg-brand text-brand-foreground px-3 py-1.5 text-xs font-medium"
                 >
                   Save rate
                 </button>
@@ -189,11 +235,11 @@ export function TaxRatesClient(props: {
       </section>
 
       <p className="text-xs opacity-70">
-        Advanced: manage additional tax types and raw schedule rows under{" "}
+        Need another levy beyond VAT and sales tax? Add the tax type under{" "}
         <Link href="/tax-types" className="underline underline-offset-4">
           Tax types
         </Link>
-        .
+        , schedule its rates there, then link it to regimes.
       </p>
     </div>
   );

@@ -1,7 +1,7 @@
 import "server-only";
 
-import type { CustomerType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { getCustomerTypeIdByCode } from "@/lib/customer-types/catalog";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaDateToIso } from "@/lib/posting-calendar";
 
@@ -9,12 +9,12 @@ export type PrismaForPricing = ReturnType<typeof getPrismaClient>;
 
 /**
  * Latest schedule row with effectiveFrom <= transaction calendar day (UTC).
- * Bottled products use a single direct price (customerType null).
+ * Bottled products use a single direct price (customerTypeId null).
  */
 export async function resolveUnitPriceExTax(
   prisma: PrismaForPricing,
   productId: number,
-  customerType: CustomerType,
+  customerTypeId: string,
   asOfDate: Date,
 ): Promise<
   | { ok: true; unitPriceExTax: Prisma.Decimal; productName: string }
@@ -43,10 +43,10 @@ export async function resolveUnitPriceExTax(
       productId,
       effectiveFrom: { lte: asOfStartUtc },
       ...(isBottled
-        ? { customerType: null }
+        ? { customerTypeId: null }
         : isMainCategory
-          ? { customerType }
-          : { customerType: null }),
+          ? { customerTypeId }
+          : { customerTypeId: null }),
     },
     orderBy: { effectiveFrom: "desc" },
   });
@@ -59,9 +59,14 @@ export async function resolveUnitPriceExTax(
       };
     }
     if (isMainCategory) {
+      const typeDef = await prisma.customerTypeDefinition.findUnique({
+        where: { id: customerTypeId },
+        select: { name: true, code: true },
+      });
+      const typeLabel = typeDef?.name ?? typeDef?.code ?? customerTypeId;
       return {
         ok: false,
-        error: `No unit price scheduled for "${product.productName}" (${customerType}) on or before ${dayIso}. Add a price in Product pricing (setup).`,
+        error: `No unit price scheduled for "${product.productName}" (${typeLabel}) on or before ${dayIso}. Add a price in Product pricing (setup).`,
       };
     }
     return {
@@ -97,12 +102,11 @@ export async function resolveBottledUnitPriceExTax(
   if (product.productCat?.isBottled !== true) {
     return { ok: false, error: "Product is not a bottled SKU." };
   }
-  const r = await resolveUnitPriceExTax(
-    prisma,
-    productId,
-    "RETAIL" as CustomerType,
-    asOfDate,
-  );
+  const retailTypeId = await getCustomerTypeIdByCode("RETAIL");
+  if (!retailTypeId) {
+    return { ok: false, error: "Retail customer type is not configured." };
+  }
+  const r = await resolveUnitPriceExTax(prisma, productId, retailTypeId, asOfDate);
   if (!r.ok) return r;
   return { ok: true, unitPriceExTax: r.unitPriceExTax, productName: r.productName, productId };
 }

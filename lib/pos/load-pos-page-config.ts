@@ -1,11 +1,15 @@
 import "server-only";
 
+import { getCustomerTypeIdByCode } from "@/lib/customer-types/catalog";
 import { productWhereBottled, productWhereNotBottled } from "@/lib/product-form";
 import { getPrismaClient } from "@/lib/prisma";
 import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
 import type { AuthSession } from "@/lib/auth-session";
 import {
+  getOrCreatePosPlaceholderCustomer,
   getOrCreateWalkInCustomer,
+  PUBLIC_RELATION_POS_CUSTOMER_NAME,
+  RATION_POS_CUSTOMER_NAME,
   resolveBotaSalesPointId,
   resolveBottleOilStoreLocationId,
 } from "@/lib/pos/sale-product-mode";
@@ -19,9 +23,33 @@ export async function loadPosPageConfig(session: AuthSession, scope: ServiceScop
     session.userId,
   );
 
-  const [botaSalesPointId, walkIn, looseProducts, bottledProducts] = await Promise.all([
+  const [retailCustomerTypeId, workerCustomerTypeId] = await Promise.all([
+    getCustomerTypeIdByCode("RETAIL"),
+    getCustomerTypeIdByCode("WORKER"),
+  ]);
+  if (!retailCustomerTypeId) {
+    throw new Error("Retail customer type is not configured.");
+  }
+  if (!workerCustomerTypeId) {
+    throw new Error("Worker customer type is not configured.");
+  }
+
+  const [botaSalesPointId, walkIn, rationPlaceholder, publicRelationPlaceholder, looseProducts, bottledProducts] =
+    await Promise.all([
     resolveBotaSalesPointId(prisma),
-    getOrCreateWalkInCustomer(prisma, commercialService.id),
+    getOrCreateWalkInCustomer(prisma, commercialService.id, retailCustomerTypeId),
+    getOrCreatePosPlaceholderCustomer(
+      prisma,
+      commercialService.id,
+      RATION_POS_CUSTOMER_NAME,
+      workerCustomerTypeId,
+    ),
+    getOrCreatePosPlaceholderCustomer(
+      prisma,
+      commercialService.id,
+      PUBLIC_RELATION_POS_CUSTOMER_NAME,
+      workerCustomerTypeId,
+    ),
     prisma.product.findMany({
       where: { ...productWhere, ...productWhereNotBottled() },
       orderBy: [{ productName: "asc" }],
@@ -45,6 +73,8 @@ export async function loadPosPageConfig(session: AuthSession, scope: ServiceScop
     botaSalesPointId,
     bottleOilStoreLocationId,
     walkInCustomerId: walkIn.id,
+    rationCustomerId: rationPlaceholder.id,
+    publicRelationCustomerId: publicRelationPlaceholder.id,
     looseProducts,
     bottledProducts,
   };

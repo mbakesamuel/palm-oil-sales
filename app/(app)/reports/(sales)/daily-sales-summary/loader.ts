@@ -1,5 +1,10 @@
-import { CustomerType, Prisma, ValidationStatus } from "@prisma/client";
+import { Prisma, ValidationStatus } from "@prisma/client";
 import type { AuthSession } from "@/lib/auth-session";
+import {
+  listCustomerTypeDefinitions,
+  resolveDefaultCustomerTypeId,
+} from "@/lib/customer-types/catalog";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
 import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
@@ -21,9 +26,15 @@ export type DailySaleRow = {
   vehicleNumber: string;
   deliveryOrderNo: string | null;
   customerNameSnapshot: string;
-  customer: { customerType: CustomerType; name: string } | null;
+  customer: {
+    customerTypeId: string;
+    customerTypeDefinition: CustomerTypeOption;
+    name: string;
+  } | null;
   qtyKg: Prisma.Decimal;
-  customerType: CustomerType;
+  customerTypeId: string;
+  customerTypeCode: string;
+  customerTypeName: string;
 };
 
 export type DailySummaryReportData = {
@@ -43,8 +54,9 @@ export type DailySummaryReportData = {
   dateToIso: string | null;
   dateInvalid: boolean;
   rangeInvalid: boolean;
+  customerTypeOptions: CustomerTypeOption[];
   rows: DailySaleRow[];
-  totalsByType: Map<CustomerType, Prisma.Decimal>;
+  totalsByType: Map<string, Prisma.Decimal>;
   grandQty: Prisma.Decimal;
   doMetaByNo: Map<string, { dateIssued: Date; balanceKg: Prisma.Decimal }>;
 };
@@ -178,10 +190,13 @@ export async function loadDailySalesSummary(
       ? { date: rawParams }
       : (rawParams ?? {});
 
-  const [{ monthFilter, hasOpenFy }, prisma] = await Promise.all([
-    resolveReportWorkingMonthFilter(),
-    getPrismaClient(),
-  ]);
+  const [{ monthFilter, hasOpenFy }, prisma, customerTypeOptions, defaultCustomerTypeId] =
+    await Promise.all([
+      resolveReportWorkingMonthFilter(),
+      getPrismaClient(),
+      listCustomerTypeDefinitions({ activeOnly: true }),
+      resolveDefaultCustomerTypeId(),
+    ]);
 
   const monthFirstIso = monthFilter
     ? firstDayOfCalendarMonth(
@@ -226,7 +241,11 @@ export async function loadDailySalesSummary(
     vehicleNumber: string;
     deliveryOrderNo: string | null;
     customerNameSnapshot: string;
-    customer: { customerType: CustomerType; name: string } | null;
+    customer: {
+      customerTypeId: string;
+      customerTypeDefinition: CustomerTypeOption;
+      name: string;
+    } | null;
     lines: Array<{ qtyKg: Prisma.Decimal }>;
   }> = [];
 
@@ -254,7 +273,13 @@ export async function loadDailySalesSummary(
           vehicleNumber: true,
           deliveryOrderNo: true,
           customerNameSnapshot: true,
-          customer: { select: { customerType: true, name: true } },
+          customer: {
+            select: {
+              customerTypeId: true,
+              name: true,
+              customerTypeDefinition: { select: { id: true, code: true, name: true } },
+            },
+          },
           lines: { select: { qtyKg: true } },
         },
       }),
@@ -318,17 +343,27 @@ export async function loadDailySalesSummary(
     }
   }
 
-  const rows: DailySaleRow[] = sales.map((s) => ({
-    ...s,
-    qtyKg: s.lines.reduce((a, l) => a.add(l.qtyKg), z),
-    customerType: s.customer?.customerType ?? CustomerType.INDUSTRY,
-  }));
+  const defaultType =
+    customerTypeOptions.find((o) => o.id === defaultCustomerTypeId) ??
+    customerTypeOptions[0];
 
-  const totalsByType = new Map<CustomerType, Prisma.Decimal>();
+  const rows: DailySaleRow[] = sales.map((s) => {
+    const typeDef = s.customer?.customerTypeDefinition ?? defaultType;
+    const customerTypeId = s.customer?.customerTypeId ?? defaultCustomerTypeId;
+    return {
+      ...s,
+      qtyKg: s.lines.reduce((a, l) => a.add(l.qtyKg), z),
+      customerTypeId,
+      customerTypeCode: typeDef?.code ?? "INDUSTRY",
+      customerTypeName: typeDef?.name ?? "Industry",
+    };
+  });
+
+  const totalsByType = new Map<string, Prisma.Decimal>();
   for (const r of rows) {
     totalsByType.set(
-      r.customerType,
-      (totalsByType.get(r.customerType) ?? z).add(r.qtyKg),
+      r.customerTypeId,
+      (totalsByType.get(r.customerTypeId) ?? z).add(r.qtyKg),
     );
   }
   const grandQty = rows.reduce((a, r) => a.add(r.qtyKg), z);
@@ -346,26 +381,13 @@ export async function loadDailySalesSummary(
     dateToIso,
     dateInvalid,
     rangeInvalid,
+    customerTypeOptions,
     rows,
     totalsByType,
     grandQty,
     doMetaByNo,
   };
 }
-
-export const DAILY_SALES_CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
-  [CustomerType.INDUSTRY]: "Industry",
-  [CustomerType.WHOLE_SALE]: "Whole sale",
-  [CustomerType.RETAIL]: "Retail",
-  [CustomerType.WORKER]: "Worker",
-};
-
-export const DAILY_SALES_TYPE_ORDER: CustomerType[] = [
-  CustomerType.INDUSTRY,
-  CustomerType.WHOLE_SALE,
-  CustomerType.RETAIL,
-  CustomerType.WORKER,
-];
 
 export function fmtKg(d: Prisma.Decimal): string {
   const n = Number(d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP));

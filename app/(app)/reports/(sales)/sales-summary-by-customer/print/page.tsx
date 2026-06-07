@@ -112,6 +112,7 @@ export default async function SalesSummaryByCustomerPrintPage(props: {
             <ProductCustomerSummaryTable
               key={block.productId}
               block={block}
+              customerTypeOptions={data.customerTypeOptions}
               compact
             />
           ))}
@@ -119,6 +120,7 @@ export default async function SalesSummaryByCustomerPrintPage(props: {
             <GrandCustomerSummaryTable
               grandByType={data.grandByType}
               grandTotal={data.grandTotal}
+              customerTypeOptions={data.customerTypeOptions}
               grandBudgetVsActual={data.grandBudgetVsActual}
             />
           ) : null}
