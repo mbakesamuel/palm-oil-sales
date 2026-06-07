@@ -17,12 +17,24 @@ export function canValidateDeliveryOrdersOnMobile(
   return hasPermission("ui:validate-delivery-orders");
 }
 
+/** Supervisors validate pending vehicle consignment notes prepared by clerks. */
+export function canValidateConsignmentOnMobile(
+  hasPermission: (key: string) => boolean,
+  session: MobileSessionPayload | null,
+) {
+  if (!hasPermission("route:/consignment-notes")) return false;
+  if (!session) return false;
+  return session.role === "SUPERVISOR" || session.role === "ADMIN";
+}
+
 export function canOpenMobileApprovals(
   hasPermission: (key: string) => boolean,
+  session?: MobileSessionPayload | null,
 ) {
   return (
     canValidateSalesOnMobile(hasPermission) ||
-    canValidateDeliveryOrdersOnMobile(hasPermission)
+    canValidateDeliveryOrdersOnMobile(hasPermission) ||
+    canValidateConsignmentOnMobile(hasPermission, session ?? null)
   );
 }
 
@@ -30,19 +42,33 @@ export function mobileValidationScreenHint(
   session: MobileSessionPayload | null,
   hasPermission: (key: string) => boolean,
 ): string {
-  if (
-    canValidateDeliveryOrdersOnMobile(hasPermission) &&
-    !canValidateSalesOnMobile(hasPermission)
-  ) {
+  const canSales = canValidateSalesOnMobile(hasPermission);
+  const canDos = canValidateDeliveryOrdersOnMobile(hasPermission);
+  const canConsignment = canValidateConsignmentOnMobile(hasPermission, session);
+
+  if (canDos && !canSales && !canConsignment) {
     return "Managers validate delivery orders only. Open a DO, mark it reviewed, then validate.";
   }
-  if (session && canValidateSalesOnMobile(hasPermission)) {
+  if (canConsignment && !canSales && !canDos) {
+    return session?.salesPoint
+      ? `Supervisor: validate vehicle consignment notes for ${session.salesPoint.name}.`
+      : "Supervisor: validate pending vehicle consignment notes.";
+  }
+  if (session && canSales) {
     return pendingSalesValidationHint({
       role: session.role,
       commercialServiceRoleCode: session.commercialServiceRole?.code,
     });
   }
   return "Open each item to review lines and totals before validating.";
+}
+
+export function mobilePendingConsignmentEmptyHint(
+  session: MobileSessionPayload | null,
+): string {
+  return session?.salesPoint
+    ? `No pending vehicle consignment notes at ${session.salesPoint.name}.`
+    : "No pending vehicle consignment notes.";
 }
 
 export function mobilePendingSalesEmptyHint(
