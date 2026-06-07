@@ -78,6 +78,45 @@ export type MobileSaleDetail = {
   }>;
 };
 
+export type MobilePendingConsignmentRow = {
+  id: string;
+  consignmentNoteNo: string;
+  invoiceNo: string;
+  customerName: string;
+  destination: string;
+  vehicleNumber: string;
+  dateOfConsignmentIso: string;
+  salesPointName: string | null;
+};
+
+export type MobileConsignmentDetail = {
+  id: string;
+  consignmentNoteNo: string;
+  status: string;
+  invoiceNo: string;
+  customerName: string;
+  salesPointName: string | null;
+  destination: string;
+  vehicleNumber: string;
+  dateOfLiftingIso: string;
+  dateOfConsignmentIso: string;
+  consignerName: string;
+  consignerDesignation: string;
+  receiverName: string;
+  receiverNicNo: string;
+  receiverNicPlaceOfIssue: string;
+  receivedDateIso: string | null;
+  deliveryOrderNo: string | null;
+  createdByName: string;
+  validatedByName: string | null;
+  validatedAtIso: string | null;
+  lines: Array<{
+    lineNo: number;
+    productName: string;
+    qtyKg: string;
+  }>;
+};
+
 export type MobileDeliveryOrderDetail = {
   id: number;
   deliveryOrderNo: string;

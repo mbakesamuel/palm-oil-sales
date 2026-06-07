@@ -9,6 +9,10 @@ export default function ValidationLayout() {
       <Stack.Screen name="index" options={{ title: "Approvals" }} />
       <Stack.Screen name="sale/[id]" options={{ title: "Review sale" }} />
       <Stack.Screen name="do/[id]" options={{ title: "Review delivery order" }} />
+      <Stack.Screen
+        name="consignment/[id]"
+        options={{ title: "Review consignment" }}
+      />
     </Stack>
   );
 }

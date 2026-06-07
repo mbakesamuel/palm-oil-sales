@@ -21,6 +21,10 @@ const MOBILE_ROUTE_PERMISSIONS: Array<{ prefix: string; key: PermissionKey }> = 
     key: "ui:validate-delivery-orders",
   },
   { prefix: "/api/mobile/v1/validation/delivery-orders", key: "ui:validate-delivery-orders" },
+  {
+    prefix: "/api/mobile/v1/validation/consignment-notes",
+    key: "route:/consignment-notes",
+  },
   { prefix: "/api/mobile/v1/stock/receipts", key: "route:/stock" },
   { prefix: "/api/mobile/v1/stock/transfers", key: "route:/stock" },
   { prefix: "/api/mobile/v1/me", key: "route:/dashboard" },
@@ -50,4 +54,9 @@ export function resolveMobileValidateSalePermission(): PermissionKey {
 /** Delivery-order validation on mobile — capability, not the web queue route. */
 export function resolveMobileValidateDeliveryOrderPermission(): PermissionKey {
   return "ui:validate-delivery-orders";
+}
+
+/** Vehicle consignment validation on mobile — same route permission as web. */
+export function resolveMobileValidateConsignmentPermission(): PermissionKey {
+  return "route:/consignment-notes";
 }

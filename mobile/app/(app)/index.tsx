@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import type { MobileSessionPayload } from "@pos/shared";
 import { useAuth } from "@/auth/AuthProvider";
 import { ActionGrid } from "@/components/home/ActionGrid";
 import { HomeHeader } from "@/components/home/HomeHeader";
@@ -22,10 +23,11 @@ import { agro, agroHomeSheet } from "@/theme/agro";
 function isActionAllowed(
   action: HomeAction,
   hasPermission: (key: string) => boolean,
+  session: MobileSessionPayload | null,
 ) {
   if (action.permission === "__always__") return true;
   if (action.permission === "__approvals__") {
-    return canOpenMobileApprovals(hasPermission);
+    return canOpenMobileApprovals(hasPermission, session);
   }
   return hasPermission(action.permission);
 }
@@ -36,7 +38,7 @@ export default function HomeScreen() {
   const { scrollBottom } = useSafePadding();
   const [tab, setTab] = useState<HomeTabId>("dashboard");
 
-  const canApprovals = canOpenMobileApprovals(hasPermission);
+  const canApprovals = canOpenMobileApprovals(hasPermission, session);
 
   const actionsByTab = useMemo(() => {
     const all = [
@@ -44,14 +46,14 @@ export default function HomeScreen() {
       ...homeStockActions,
       homeApprovalAction,
       ...homeMoreActions,
-    ].filter((action) => isActionAllowed(action, hasPermission));
+    ].filter((action) => isActionAllowed(action, hasPermission, session));
 
     return {
       dashboard: all.filter((a) => a.tab === "dashboard"),
       approvals: all.filter((a) => a.tab === "approvals"),
       more: all.filter((a) => a.tab === "more"),
     };
-  }, [hasPermission]);
+  }, [hasPermission, session]);
 
   const visibleTabs = useMemo(
     () =>

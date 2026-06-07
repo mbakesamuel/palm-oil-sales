@@ -7,12 +7,17 @@ import {
   Text,
 } from "react-native";
 import { Link } from "expo-router";
-import type { MobilePendingSaleRow } from "@pos/shared";
+import type {
+  MobilePendingConsignmentRow,
+  MobilePendingSaleRow,
+} from "@pos/shared";
 import { ApiError, apiFetch } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import {
+  canValidateConsignmentOnMobile,
   canValidateDeliveryOrdersOnMobile,
   canValidateSalesOnMobile,
+  mobilePendingConsignmentEmptyHint,
   mobilePendingSalesEmptyHint,
   mobileValidationScreenHint,
 } from "@/constants/validation-access";
@@ -20,6 +25,7 @@ import { ListScreenSkeleton } from "@/components/skeleton";
 import { useSafePadding } from "@/hooks/use-safe-padding";
 
 type PendingSalesResponse = { rows: MobilePendingSaleRow[] };
+type PendingConsignmentResponse = { rows: MobilePendingConsignmentRow[] };
 
 type DoQueueResponse = {
   rows: Array<{
@@ -35,6 +41,7 @@ export default function ValidationScreen() {
   const { hasPermission, session } = useAuth();
   const { scrollBottom } = useSafePadding();
   const [sales, setSales] = useState<MobilePendingSaleRow[]>([]);
+  const [consignments, setConsignments] = useState<MobilePendingConsignmentRow[]>([]);
   const [dos, setDos] = useState<DoQueueResponse["rows"]>([]);
   const [busy, setBusy] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +55,12 @@ export default function ValidationScreen() {
           "/api/mobile/v1/validation/sales",
         );
         setSales(res.rows);
+      }
+      if (canValidateConsignmentOnMobile(hasPermission, session)) {
+        const res = await apiFetch<PendingConsignmentResponse>(
+          "/api/mobile/v1/validation/consignment-notes",
+        );
+        setConsignments(res.rows);
       }
       if (canValidateDeliveryOrdersOnMobile(hasPermission)) {
         const res = await apiFetch<DoQueueResponse>(
@@ -66,7 +79,7 @@ export default function ValidationScreen() {
     } finally {
       setBusy(false);
     }
-  }, [hasPermission]);
+  }, [hasPermission, session]);
 
   useEffect(() => {
     void load();
@@ -111,6 +124,38 @@ export default function ValidationScreen() {
                     <Text style={styles.meta}>{s.salesPointName}</Text>
                   ) : null}
                   <Text style={styles.meta}>{s.totalLabel}</Text>
+                  <Text style={styles.reviewLink}>Review →</Text>
+                </Pressable>
+              </Link>
+            ))
+          )}
+        </>
+      ) : null}
+
+      {canValidateConsignmentOnMobile(hasPermission, session) ? (
+        <>
+          <Text style={styles.section}>Vehicle consignment</Text>
+          {consignments.length === 0 ? (
+            <Text style={styles.empty}>
+              {mobilePendingConsignmentEmptyHint(session)}
+            </Text>
+          ) : (
+            consignments.map((c) => (
+              <Link
+                key={c.id}
+                href={`/(app)/validation/consignment/${c.id}` as never}
+                asChild
+              >
+                <Pressable style={styles.card}>
+                  <Text style={styles.title}>{c.consignmentNoteNo}</Text>
+                  <Text>{c.customerName}</Text>
+                  <Text style={styles.meta}>
+                    Invoice {c.invoiceNo} · {c.destination}
+                  </Text>
+                  {c.salesPointName ? (
+                    <Text style={styles.meta}>{c.salesPointName}</Text>
+                  ) : null}
+                  <Text style={styles.meta}>{c.vehicleNumber}</Text>
                   <Text style={styles.reviewLink}>Review →</Text>
                 </Pressable>
               </Link>
