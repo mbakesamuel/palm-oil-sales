@@ -1,6 +1,9 @@
 import "server-only";
 
-import { getCustomerTypeIdByCode } from "@/lib/customer-types/catalog";
+import {
+  ensureBuiltinCustomerTypes,
+  getCustomerTypeIdByCode,
+} from "@/lib/customer-types/catalog";
 import { productWhereBottled, productWhereNotBottled } from "@/lib/product-form";
 import { getPrismaClient } from "@/lib/prisma";
 import { resolveCommercialServiceForUserId } from "@/lib/commercial-service";
@@ -22,6 +25,8 @@ export async function loadPosPageConfig(session: AuthSession, scope: ServiceScop
     prisma,
     session.userId,
   );
+
+  await ensureBuiltinCustomerTypes();
 
   const [retailCustomerTypeId, workerCustomerTypeId] = await Promise.all([
     getCustomerTypeIdByCode("RETAIL"),
