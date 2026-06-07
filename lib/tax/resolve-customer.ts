@@ -16,7 +16,7 @@ type PrismaForTax = ReturnType<typeof getPrismaClient>;
 
 type CustomerTaxContext = {
   residency: string;
-  customerType: string;
+  customerTypeCode: string;
   hasTaxpayerId: boolean;
   taxRegimeId: string | null;
   taxRegimeKind: TaxRegimeKind | null;
@@ -60,7 +60,7 @@ async function resolveTaxesFromCatalog(
 
     if (taxType.code === SALES_TAX_CODE) {
       if (customer.residency !== "LOCAL") continue;
-      if (customer.customerType === "INDUSTRY") continue;
+      if (customer.customerTypeCode === "INDUSTRY") continue;
 
       const variant = TaxRateVariant.NO_TAXPAYER_ID;
       const row = await resolveRateRow(prisma, taxType.id, soldAt, variant);
@@ -122,7 +122,7 @@ async function resolveTaxesFromRegimeLinks(
 
     if (link.taxType.code === SALES_TAX_CODE) {
       if (customer.residency !== "LOCAL") continue;
-      if (customer.customerType === "INDUSTRY") continue;
+      if (customer.customerTypeCode === "INDUSTRY") continue;
 
       const variant = customer.hasTaxpayerId
         ? customer.taxRegimeKind === TaxRegimeKind.REAL
@@ -175,7 +175,7 @@ export async function resolveTaxesForCustomer(
     where: { id: customerId },
     select: {
       residency: true,
-      customerType: true,
+      customerTypeDefinition: { select: { code: true } },
       hasTaxpayerId: true,
       taxRegimeId: true,
       taxRegime: { select: { kind: true } },
@@ -185,7 +185,7 @@ export async function resolveTaxesForCustomer(
 
   const ctx: CustomerTaxContext = {
     residency: customer.residency,
-    customerType: customer.customerType,
+    customerTypeCode: customer.customerTypeDefinition.code,
     hasTaxpayerId: customer.taxRegimeId != null ? true : false,
     taxRegimeId: customer.taxRegimeId,
     taxRegimeKind: customer.taxRegime?.kind ?? null,

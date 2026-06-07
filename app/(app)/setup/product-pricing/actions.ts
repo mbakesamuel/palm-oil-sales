@@ -2,7 +2,8 @@
 
 import { assertActorIsAdmin } from "@/lib/access-control";
 import { getPrismaClient } from "@/lib/prisma";
-import { CustomerType, Prisma } from "@prisma/client";
+import { assertCustomerTypeUsable } from "@/lib/customer-types/catalog";
+import { Prisma } from "@prisma/client";
 import { revalidatePricingPaths } from "@/lib/pricing/revalidate";
 
 function parseIsoDate(raw: string): Date | null {
@@ -15,17 +16,11 @@ function money2(value: Prisma.Decimal) {
   return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
-function parseCustomerTypeMain(raw: string): CustomerType {
-  const s = String(raw ?? "").trim() as CustomerType;
-  if (
-    s !== CustomerType.INDUSTRY &&
-    s !== CustomerType.WHOLE_SALE &&
-    s !== CustomerType.RETAIL &&
-    s !== CustomerType.WORKER
-  ) {
-    throw new Error("Choose a customer type for Main-category products.");
-  }
-  return s;
+async function parseCustomerTypeIdMain(raw: string): Promise<string> {
+  const id = String(raw ?? "").trim();
+  if (!id) throw new Error("Choose a customer type for Main-category products.");
+  await assertCustomerTypeUsable(id);
+  return id;
 }
 
 export async function saveProductUnitPriceSchedule(formData: FormData) {
@@ -57,16 +52,18 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
 
   const isMain = product.productCat?.isMain === true;
   const isBottled = product.productCat?.isBottled === true;
-  let customerType: CustomerType | null = null;
+  let customerTypeId: string | null = null;
   if (isBottled) {
-    const ct = String(formData.get("customerType") ?? "").trim();
+    const ct = String(formData.get("customerTypeId") ?? "").trim();
     if (ct) {
       throw new Error("Bottled products use one direct unit price (leave customer type empty).");
     }
   } else if (isMain) {
-    customerType = parseCustomerTypeMain(String(formData.get("customerType") ?? ""));
+    customerTypeId = await parseCustomerTypeIdMain(
+      String(formData.get("customerTypeId") ?? ""),
+    );
   } else {
-    const ct = String(formData.get("customerType") ?? "").trim();
+    const ct = String(formData.get("customerTypeId") ?? "").trim();
     if (ct) {
       throw new Error("Only Main-category products use customer type on price rows.");
     }
@@ -78,7 +75,7 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
         where: { id },
         data: {
           productId,
-          customerType,
+          customerTypeId,
           unitPriceExTax,
           effectiveFrom,
         },
@@ -87,7 +84,7 @@ export async function saveProductUnitPriceSchedule(formData: FormData) {
       await prisma.productUnitPriceSchedule.create({
         data: {
           productId,
-          customerType,
+          customerTypeId,
           unitPriceExTax,
           effectiveFrom,
         },

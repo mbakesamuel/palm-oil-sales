@@ -6,6 +6,8 @@ export type SaleProductMode = PosSaleProductMode;
 export const BOTA_SALES_POINT_NAME = "Bota";
 export const BOTTLE_OIL_STORE_LOCATION_NAME = "Bottle Oil Store";
 export const WALK_IN_CUSTOMER_NAME = "Walk-in (POS)";
+export const RATION_POS_CUSTOMER_NAME = "Worker ration (POS)";
+export const PUBLIC_RELATION_POS_CUSTOMER_NAME = "Public relation (POS)";
 export const BOTTLE_VEHICLE_PLACEHOLDER = "-";
 
 export type PrismaDb = {
@@ -27,17 +29,17 @@ export type PrismaDb = {
   customer: {
     findFirst: (args: {
       where: { name: string; commercialServiceId: string };
-      select: { id: true; name: true };
-    }) => Promise<{ id: string; name: string } | null>;
+      select: { id: true; name: true; customerTypeId: true };
+    }) => Promise<{ id: string; name: string; customerTypeId: string } | null>;
     create: (args: {
       data: {
         commercialServiceId: string;
         name: string;
-        customerType: "RETAIL";
+        customerTypeId: string;
         hasTaxpayerId: boolean;
       };
-      select: { id: true; name: true };
-    }) => Promise<{ id: string; name: string }>;
+      select: { id: true; name: true; customerTypeId: true };
+    }) => Promise<{ id: string; name: string; customerTypeId: string }>;
   };
 };
 
@@ -123,24 +125,39 @@ export async function resolveBottleOilStoreLocationId(
   return row?.id ?? null;
 }
 
-export async function getOrCreateWalkInCustomer(
+export async function getOrCreatePosPlaceholderCustomer(
   db: PrismaDb,
   commercialServiceId: string,
-): Promise<{ id: string; name: string }> {
+  placeholderName: string,
+  customerTypeId: string,
+): Promise<{ id: string; name: string; customerTypeId: string }> {
   const existing = await db.customer.findFirst({
-    where: { name: WALK_IN_CUSTOMER_NAME, commercialServiceId },
-    select: { id: true, name: true },
+    where: { name: placeholderName, commercialServiceId },
+    select: { id: true, name: true, customerTypeId: true },
   });
   if (existing) return existing;
   return db.customer.create({
     data: {
       commercialServiceId,
-      name: WALK_IN_CUSTOMER_NAME,
-      customerType: "RETAIL",
+      name: placeholderName,
+      customerTypeId,
       hasTaxpayerId: false,
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, customerTypeId: true },
   });
+}
+
+export async function getOrCreateWalkInCustomer(
+  db: PrismaDb,
+  commercialServiceId: string,
+  retailCustomerTypeId: string,
+): Promise<{ id: string; name: string; customerTypeId: string }> {
+  return getOrCreatePosPlaceholderCustomer(
+    db,
+    commercialServiceId,
+    WALK_IN_CUSTOMER_NAME,
+    retailCustomerTypeId,
+  );
 }
 
 export function productWhereForSaleMode(mode: SaleProductMode): Prisma.ProductWhereInput {

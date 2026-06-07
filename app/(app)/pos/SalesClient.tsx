@@ -31,6 +31,7 @@ import type {
 type Customer = {
   id: string;
   name: string;
+  customerTypeId: string;
   taxRegimeId: string | null;
   taxRegime: { name: string; vatApplies: boolean } | null;
 };
@@ -52,6 +53,9 @@ type Line = {
 type Payment = {
   paymentMethodId: string;
   amount: string;
+  /** Snapshot from loaded sale when method is inactive or off the POS pick list. */
+  methodName?: string;
+  kind?: PaymentMethodOption["kind"];
   chequeNo?: string;
   bank?: string;
   traiteNo?: string;
@@ -175,6 +179,7 @@ function legacyAppliedTaxesFromSale(
 }
 
 type SaleProductModeUi = "LOOSE" | "BOTTLE";
+type SaleDispositionUi = "NORMAL" | "RATION" | "PUBLIC_RELATION";
 
 export function SalesClient(props: {
   paymentMethods: PaymentMethodOption[];
@@ -184,6 +189,8 @@ export function SalesClient(props: {
   botaSalesPointId: number | null;
   bottleOilStoreLocationId: number | null;
   walkInCustomerId: string;
+  rationCustomerId: string;
+  publicRelationCustomerId: string;
   salesPoints: Array<{ id: number; name: string }>;
   storageLocations: Array<{
     id: number;
@@ -251,6 +258,8 @@ export function SalesClient(props: {
     botaSalesPointId,
     bottleOilStoreLocationId,
     walkInCustomerId,
+    rationCustomerId,
+    publicRelationCustomerId,
     salesPoints,
     previewPosTaxesAction,
     previewPosLineStockAction,
@@ -295,8 +304,11 @@ export function SalesClient(props: {
   const [salesPointId, setSalesPointId] = React.useState<string>("");
   const [saleProductMode, setSaleProductMode] =
     React.useState<SaleProductModeUi>("LOOSE");
+  const [saleDisposition, setSaleDisposition] =
+    React.useState<SaleDispositionUi>("NORMAL");
   const [useWalkInCustomer, setUseWalkInCustomer] = React.useState(false);
   const [walkInCustomerName, setWalkInCustomerName] = React.useState("");
+  const [typedCustomerName, setTypedCustomerName] = React.useState("");
   const effectiveSalesPointId =
     session?.salesPoint?.id != null
       ? String(session.salesPoint.id)
@@ -316,6 +328,12 @@ export function SalesClient(props: {
     botaSalesPointId != null &&
     effectiveSalesPointId === String(botaSalesPointId);
   const isBottleMode = isBotaSalesPoint && saleProductMode === "BOTTLE";
+  const isRationMode = saleDisposition === "RATION";
+  const isPublicRelationMode = saleDisposition === "PUBLIC_RELATION";
+  const isSpecialDisposition = isRationMode || isPublicRelationMode;
+  const skipDo = isBottleMode || isSpecialDisposition;
+  const skipTax = isBottleMode || isSpecialDisposition;
+  const skipPayment = isSpecialDisposition;
   const lineProducts = isBottleMode ? bottledProducts : looseProducts;
 
   function defaultLocationId(spId: string): string {
@@ -337,6 +355,7 @@ export function SalesClient(props: {
   const [validatedAtIso, setValidatedAtIso] = React.useState<string>("");
 
   const [customerId, setCustomerId] = React.useState("");
+  const pricingCustomerId = isRationMode ? rationCustomerId : customerId;
   const [lines, setLines] = React.useState<Line[]>(() => [
     {
       productId: "",
@@ -601,7 +620,7 @@ export function SalesClient(props: {
   React.useEffect(() => {
     let alive = true;
     if (saleId != null) return;
-    if (isBottleMode) {
+    if (skipTax) {
       window.queueMicrotask(() => {
         if (!alive) return;
         setTaxPreviewRows([]);
@@ -643,7 +662,7 @@ export function SalesClient(props: {
     authStatus,
     session?.userId,
     previewPosTaxesAction,
-    isBottleMode,
+    skipTax,
   ]);
 
   const lineProductKey = lines.map((l) => l.productId).join(",");
@@ -653,17 +672,36 @@ export function SalesClient(props: {
     if (saleId != null) return;
     const productIdByIdx = lineProductKey.split(",");
     const hasAnyProductPicked = productIdByIdx.some((id) => id.trim() !== "");
+    if (isPublicRelationMode) {
+      window.queueMicrotask(() => {
+        if (!alive) return;
+        setLinePriceErrors({});
+        setLines((prev) =>
+          prev.map((row) => ({
+            ...row,
+            unitPricePerKg: "0",
+            unitPricePerUnit: "0",
+          })),
+        );
+      });
+      return () => {
+        alive = false;
+      };
+    }
+    const needsCustomerForPricing = !isBottleMode || isRationMode;
     if (
-      !isBottleMode &&
-      (!customerId || authStatus !== "ready" || !session?.userId?.trim())
+      needsCustomerForPricing &&
+      (!pricingCustomerId || authStatus !== "ready" || !session?.userId?.trim())
     ) {
       window.queueMicrotask(() => {
         if (!alive) return;
-        if (!customerId && hasAnyProductPicked) {
+        if (!pricingCustomerId && hasAnyProductPicked) {
           const hint: Record<number, string> = {};
           productIdByIdx.forEach((id, idx) => {
             if (id.trim() !== "") {
-              hint[idx] = "Select a customer first to load the unit price.";
+              hint[idx] = isRationMode
+                ? "Ration pricing is not configured."
+                : "Select a customer first to load the unit price.";
             }
           });
           setLinePriceErrors(hint);
@@ -687,13 +725,14 @@ export function SalesClient(props: {
           if (trimmed === "") return;
           const pid = Number.parseInt(trimmed, 10);
           if (!Number.isFinite(pid)) return;
-          const r = isBottleMode
-            ? await previewBottledUnitPriceAction(String(pid), transactionDate)
-            : await previewProductUnitPriceAction(
-                customerId,
-                pid,
-                transactionDate,
-              );
+          const r =
+            isBottleMode && !isRationMode
+              ? await previewBottledUnitPriceAction(String(pid), transactionDate)
+              : await previewProductUnitPriceAction(
+                  isRationMode ? rationCustomerId : pricingCustomerId,
+                  pid,
+                  transactionDate,
+                );
           if (!alive) return;
           if (r.ok) priceByIdx[idx] = r.unitPriceExTax;
           else errs[idx] = r.error;
@@ -720,7 +759,7 @@ export function SalesClient(props: {
     };
   }, [
     saleId,
-    customerId,
+    pricingCustomerId,
     transactionDate,
     lineProductKey,
     authStatus,
@@ -728,6 +767,9 @@ export function SalesClient(props: {
     previewProductUnitPriceAction,
     previewBottledUnitPriceAction,
     isBottleMode,
+    isPublicRelationMode,
+    isRationMode,
+    rationCustomerId,
   ]);
 
   const lineLocationKey = lines
@@ -833,7 +875,9 @@ export function SalesClient(props: {
 
   const totalTax =
     Math.round(taxDisplayRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
-  const gross = Math.round((net + totalTax) * 100) / 100;
+  const gross = skipTax
+    ? Math.round(net * 100) / 100
+    : Math.round((net + totalTax) * 100) / 100;
   const displayNet =
     saleId != null && loadedTotals ? parseDec(loadedTotals.netAmount) : net;
   const displayGross =
@@ -884,7 +928,7 @@ export function SalesClient(props: {
   );
 
   const deliveryOrderControlsItems =
-    !isBottleMode &&
+    !skipDo &&
     saleId == null &&
     deliveryOrderNo.trim() !== "" &&
     doLookupData != null;
@@ -993,8 +1037,10 @@ export function SalesClient(props: {
     setValidatedAtIso("");
     setCustomerId("");
     setSaleProductMode("LOOSE");
+    setSaleDisposition("NORMAL");
     setUseWalkInCustomer(false);
     setWalkInCustomerName("");
+    setTypedCustomerName("");
     setLines([
       {
         productId: "",
@@ -1035,12 +1081,29 @@ export function SalesClient(props: {
     setValidatedByName(s.validatedByName ?? "");
     setValidatedAtIso(s.validatedAtIso ?? "");
     setSaleProductMode(s.saleProductMode === "BOTTLE" ? "BOTTLE" : "LOOSE");
-    if (s.customerId === walkInCustomerId) {
+    setSaleDisposition(
+      s.saleDisposition === "RATION"
+        ? "RATION"
+        : s.saleDisposition === "PUBLIC_RELATION"
+          ? "PUBLIC_RELATION"
+          : "NORMAL",
+    );
+    if (s.saleDisposition === "RATION") {
+      setUseWalkInCustomer(false);
+      setTypedCustomerName(s.customerName);
+      setCustomerId(rationCustomerId);
+    } else if (s.saleDisposition === "PUBLIC_RELATION") {
+      setUseWalkInCustomer(false);
+      setTypedCustomerName(s.customerName);
+      setCustomerId(publicRelationCustomerId);
+    } else if (s.customerId === walkInCustomerId) {
       setUseWalkInCustomer(true);
       setWalkInCustomerName(s.customerName);
+      setTypedCustomerName("");
       setCustomerId(walkInCustomerId);
     } else {
       setUseWalkInCustomer(false);
+      setTypedCustomerName("");
       setCustomerId(s.customerId);
     }
     setLoadedTotals({ netAmount: s.netAmount, grossAmount: s.grossAmount });
@@ -1072,6 +1135,8 @@ export function SalesClient(props: {
       s.payments.length > 0
         ? s.payments.map((p) => ({
             paymentMethodId: p.paymentMethodId,
+            methodName: p.methodName,
+            kind: p.kind,
             amount: p.amount,
             chequeNo: p.chequeNo ?? undefined,
             bank: p.bank ?? undefined,
@@ -1145,14 +1210,21 @@ export function SalesClient(props: {
         setBanner({ type: "error", text: "Vehicle number is required." });
         return;
       }
-      if (!isBottleMode && !deliveryOrderNo.trim()) {
+      if (!skipDo && !deliveryOrderNo.trim()) {
         setBanner({
           type: "error",
           text: "Delivery Order number is required.",
         });
         return;
       }
-      if (!isBottleMode && deliveryOrderSaveBlock.block) {
+      if (isSpecialDisposition && !typedCustomerName.trim()) {
+        setBanner({
+          type: "error",
+          text: "Enter the customer name.",
+        });
+        return;
+      }
+      if (!skipDo && deliveryOrderSaveBlock.block) {
         setBanner({
           type: "error",
           text:
@@ -1170,18 +1242,26 @@ export function SalesClient(props: {
       }
       const fd = new FormData();
       fd.set("saleProductMode", saleProductMode);
+      fd.set("saleDisposition", saleDisposition);
       fd.set(
         "useWalkInCustomer",
         isBottleMode && useWalkInCustomer ? "1" : "0",
       );
       fd.set("walkInCustomerName", walkInCustomerName);
+      fd.set("typedCustomerName", isSpecialDisposition ? typedCustomerName : "");
       fd.set(
         "customerId",
-        isBottleMode && useWalkInCustomer ? walkInCustomerId : customerId,
+        isRationMode
+          ? rationCustomerId
+          : isPublicRelationMode
+            ? publicRelationCustomerId
+            : isBottleMode && useWalkInCustomer
+              ? walkInCustomerId
+              : customerId,
       );
       fd.set("referenceNumber", isBottleMode ? "" : referenceNumber);
       fd.set("vehicleNumber", vehicleNumber);
-      fd.set("deliveryOrderNo", isBottleMode ? "" : deliveryOrderNo.trim());
+      fd.set("deliveryOrderNo", skipDo ? "" : deliveryOrderNo.trim());
       fd.set(
         "salesPointId",
         session?.salesPoint?.id != null
@@ -1204,7 +1284,7 @@ export function SalesClient(props: {
           })),
         ),
       );
-      fd.set("payments", JSON.stringify(payments));
+      fd.set("payments", JSON.stringify(skipPayment ? [] : payments));
       fd.set(
         "postingFinancialYear",
         wp.openFinancialYear != null ? String(wp.openFinancialYear) : "",
@@ -1285,7 +1365,7 @@ export function SalesClient(props: {
   const canPickPending =
     authStatus === "ready" && session && canPickPendingSalesProp;
   const canPickAvailableDo =
-    saleId == null && effectiveSalesPointId.trim() !== "";
+    saleId == null && !skipDo && effectiveSalesPointId.trim() !== "";
 
   return (
     <div className="space-y-8">
@@ -1553,11 +1633,85 @@ export function SalesClient(props: {
           </div>
         ) : null}
 
+        {saleId == null ? (
+          <div className="flex flex-wrap items-center gap-4 rounded-md border border-border px-3 py-2">
+            <span className="text-xs font-medium opacity-80">Sale purpose</span>
+            <label className="flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={saleDisposition === "RATION"}
+                disabled={saleId != null}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSaleDisposition("RATION");
+                    setUseWalkInCustomer(false);
+                    setWalkInCustomerName("");
+                    setDeliveryOrderNo("");
+                    setDoLookupData(null);
+                    setDoLookupError(null);
+                    setTypedCustomerName("");
+                    setCustomerId(rationCustomerId);
+                  } else {
+                    setSaleDisposition("NORMAL");
+                    setTypedCustomerName("");
+                    setCustomerId("");
+                  }
+                }}
+              />
+              Ration
+            </label>
+            <label className="flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={saleDisposition === "PUBLIC_RELATION"}
+                disabled={saleId != null}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSaleDisposition("PUBLIC_RELATION");
+                    setUseWalkInCustomer(false);
+                    setWalkInCustomerName("");
+                    setDeliveryOrderNo("");
+                    setDoLookupData(null);
+                    setDoLookupError(null);
+                    setTypedCustomerName("");
+                    setCustomerId(publicRelationCustomerId);
+                    setLines((prev) =>
+                      prev.map((l) => ({
+                        ...l,
+                        unitPricePerKg: "0",
+                        unitPricePerUnit: "0",
+                      })),
+                    );
+                  } else {
+                    setSaleDisposition("NORMAL");
+                    setTypedCustomerName("");
+                    setCustomerId("");
+                  }
+                }}
+              />
+              Public Relation
+            </label>
+            <p className="text-[11px] opacity-70 w-full sm:w-auto">
+              {isRationMode
+                ? isBottleMode
+                  ? "Worker ration — worker price, no payment."
+                  : "Worker dept sale — no DO, tax, or payment."
+                : isPublicRelationMode
+                  ? isBottleMode
+                    ? "Complimentary issue — zero price, no payment."
+                    : "Complimentary issue — zero price, no DO, tax, or payment."
+                  : isBottleMode
+                    ? "Normal bottle sale — payment required."
+                    : "Normal sale — DO, tax, and payment apply."}
+            </p>
+          </div>
+        ) : null}
+
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-x-4">
           <div className="grid gap-1">
             <div className="flex items-baseline justify-between gap-2">
               <label className="text-xs font-medium opacity-80">Customer</label>
-              {isBottleMode && saleId == null ? (
+              {isBottleMode && !isSpecialDisposition && saleId == null ? (
                 <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-normal opacity-80">
                   <input
                     type="checkbox"
@@ -1577,7 +1731,23 @@ export function SalesClient(props: {
                 </label>
               ) : null}
             </div>
-            {isBottleMode ? (
+            {isSpecialDisposition ? (
+              <>
+                <input
+                  className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                  value={typedCustomerName}
+                  onChange={(e) => setTypedCustomerName(e.target.value)}
+                  placeholder="Customer / department name"
+                  disabled={saleId != null}
+                  required
+                />
+                <p className="text-[11px] opacity-70 leading-tight">
+                  {isRationMode
+                    ? "Type the recipient name — worker ration price applies."
+                    : "Type the recipient name — complimentary issue (zero price)."}
+                </p>
+              </>
+            ) : isBottleMode ? (
               useWalkInCustomer ? (
                 <input
                   className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm"
@@ -1628,14 +1798,15 @@ export function SalesClient(props: {
                 <div className="text-[11px] opacity-70 leading-tight space-y-0.5">
                   <div>
                     Regime: {customer?.taxRegime?.name ?? "-"}
-                    {vatChargedHint ? " · VAT may apply" : ""}
+                    {!skipTax && vatChargedHint ? " · VAT may apply" : ""}
                   </div>
-                  {saleId == null && taxPreviewError ? (
+                  {saleId == null && !skipTax && taxPreviewError ? (
                     <div className="text-amber-800 dark:text-amber-300">
                       {taxPreviewError}
                     </div>
                   ) : null}
                   {saleId == null &&
+                  !skipTax &&
                   !taxPreviewError &&
                   customerId &&
                   taxPreviewRows.length === 0 ? (
@@ -1644,7 +1815,7 @@ export function SalesClient(props: {
                 </div>
               </>
             )}
-            {isBottleMode ? (
+            {isBottleMode && !isSpecialDisposition ? (
               <p className="text-[11px] opacity-70 leading-tight">
                 Prices are tax-inclusive; no tax is added on bottle sales.
               </p>
@@ -1779,7 +1950,7 @@ export function SalesClient(props: {
               </p>
             ) : null}
           </div>
-          {!isBottleMode ? (
+          {!skipDo ? (
           <div className="grid gap-1">
             <label className="text-xs font-medium opacity-80">
               Delivery order no.
@@ -1874,7 +2045,7 @@ export function SalesClient(props: {
           </div>
           ) : null}
 
-          {!isBottleMode && deliveryOrderNo.trim() ? (
+          {!skipDo && deliveryOrderNo.trim() ? (
             <div className="rounded-lg border border-border p-3 text-sm space-y-2 sm:col-span-2">
               <div className="text-xs font-semibold uppercase tracking-wide opacity-70">
                 Delivery order control
@@ -2192,42 +2363,50 @@ export function SalesClient(props: {
                 <span className="opacity-70">Net (ex tax)</span>
                 <span className="tabular-nums">{displayNet.toFixed(2)}</span>
               </div>
-              {taxDisplayRows.map((row) => (
-                <div key={row.key} className="flex justify-between">
-                  <span className="opacity-70">
-                    {row.label} ({row.ratePercentLabel}%)
-                  </span>
-                  <span className="tabular-nums">{row.amount.toFixed(2)}</span>
-                </div>
-              ))}
+              {!skipTax
+                ? taxDisplayRows.map((row) => (
+                    <div key={row.key} className="flex justify-between">
+                      <span className="opacity-70">
+                        {row.label} ({row.ratePercentLabel}%)
+                      </span>
+                      <span className="tabular-nums">{row.amount.toFixed(2)}</span>
+                    </div>
+                  ))
+                : null}
               <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
                 <span>Gross</span>
                 <span className="tabular-nums">{displayGross.toFixed(2)}</span>
               </div>
               <div className="text-xs opacity-70 mt-2">
-                Payments total: {paid.toFixed(2)} (must equal gross).
+                {skipPayment
+                  ? "No payment collected for ration or public relation sales."
+                  : `Payments total: ${paid.toFixed(2)} (must equal gross).`}
               </div>
             </div>
           </div>
         </section>
 
         <section
-          className={`space-y-2 ${saleId != null ? "opacity-60 pointer-events-none" : ""}`}
+          className={`space-y-2 ${saleId != null || skipPayment ? "opacity-60 pointer-events-none" : ""}`}
         >
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-base font-semibold">Payments</h3>
-            <button
-              type="button"
-              className="text-sm underline underline-offset-4"
-              onClick={() =>
-                setPayments((prev) => [
-                  ...prev,
-                  { paymentMethodId: defaultPayMethodId, amount: "0" },
-                ])
-              }
-            >
-              Add payment line
-            </button>
+            {skipPayment ? (
+              <span className="text-xs opacity-70">Not required</span>
+            ) : (
+              <button
+                type="button"
+                className="text-sm underline underline-offset-4"
+                onClick={() =>
+                  setPayments((prev) => [
+                    ...prev,
+                    { paymentMethodId: defaultPayMethodId, amount: "0" },
+                  ])
+                }
+              >
+                Add payment line
+              </button>
+            )}
           </div>
 
           <div className="rounded-lg border border-border overflow-hidden divide-y divide-border">
@@ -2239,38 +2418,46 @@ export function SalesClient(props: {
             </div>
             {payments.map((p, idx) => {
               const selectedMethod = paymentMethodById.get(p.paymentMethodId);
-              const paymentKind = selectedMethod?.kind ?? "SIMPLE";
+              const paymentKind = p.kind ?? selectedMethod?.kind ?? "SIMPLE";
+              const methodLabel =
+                p.methodName ?? selectedMethod?.name ?? "Unknown method";
               return (
               <div key={idx} className="px-3 py-3 space-y-2 text-sm">
                 <div className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-3">
-                    <select
-                      className="w-full rounded-md border border-border bg-transparent px-2 py-1"
-                      value={p.paymentMethodId}
-                      onChange={(e) =>
-                        setPayments((prev) =>
-                          prev.map((x, i) =>
-                            i === idx
-                              ? {
-                                  ...x,
-                                  paymentMethodId: e.target.value,
-                                  chequeNo: undefined,
-                                  bank: undefined,
-                                  traiteNo: undefined,
-                                  traiteIssuedOn: undefined,
-                                  traiteMaturityOn: undefined,
-                                }
-                              : x,
-                          ),
-                        )
-                      }
-                    >
-                      {selectablePaymentMethods.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
+                    {saleId != null ? (
+                      <span className="block py-1">{methodLabel}</span>
+                    ) : (
+                      <select
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1"
+                        value={p.paymentMethodId}
+                        onChange={(e) =>
+                          setPayments((prev) =>
+                            prev.map((x, i) =>
+                              i === idx
+                                ? {
+                                    ...x,
+                                    paymentMethodId: e.target.value,
+                                    methodName: undefined,
+                                    kind: undefined,
+                                    chequeNo: undefined,
+                                    bank: undefined,
+                                    traiteNo: undefined,
+                                    traiteIssuedOn: undefined,
+                                    traiteMaturityOn: undefined,
+                                  }
+                                : x,
+                            ),
+                          )
+                        }
+                      >
+                        {selectablePaymentMethods.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div className="col-span-3">
                     <input
@@ -2437,21 +2624,36 @@ export function SalesClient(props: {
           (deliveryOrderSaveBlock.block ||
             stockSaveBlock.block ||
             (!isBottleMode && !vehicleNumber.trim()) ||
-            (isBottleMode && useWalkInCustomer && !walkInCustomerName.trim()) ||
-            (isBottleMode && !useWalkInCustomer && !customerId) ||
-            (!isBottleMode && Boolean(taxPreviewError))) ? (
+            (isBottleMode &&
+              !isSpecialDisposition &&
+              useWalkInCustomer &&
+              !walkInCustomerName.trim()) ||
+            (isBottleMode &&
+              !isSpecialDisposition &&
+              !useWalkInCustomer &&
+              !customerId) ||
+            (isSpecialDisposition && !typedCustomerName.trim()) ||
+            (!skipTax && Boolean(taxPreviewError))) ? (
             <p className="text-xs text-amber-800 dark:text-amber-300 max-w-xl">
-              {!isBottleMode && taxPreviewError
-                ? "Fix tax configuration before saving."
-                : !isBottleMode && !vehicleNumber.trim()
-                  ? "Enter a vehicle number before saving."
-                  : isBottleMode && useWalkInCustomer && !walkInCustomerName.trim()
-                    ? "Enter the walk-in customer name before saving."
-                    : isBottleMode && !useWalkInCustomer && !customerId
-                      ? "Select a customer before saving."
-                      : (stockSaveBlock.hint ??
-                        deliveryOrderSaveBlock.hint ??
-                        "Fix validation before saving.")}
+              {isSpecialDisposition && !typedCustomerName.trim()
+                ? "Enter the customer name before saving."
+                : !skipTax && taxPreviewError
+                  ? "Fix tax configuration before saving."
+                  : !isBottleMode && !vehicleNumber.trim()
+                    ? "Enter a vehicle number before saving."
+                    : isBottleMode &&
+                        !isSpecialDisposition &&
+                        useWalkInCustomer &&
+                        !walkInCustomerName.trim()
+                      ? "Enter the walk-in customer name before saving."
+                      : isBottleMode &&
+                          !isSpecialDisposition &&
+                          !useWalkInCustomer &&
+                          !customerId
+                        ? "Select a customer before saving."
+                        : (stockSaveBlock.hint ??
+                          deliveryOrderSaveBlock.hint ??
+                          "Fix validation before saving.")}
             </p>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
@@ -2462,12 +2664,17 @@ export function SalesClient(props: {
                 saleId != null ||
                 (!isBottleMode && !vehicleNumber.trim()) ||
                 (isBottleMode &&
+                  !isSpecialDisposition &&
                   useWalkInCustomer &&
                   !walkInCustomerName.trim()) ||
-                (isBottleMode && !useWalkInCustomer && !customerId) ||
-                (!isBottleMode && deliveryOrderSaveBlock.block) ||
+                (isBottleMode &&
+                  !isSpecialDisposition &&
+                  !useWalkInCustomer &&
+                  !customerId) ||
+                (isSpecialDisposition && !typedCustomerName.trim()) ||
+                (!skipDo && deliveryOrderSaveBlock.block) ||
                 stockSaveBlock.block ||
-                (!isBottleMode && Boolean(taxPreviewError))
+                (!skipTax && Boolean(taxPreviewError))
               }
               onClick={() => void onSaveSale()}
               className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"

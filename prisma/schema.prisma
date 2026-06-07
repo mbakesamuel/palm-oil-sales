@@ -306,28 +306,49 @@ model MobileRefreshToken {
   @@index([expiresAt])
 }
 
+/// Configurable customer type (Industry, Whole sale, custom categories, etc.).
+model CustomerTypeDefinition {
+  id             String                     @id @default(cuid())
+  /// Stable key (e.g. INDUSTRY, WHOLE_SALE).
+  code           String                     @unique
+  name           String
+  sortOrder      Int                        @default(0)
+  isActive       Boolean                    @default(true)
+  /// Built-ins — code cannot be changed; no delete.
+  isSystem       Boolean                    @default(false)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  customers      Customer[]
+  priceSchedules ProductUnitPriceSchedule[]
+
+  @@index([isActive, sortOrder])
+  @@map("CustomerTypeDefinition")
+}
+
 model Customer {
-  id                  String            @id @default(cuid())
-  name                String
-  phone               String?
-  email               String?
-  address             String?
-  customerType        CustomerType      @default(INDUSTRY)
-  taxRegimeId         String?
-  taxpayerId          String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  residency           CustomerResidency @default(LOCAL)
-  hasTaxpayerId       Boolean           @default(false)
-  commercialServiceId String
-  commercialService   CommercialService @relation(fields: [commercialServiceId], references: [id])
-  taxRegime           TaxRegime?        @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
-  deliveryOrders      DeliveryOrder[]
-  sales               Sale[]
+  id                     String                 @id @default(cuid())
+  name                   String
+  phone                  String?
+  email                  String?
+  address                String?
+  taxRegimeId            String?
+  taxpayerId             String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  residency              CustomerResidency      @default(LOCAL)
+  hasTaxpayerId          Boolean                @default(false)
+  commercialServiceId    String
+  customerTypeId         String
+  commercialService      CommercialService      @relation(fields: [commercialServiceId], references: [id])
+  customerTypeDefinition CustomerTypeDefinition @relation(fields: [customerTypeId], references: [id])
+  taxRegime              TaxRegime?             @relation(fields: [taxRegimeId], references: [id], onDelete: Restrict)
+  deliveryOrders         DeliveryOrder[]
+  sales                  Sale[]
 
   @@index([name])
   @@index([taxRegimeId])
   @@index([commercialServiceId])
+  @@index([customerTypeId])
 }
 
 model Employee {
@@ -419,19 +440,21 @@ model SaleAppliedTax {
 
 /// Ex-tax unit price per kg (or per order unit used on lines); effectiveFrom is inclusive (latest row where effectiveFrom <= date wins).
 model ProductUnitPriceSchedule {
-  id             String        @id @default(cuid())
-  productId      Int
+  id                     String                  @id @default(cuid())
+  productId              Int
+  unitPriceExTax         Decimal                 @db.Decimal(14, 2)
+  effectiveFrom          DateTime                @db.Date
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
   /// Main-category products: required. Non-Main: must be null (direct price).
-  customerType   CustomerType?
-  unitPriceExTax Decimal       @db.Decimal(14, 2)
-  effectiveFrom  DateTime      @db.Date
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  product        Product       @relation(fields: [productId], references: [productId])
+  customerTypeId         String?
+  customerTypeDefinition CustomerTypeDefinition? @relation(fields: [customerTypeId], references: [id], onDelete: Restrict)
+  product                Product                 @relation(fields: [productId], references: [productId])
 
-  @@unique([productId, customerType, effectiveFrom], map: "ProductUnitPriceSchedule_product_customer_effective_key", where: raw("(\"customerType\" IS NOT NULL)"))
-  @@unique([productId, effectiveFrom], map: "ProductUnitPriceSchedule_product_effective_direct_key", where: raw("(\"customerType\" IS NULL)"))
+  @@unique([productId, customerTypeId, effectiveFrom], map: "ProductUnitPriceSchedule_product_customer_effective_key", where: raw("(\"customerTypeId\" IS NOT NULL)"))
+  @@unique([productId, effectiveFrom], map: "ProductUnitPriceSchedule_product_effective_direct_key", where: raw("(\"customerTypeId\" IS NULL)"))
   @@index([productId, effectiveFrom])
+  @@index([customerTypeId])
   @@map("ProductUnitPriceSchedule")
 }
 
@@ -531,6 +554,8 @@ model Sale {
   commercialServiceNameSnapshot String?
   /// LOOSE = standard POS; BOTTLE = Bota bottled palm oil (tax-inclusive). Null = legacy loose.
   saleProductMode               PosSaleProductMode?
+  /// NORMAL = standard; RATION = worker dept (no DO/tax/payment); PUBLIC_RELATION = GM gift (zero price).
+  saleDisposition               PosSaleDisposition?     @default(NORMAL)
   payments                      Payment[]
   commercialService             CommercialService?      @relation(fields: [commercialServiceId], references: [id])
   createdBy                     User                    @relation("SalesCreatedBy", fields: [createdByUserId], references: [id])
@@ -575,19 +600,19 @@ model SaleLine {
 
 /// Configurable payment method (Cash, Cheque, custom Mobile Money, etc.).
 model PaymentMethodDefinition {
-  id                   String                        @id @default(cuid())
+  id                    String                        @id @default(cuid())
   /// Stable key (e.g. CASH, MOBILE_MONEY).
-  code                 String                        @unique
-  name                 String
-  kind                 PaymentMethodKind
-  sortOrder            Int                           @default(0)
-  isActive             Boolean                       @default(true)
+  code                  String                        @unique
+  name                  String
+  kind                  PaymentMethodKind
+  sortOrder             Int                           @default(0)
+  isActive              Boolean                       @default(true)
   /// Built-ins (CASH, CHEQUE, TRAITE, CREDIT) — code/kind cannot be changed; no delete.
-  isSystem             Boolean                       @default(false)
-  createdAt            DateTime                      @default(now())
-  updatedAt            DateTime                      @updatedAt
-  payments             Payment[]
+  isSystem              Boolean                       @default(false)
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
   deliveryOrderPayments DeliveryOrderPaymentDetails[]
+  payments              Payment[]
 
   @@index([isActive, sortOrder])
   @@map("PaymentMethodDefinition")
@@ -596,7 +621,6 @@ model PaymentMethodDefinition {
 model Payment {
   id               String                  @id @default(cuid())
   saleId           String
-  paymentMethodId  String
   amount           Decimal                 @db.Decimal(14, 2)
   chequeNo         String?
   paidAt           DateTime                @default(now())
@@ -607,7 +631,8 @@ model Payment {
   traiteNo         String?
   traiteIssuedOn   DateTime?               @db.Date
   traiteMaturityOn DateTime?               @db.Date
-  paymentMethod    PaymentMethodDefinition @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  paymentMethodId  String
+  paymentMethod    PaymentMethodDefinition @relation(fields: [paymentMethodId], references: [id])
   sale             Sale                    @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
@@ -728,16 +753,16 @@ model DeliveryOrderDetails {
 }
 
 model DeliveryOrderPaymentDetails {
-  id                Int                     @id @default(autoincrement())
-  deliveryOrderId   Int
-  paymentMethodId   String
-  paymentDate       DateTime
-  chequeNo          String?
-  bank              String?
-  cashReceiptNo     String?
-  receiptDate       DateTime?
-  paymentMethod     PaymentMethodDefinition @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
-  deliveryOrder     DeliveryOrder           @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  id              Int                     @id @default(autoincrement())
+  deliveryOrderId Int
+  paymentDate     DateTime
+  chequeNo        String?
+  bank            String?
+  cashReceiptNo   String?
+  receiptDate     DateTime?
+  paymentMethodId String
+  deliveryOrder   DeliveryOrder           @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  paymentMethod   PaymentMethodDefinition @relation(fields: [paymentMethodId], references: [id])
 
   @@index([deliveryOrderId])
   @@map("DeliveryOrderPaymentDetails")
@@ -1007,13 +1032,6 @@ enum CommercialSiteKind {
   FACTORY
 }
 
-enum CustomerType {
-  INDUSTRY
-  WHOLE_SALE
-  RETAIL
-  WORKER
-}
-
 enum CustomerResidency {
   LOCAL
   OVERSEAS
@@ -1034,6 +1052,13 @@ enum ValidationStatus {
 enum PosSaleProductMode {
   LOOSE
   BOTTLE
+}
+
+/// POS sale purpose: standard sale, worker ration, or complimentary public-relation issue.
+enum PosSaleDisposition {
+  NORMAL
+  RATION
+  PUBLIC_RELATION
 }
 
 enum TaxRegimeKind {

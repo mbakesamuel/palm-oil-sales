@@ -6,6 +6,7 @@ import {
   taxRegimeWhereForCommercialLine,
 } from "@/lib/service-scope";
 import { getEffectiveRatesSummary, decimalToPercentLabel } from "@/lib/tax/schedules";
+import { listCustomerTypeDefinitions } from "@/lib/customer-types/catalog";
 import { CustomersClient } from "./CustomersClient";
 import { deleteCustomer, saveCustomer } from "./actions";
 
@@ -23,7 +24,8 @@ export default async function CustomersPage() {
       ? taxRegimeWhereForCommercialLine(scope.commercialServiceId)
       : undefined;
 
-  const [commercialServices, taxRegimes, customers, rateSummary] = await Promise.all([
+  const [commercialServices, taxRegimes, customers, rateSummary, customerTypeOptions] =
+    await Promise.all([
     prisma.commercialService.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -49,7 +51,8 @@ export default async function CustomersPage() {
         phone: true,
         email: true,
         address: true,
-        customerType: true,
+        customerTypeId: true,
+        customerTypeDefinition: { select: { id: true, code: true, name: true } },
         residency: true,
         taxpayerId: true,
         commercialServiceId: true,
@@ -60,6 +63,7 @@ export default async function CustomersPage() {
       take: 200,
     }),
     getEffectiveRatesSummary(),
+    listCustomerTypeDefinitions({ activeOnly: true }),
   ]);
 
   const vatPct = decimalToPercentLabel(rateSummary.vatRate);
@@ -78,6 +82,7 @@ export default async function CustomersPage() {
       defaultCommercialServiceId={defaultLineId}
       commercialServices={commercialServices}
       taxRegimes={taxRegimes}
+      customerTypeOptions={customerTypeOptions}
       rateHints={{
         vatPct,
         satRealPct,

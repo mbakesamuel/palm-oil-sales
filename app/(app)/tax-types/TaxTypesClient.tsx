@@ -2,78 +2,82 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { EmptyTableNotice } from "@/components/EmptyTableNotice";
-import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
-import { TAX_RATE_VARIANT_LABELS } from "@/lib/tax/variant-labels";
-import { TaxRateVariant } from "@prisma/client";
-
-type RateRow = { id: string; rate: string; effectiveFromIso: string; variant: string };
+import { isOperationalTaxCode } from "@/lib/tax/constants";
 
 type TypeRow = {
   id: string;
   code: string;
   name: string;
   sortOrder: number;
-  rateSchedules: RateRow[];
+  currentRatePercent: string | null;
 };
+
+const inputClass =
+  "h-8 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm";
+const labelClass = "text-xs font-medium";
+const hintClass = "text-[11px] opacity-70 mt-0.5";
+const fieldRowClass = "flex items-start gap-2";
+const fieldLabelClass = [
+  labelClass,
+  "shrink-0 w-[7.25rem] h-8",
+  "flex items-center justify-end px-2",
+  "rounded-md border border-border",
+  "bg-sidebar text-sidebar-foreground",
+].join(" ");
+const fieldControlClass = "min-w-0 flex-1";
+const formActionsClass =
+  "flex flex-wrap items-center justify-end gap-2 pt-1 pl-[7.25rem]";
 
 export function TaxTypesClient(props: {
   types: TypeRow[];
   saveTaxTypeAction: (formData: FormData) => void | Promise<void>;
   deleteTaxTypeAction: (formData: FormData) => void | Promise<void>;
   saveTaxRateScheduleAction: (formData: FormData) => void | Promise<void>;
-  deleteTaxRateScheduleAction: (formData: FormData) => void | Promise<void>;
 }) {
-  const {
-    types,
-    saveTaxTypeAction,
-    deleteTaxTypeAction,
-    saveTaxRateScheduleAction,
-    deleteTaxRateScheduleAction,
-  } = props;
+  const { types, saveTaxTypeAction, deleteTaxTypeAction, saveTaxRateScheduleAction } =
+    props;
+  const router = useRouter();
 
-  const satType = types.find((t) => t.code === SALES_TAX_CODE);
-  const satMissingVariants = React.useMemo(() => {
-    if (!satType) return ["REAL", "SIMPLIFIED", "NO_TAXPAYER_ID"] as const;
-    const have = new Set(satType.rateSchedules.map((r) => r.variant));
-    return (["REAL", "SIMPLIFIED", "NO_TAXPAYER_ID"] as const).filter((v) => !have.has(v));
-  }, [satType]);
-
-  const [typeModalOpen, setTypeModalOpen] = React.useState(false);
+  const [isTypeFormOpen, setIsTypeFormOpen] = React.useState(false);
   const [editingTypeId, setEditingTypeId] = React.useState<string | null>(null);
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
   const [sortOrder, setSortOrder] = React.useState("0");
+  const [banner, setBanner] = React.useState<{
+    type: "error" | "ok";
+    text: string;
+  } | null>(null);
 
   const [pendingDeleteType, setPendingDeleteType] = React.useState<{
     id: string;
     code: string;
   } | null>(null);
-  const [pendingDeleteRate, setPendingDeleteRate] = React.useState<{
-    id: string;
-  } | null>(null);
 
-  const [rateEditId, setRateEditId] = React.useState<string | null>(null);
-  const [rateTaxTypeId, setRateTaxTypeId] = React.useState<string | null>(null);
+  const [rateModal, setRateModal] = React.useState<{
+    taxTypeId: string;
+    code: string;
+  } | null>(null);
   const [rateValue, setRateValue] = React.useState("");
   const [rateEffective, setRateEffective] = React.useState("");
-  const [rateVariant, setRateVariant] = React.useState("DEFAULT");
 
-  const closeTypeModal = React.useCallback(() => {
-    setTypeModalOpen(false);
+  function resetTypeForm(opts?: { clearBanner?: boolean }) {
     setEditingTypeId(null);
     setCode("");
     setName("");
     setSortOrder("0");
-  }, []);
+    if (opts?.clearBanner !== false) setBanner(null);
+  }
 
-  function openAddTypeModal() {
-    setEditingTypeId(null);
-    setCode("");
-    setName("");
-    setSortOrder("0");
-    setTypeModalOpen(true);
+  function closeTypeForm(opts?: { clearBanner?: boolean }) {
+    setIsTypeFormOpen(false);
+    resetTypeForm(opts);
+  }
+
+  function openAddTypeForm() {
+    resetTypeForm();
+    setIsTypeFormOpen(true);
   }
 
   function startEditType(t: TypeRow) {
@@ -81,162 +85,195 @@ export function TaxTypesClient(props: {
     setCode(t.code);
     setName(t.name);
     setSortOrder(String(t.sortOrder));
-    setTypeModalOpen(true);
+    setBanner(null);
+    setIsTypeFormOpen(true);
   }
 
-  React.useEffect(() => {
-    if (!typeModalOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closeTypeModal();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [typeModalOpen, closeTypeModal]);
-
-  function openNewRate(taxTypeId: string) {
-    setRateEditId(null);
-    setRateTaxTypeId(taxTypeId);
+  function openSetRate(t: TypeRow) {
+    setRateModal({ taxTypeId: t.id, code: t.code });
     setRateValue("");
     setRateEffective(new Date().toISOString().slice(0, 10));
-    setRateVariant("DEFAULT");
   }
 
-  function startEditRate(taxTypeId: string, r: RateRow) {
-    setRateEditId(r.id);
-    setRateTaxTypeId(taxTypeId);
-    setRateValue(r.rate);
-    setRateEffective(r.effectiveFromIso);
-    setRateVariant(r.variant || "DEFAULT");
+  function closeRateModal() {
+    setRateModal(null);
+    setRateValue("");
+    setRateEffective("");
+  }
+
+  async function onSaveTypeForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBanner(null);
+    const fd = new FormData(e.currentTarget);
+    if (editingTypeId) fd.set("id", editingTypeId);
+    const wasEdit = editingTypeId != null;
+    try {
+      await saveTaxTypeAction(fd);
+      closeTypeForm({ clearBanner: false });
+      setBanner({
+        type: "ok",
+        text: wasEdit ? "Tax type updated." : "Tax type created.",
+      });
+      router.refresh();
+    } catch (err) {
+      setBanner({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not save tax type.",
+      });
+    }
+  }
+
+  async function onSaveRateForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!rateModal) return;
+    setBanner(null);
+    const fd = new FormData(e.currentTarget);
+    fd.set("taxTypeId", rateModal.taxTypeId);
+    fd.set("variant", "DEFAULT");
+    try {
+      await saveTaxRateScheduleAction(fd);
+      closeRateModal();
+      setBanner({ type: "ok", text: "Rate saved." });
+      router.refresh();
+    } catch (err) {
+      setBanner({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not save rate.",
+      });
+    }
   }
 
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Tax types and rates</h1>
+        <h1 className="text-2xl font-semibold">Tax types</h1>
         <p className="text-sm opacity-75">
-          Advanced catalog for all tax types. For everyday VAT and sales tax changes, use{" "}
+          Catalog of tax levies linked to regimes. Change VAT and sales tax
+          percentages on{" "}
           <Link href="/setup/tax-rates" className="underline underline-offset-4">
             Tax rates
           </Link>
-          . Link taxes to regimes under{" "}
+          ; assign which taxes apply per regime on{" "}
           <Link href="/tax-regimes" className="underline underline-offset-4">
             Tax regimes
           </Link>
-          .
+          . Add custom tax types here only when you need levies beyond VAT and
+          sales tax.
         </p>
       </div>
 
-      {satMissingVariants.length > 0 ? (
-        <p className="text-sm rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2">
-          Sales tax is missing rate rows for:{" "}
-          {satMissingVariants
-            .map((v) => TAX_RATE_VARIANT_LABELS[v as TaxRateVariant])
-            .join(", ")}
-          . Add them on{" "}
-          <Link href="/setup/tax-rates" className="underline underline-offset-4 font-medium">
-            Tax rates
-          </Link>
-          .
-        </p>
+      {banner ? (
+        <div
+          className={
+            banner.type === "error"
+              ? "rounded-lg border border-red-600/40 bg-red-600/5 px-4 py-3 text-sm text-red-800 dark:text-red-300"
+              : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200"
+          }
+        >
+          {banner.text}
+        </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={openAddTypeModal}
-          className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
+      {isTypeFormOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingTypeId ? "Edit tax type" : "Add tax type"}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeTypeForm();
+          }}
         >
-          Add tax type
-        </button>
-      </div>
-
-      {typeModalOpen ? (
-        <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center p-4 sm:p-6">
-          <div
-            className="absolute inset-0 bg-black/45 dark:bg-black/55 backdrop-blur-[2px]"
-            aria-hidden
-            onClick={closeTypeModal}
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={() => closeTypeForm()}
           />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tax-type-modal-title"
-            className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-background shadow-xl shadow-black/10 dark:shadow-black/40 p-5 sm:p-6 space-y-4 max-h-[min(90vh,32rem)] overflow-y-auto"
-          >
+
+          <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-background text-foreground p-3 shadow-lg">
             <div className="flex items-start justify-between gap-3">
-              <h2 id="tax-type-modal-title" className="text-lg font-semibold">
+              <div className="text-sm font-semibold">
                 {editingTypeId ? "Edit tax type" : "Add tax type"}
-              </h2>
+              </div>
               <button
                 type="button"
-                onClick={closeTypeModal}
-                className="rounded-md p-1 text-sm opacity-70 hover:opacity-100 hover:bg-accent/25"
-                aria-label="Close"
+                className="rounded-md border border-border px-2 py-1 text-xs"
+                onClick={() => closeTypeForm()}
               >
-                ✕
+                X
               </button>
             </div>
+
             <form
-              action={async (formData) => {
-                await saveTaxTypeAction(formData);
-                closeTypeModal();
-              }}
-              className="space-y-4"
+              onSubmit={(e) => void onSaveTypeForm(e)}
+              className="mt-3 space-y-1.5 max-h-[min(28rem,calc(100vh-6rem))] overflow-y-auto pr-1"
             >
-              {editingTypeId ? <input type="hidden" name="id" value={editingTypeId} /> : null}
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="tax-type-modal-code">
+              {editingTypeId ? (
+                <input type="hidden" name="id" value={editingTypeId} />
+              ) : null}
+
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="tax-type-code">
                   Code
                 </label>
-                <input
-                  id="tax-type-modal-code"
-                  name="code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="rounded-md border border-border bg-transparent px-3 py-2"
-                  placeholder="e.g. VAT"
-                  required
-                  autoFocus
-                />
+                <div className={fieldControlClass}>
+                  <input
+                    id="tax-type-code"
+                    name="code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    className={`${inputClass} font-mono`}
+                    placeholder="e.g. ENV_LEVY"
+                    required
+                    autoFocus
+                  />
+                  <p className={hintClass}>Stable key used in snapshots and reports.</p>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="tax-type-modal-name">
-                  Display name
+
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="tax-type-name">
+                  Name
                 </label>
-                <input
-                  id="tax-type-modal-name"
-                  name="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="rounded-md border border-border bg-transparent px-3 py-2"
-                  required
-                />
+                <div className={fieldControlClass}>
+                  <input
+                    id="tax-type-name"
+                    name="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={inputClass}
+                    required
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="tax-type-modal-sort">
-                  Sort order
+
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="tax-type-sort">
+                  Order
                 </label>
-                <input
-                  id="tax-type-modal-sort"
-                  name="sortOrder"
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
-                  className="rounded-md border border-border bg-transparent px-3 py-2 w-32"
-                />
+                <div className={fieldControlClass}>
+                  <input
+                    id="tax-type-sort"
+                    name="sortOrder"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                    className={`${inputClass} max-w-24`}
+                  />
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
-                  {editingTypeId ? "Save type" : "Add type"}
+
+              <div className={formActionsClass}>
+                <button
+                  type="submit"
+                  className="rounded-md bg-brand text-brand-foreground px-3 py-1.5 text-xs font-medium"
+                >
+                  {editingTypeId ? "Save changes" : "Add type"}
                 </button>
                 <button
                   type="button"
-                  onClick={closeTypeModal}
-                  className="rounded-md border border-border px-4 py-2 text-sm"
+                  onClick={() => closeTypeForm()}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
                 >
                   Cancel
                 </button>
@@ -246,181 +283,197 @@ export function TaxTypesClient(props: {
         </div>
       ) : null}
 
-      {rateTaxTypeId ? (
-        <form
-          action={async (formData) => {
-            await saveTaxRateScheduleAction(formData);
-            setRateTaxTypeId(null);
-            setRateEditId(null);
+      {rateModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Set rate for ${rateModal.code}`}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeRateModal();
           }}
-          className="space-y-3 max-w-xl rounded-lg border border-border p-4"
         >
-          <h2 className="text-lg font-semibold">
-            {rateEditId ? "Edit rate row" : "Add rate row"}
-          </h2>
-          <input type="hidden" name="taxTypeId" value={rateTaxTypeId} />
-          {rateEditId ? <input type="hidden" name="id" value={rateEditId} /> : null}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Variant</label>
-            <select
-              name="variant"
-              value={rateVariant}
-              onChange={(e) => setRateVariant(e.target.value)}
-              className="rounded-md border border-border bg-transparent px-3 py-2"
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={closeRateModal}
+          />
+
+          <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-background text-foreground p-3 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-sm font-semibold">Set rate — {rateModal.code}</div>
+              <button
+                type="button"
+                className="rounded-md border border-border px-2 py-1 text-xs"
+                onClick={closeRateModal}
+              >
+                X
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => void onSaveRateForm(e)}
+              className="mt-3 space-y-1.5"
             >
-              <option value="DEFAULT">{TAX_RATE_VARIANT_LABELS.DEFAULT}</option>
-              <option value="SIMPLIFIED">{TAX_RATE_VARIANT_LABELS.SIMPLIFIED}</option>
-              <option value="REAL">{TAX_RATE_VARIANT_LABELS.REAL}</option>
-              <option value="NO_TAXPAYER_ID">{TAX_RATE_VARIANT_LABELS.NO_TAXPAYER_ID}</option>
-            </select>
-            <p className="text-xs opacity-70">
-              Use variants for Sales Tax rules. Most taxes should stay on Default.
-            </p>
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="custom-rate-effective">
+                  Effective
+                </label>
+                <div className={fieldControlClass}>
+                  <input
+                    id="custom-rate-effective"
+                    type="date"
+                    name="effectiveFrom"
+                    value={rateEffective}
+                    onChange={(e) => setRateEffective(e.target.value)}
+                    className={`${inputClass} max-w-44`}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="custom-rate-value">
+                  Rate
+                </label>
+                <div className={fieldControlClass}>
+                  <input
+                    id="custom-rate-value"
+                    name="rate"
+                    value={rateValue}
+                    onChange={(e) => setRateValue(e.target.value)}
+                    className={`${inputClass} max-w-28 font-mono`}
+                    placeholder="0.05"
+                    required
+                  />
+                  <p className={hintClass}>Decimal fraction (e.g. 0.05 = 5%).</p>
+                </div>
+              </div>
+
+              <div className={formActionsClass}>
+                <button
+                  type="submit"
+                  className="rounded-md bg-brand text-brand-foreground px-3 py-1.5 text-xs font-medium"
+                >
+                  Save rate
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
+                  onClick={closeRateModal}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Effective from</label>
-            <input
-              type="date"
-              name="effectiveFrom"
-              value={rateEffective}
-              onChange={(e) => setRateEffective(e.target.value)}
-              className="rounded-md border border-border bg-transparent px-3 py-2"
-              required
-            />
-          </div>
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Rate (decimal)</label>
-            <input
-              name="rate"
-              value={rateValue}
-              onChange={(e) => setRateValue(e.target.value)}
-              className="rounded-md border border-border bg-transparent px-3 py-2"
-              placeholder="0.1925"
-              required
-            />
-          </div>
-          <div className="flex gap-2">
-            <button className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium">
-              Save rate
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-border px-4 py-2 text-sm"
-              onClick={() => {
-                setRateTaxTypeId(null);
-                setRateEditId(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        </div>
       ) : null}
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">All tax types</h2>
-        {types.length === 0 ? (
-          <EmptyTableNotice
-            columns={[
-              { label: "Code" },
-              { label: "Name" },
-              { label: "Sort" },
-              { label: "Rate schedule" },
-              { label: "Actions", className: "w-36 text-right" },
-            ]}
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h2 className="text-lg font-semibold">All tax types</h2>
+          <button
+            type="button"
+            onClick={openAddTypeForm}
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
           >
-            No tax types yet. Use{" "}
-            <span className="font-medium text-foreground">Add tax type</span> to create
-            one.
-          </EmptyTableNotice>
-        ) : (
-          <ul className="space-y-4">
-            {types.map((t) => (
-              <li
-                key={t.id}
-                className="rounded-lg border border-border p-4 space-y-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="font-semibold">
-                      {t.name}{" "}
-                      <span className="text-xs font-normal opacity-70">({t.code})</span>
-                    </div>
-                    <div className="text-xs opacity-70">Sort: {t.sortOrder}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startEditType(t)}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs"
+            Add tax type
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Code</th>
+                <th className="p-2 font-medium">Name</th>
+                <th className="p-2 font-medium">Order</th>
+                <th className="p-2 font-medium">Current rate</th>
+                <th className="p-2 font-medium w-44 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {types.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-10 text-center text-sm text-foreground/70">
+                    No tax types yet. Use{" "}
+                    <span className="font-medium text-foreground">Add tax type</span> to
+                    create one.
+                  </td>
+                </tr>
+              ) : (
+                types.map((t) => {
+                  const operational = isOperationalTaxCode(t.code);
+                  return (
+                    <tr
+                      key={t.id}
+                      className={[
+                        "border-b border-border align-top",
+                        editingTypeId === t.id ? "bg-accent/15" : "",
+                      ].join(" ")}
                     >
-                      Edit type
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openNewRate(t.id)}
-                      className="rounded-md border border-border px-3 py-1.5 text-xs"
-                    >
-                      Add rate
-                    </button>
-                    {t.code !== VAT_TAX_CODE ? (
-                      <button
-                        type="button"
-                        onClick={() => setPendingDeleteType({ id: t.id, code: t.code })}
-                        className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs"
-                      >
-                        Delete type
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-xs font-medium opacity-70 mb-1">Rate schedule</div>
-                  {t.rateSchedules.length === 0 ? (
-                    <div className="text-xs opacity-70">No rates — sales for this tax will error.</div>
-                  ) : (
-                    <ul className="divide-y divide-border border border-border rounded-md overflow-hidden">
-                      {t.rateSchedules.map((r) => (
-                        <li
-                          key={r.id}
-                          className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                        >
-                          <span className="tabular-nums opacity-90">
-                            From {r.effectiveFromIso}: {(Number.parseFloat(r.rate) * 100).toFixed(2)}%
-                            {r.variant && r.variant !== "DEFAULT" ? (
-                              <span className="ml-2 text-[11px] opacity-70">
-                                (
-                                {TAX_RATE_VARIANT_LABELS[r.variant as TaxRateVariant] ??
-                                  r.variant}
-                                )
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="flex gap-2">
-                            <button
-                              type="button"
-                              className="text-xs underline underline-offset-4"
-                              onClick={() => startEditRate(t.id, r)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs underline underline-offset-4 text-red-700 dark:text-red-400"
-                              onClick={() => setPendingDeleteRate({ id: r.id })}
-                            >
-                              Delete
-                            </button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                      <td className="p-2 font-mono text-xs">{t.code}</td>
+                      <td className="p-2">
+                        <div className="font-medium">{t.name}</div>
+                        {operational ? (
+                          <span className="text-[11px] opacity-60">Built-in</span>
+                        ) : null}
+                      </td>
+                      <td className="p-2 tabular-nums opacity-80">{t.sortOrder}</td>
+                      <td className="p-2">
+                        {operational ? (
+                          <Link
+                            href="/setup/tax-rates"
+                            className="text-xs underline underline-offset-4 opacity-80"
+                          >
+                            Tax rates
+                          </Link>
+                        ) : t.currentRatePercent != null ? (
+                          <span className="tabular-nums">{t.currentRatePercent}%</span>
+                        ) : (
+                          <span className="text-xs opacity-60">—</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right">
+                        <div className="flex justify-end gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => startEditType(t)}
+                            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
+                          >
+                            Edit
+                          </button>
+                          {!operational ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openSetRate(t)}
+                                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
+                              >
+                                Set rate
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPendingDeleteType({ id: t.id, code: t.code })
+                                }
+                                className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {pendingDeleteType ? (
@@ -430,25 +483,20 @@ export function TaxTypesClient(props: {
           confirmLabel="Delete"
           onCancel={() => setPendingDeleteType(null)}
           onConfirm={async () => {
-            const fd = new FormData();
-            fd.set("id", pendingDeleteType.id);
-            await deleteTaxTypeAction(fd);
-            setPendingDeleteType(null);
-          }}
-        />
-      ) : null}
-
-      {pendingDeleteRate ? (
-        <ConfirmDialog
-          title="Delete rate row?"
-          description="Historical invoices keep their own snapshots; this only affects new postings."
-          confirmLabel="Delete rate"
-          onCancel={() => setPendingDeleteRate(null)}
-          onConfirm={async () => {
-            const fd = new FormData();
-            fd.set("id", pendingDeleteRate.id);
-            await deleteTaxRateScheduleAction(fd);
-            setPendingDeleteRate(null);
+            try {
+              const fd = new FormData();
+              fd.set("id", pendingDeleteType.id);
+              await deleteTaxTypeAction(fd);
+              setPendingDeleteType(null);
+              setBanner({ type: "ok", text: "Tax type deleted." });
+              router.refresh();
+            } catch (err) {
+              setBanner({
+                type: "error",
+                text: err instanceof Error ? err.message : "Could not delete.",
+              });
+              setPendingDeleteType(null);
+            }
           }}
         />
       ) : null}

@@ -10,6 +10,12 @@ import {
 import { useReportLoad } from "@/hooks/useReportLoad";
 import { fmtKg, formatIsoDate } from "@/utils/format";
 
+type CustomerTypeOption = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 type DailySalesData = {
   dateFromIso: string | null;
   dateToIso: string | null;
@@ -20,23 +26,27 @@ type DailySalesData = {
   rowCount?: number;
   scopedToSalesPoint: boolean;
   assignedSalesPointName: string | null;
+  customerTypeOptions: CustomerTypeOption[];
   totalsByType: Record<string, string>;
   rows: Array<{
     invoiceNo: string;
     soldAt: string;
     customerNameSnapshot: string;
-    customerType: string;
+    customerTypeId: string;
+    customerTypeCode: string;
+    customerTypeName: string;
     qtyKg: string;
     deliveryOrderNo: string | null;
   }>;
 };
 
-const CUSTOMER_TYPE_LABELS: Record<string, string> = {
-  INDUSTRY: "Industry",
-  WHOLE_SALE: "Whole sale",
-  RETAIL: "Retail",
-  WORKER: "Worker",
-};
+function customerTypeLabel(
+  options: CustomerTypeOption[],
+  id: string,
+  fallbackName?: string,
+): string {
+  return options.find((o) => o.id === id)?.name ?? fallbackName ?? id;
+}
 
 export default function DailySalesSummaryScreen() {
   const { data, error, loading, refreshing, refresh } =
@@ -73,10 +83,10 @@ export default function DailySalesSummaryScreen() {
           {Object.keys(data.totalsByType).length > 0 ? (
             <>
               <SectionTitle>By customer type</SectionTitle>
-              {Object.entries(data.totalsByType).map(([type, qty]) => (
+              {Object.entries(data.totalsByType).map(([typeId, qty]) => (
                 <ListCard
-                  key={type}
-                  title={CUSTOMER_TYPE_LABELS[type] ?? type}
+                  key={typeId}
+                  title={customerTypeLabel(data.customerTypeOptions, typeId)}
                   right={fmtKg(qty)}
                 />
               ))}
@@ -93,7 +103,8 @@ export default function DailySalesSummaryScreen() {
                 title={r.invoiceNo}
                 subtitle={r.customerNameSnapshot}
                 meta={[
-                  CUSTOMER_TYPE_LABELS[r.customerType] ?? r.customerType,
+                  r.customerTypeName ||
+                    customerTypeLabel(data.customerTypeOptions, r.customerTypeId),
                   r.deliveryOrderNo ? `DO ${r.deliveryOrderNo}` : null,
                   formatIsoDate(r.soldAt.slice(0, 10)),
                 ]

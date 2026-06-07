@@ -4,8 +4,6 @@ import { OpenReportButton } from "@/components/OpenReportButton";
 import { getServerSession } from "@/lib/auth-server";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import {
-  DAILY_SALES_CUSTOMER_TYPE_LABELS,
-  DAILY_SALES_TYPE_ORDER,
   fmtDate,
   fmtKg,
   formatDailySalesDateRangeLabel,
@@ -55,6 +53,7 @@ export default async function DailySalesSummaryPage(props: {
     totalsByType,
     grandQty,
     doMetaByNo,
+    customerTypeOptions,
     scopedToSalesPoint,
     assignedSalesPointName,
   } = data;
@@ -259,14 +258,12 @@ export default async function DailySalesSummaryPage(props: {
                 </tr>
               </thead>
               <tbody>
-                {DAILY_SALES_TYPE_ORDER.map((t) => {
-                  const q = totalsByType.get(t);
+                {customerTypeOptions.map((opt) => {
+                  const q = totalsByType.get(opt.id);
                   if (!q || q.equals(z)) return null;
                   return (
-                    <tr key={t} className="border-b border-border">
-                      <td className="px-3 py-1">
-                        {DAILY_SALES_CUSTOMER_TYPE_LABELS[t]}
-                      </td>
+                    <tr key={opt.id} className="border-b border-border">
+                      <td className="px-3 py-1">{opt.name}</td>
                       <td className="px-3 py-1 text-right tabular-nums">
                         {fmtKg(q)}
                       </td>

@@ -177,6 +177,12 @@ export const MOBILE_REPORT_LINKS = [
     permission: "route:/reports/do-commitment-crosstab",
     path: `${MOBILE_API_PREFIX}/reports/commitments`,
   },
+  {
+    id: "bota-bottle-stock",
+    label: "Bota bottle stock",
+    permission: "route:/reports/bota-bottle-stock",
+    path: `${MOBILE_API_PREFIX}/reports/bota-bottle-stock`,
+  },
 ] as const;
 
 export type MobileReceiptListRow = {

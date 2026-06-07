@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   PAYMENT_METHOD_KIND_LABELS,
@@ -22,14 +23,30 @@ const KIND_OPTIONS = Object.entries(PAYMENT_METHOD_KIND_LABELS) as Array<
   [Exclude<PaymentMethodKind, "CREDIT">, string]
 >;
 
+const inputClass =
+  "h-8 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm";
+const selectClass = inputClass;
+const labelClass = "text-xs font-medium";
+const hintClass = "text-[11px] opacity-70 mt-0.5";
+const fieldRowClass = "flex items-start gap-2";
+const fieldLabelClass = [
+  labelClass,
+  "shrink-0 w-[7.25rem] h-8",
+  "flex items-center justify-end px-2",
+  "rounded-md border border-border",
+  "bg-sidebar text-sidebar-foreground",
+].join(" ");
+const fieldControlClass = "min-w-0 flex-1";
+
 export function PaymentMethodsClient(props: {
   methods: MethodRow[];
   savePaymentMethodAction: (formData: FormData) => void | Promise<void>;
   deletePaymentMethodAction: (formData: FormData) => void | Promise<void>;
 }) {
   const { methods, savePaymentMethodAction, deletePaymentMethodAction } = props;
+  const router = useRouter();
 
-  const [modalOpen, setModalOpen] = React.useState(false);
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [name, setName] = React.useState("");
   const [code, setCode] = React.useState("");
@@ -41,10 +58,12 @@ export function PaymentMethodsClient(props: {
     id: string;
     name: string;
   } | null>(null);
-  const [banner, setBanner] = React.useState<string | null>(null);
+  const [banner, setBanner] = React.useState<{
+    type: "error" | "ok";
+    text: string;
+  } | null>(null);
 
-  const closeModal = React.useCallback(() => {
-    setModalOpen(false);
+  function resetForm(opts?: { clearBanner?: boolean }) {
     setEditingId(null);
     setName("");
     setCode("");
@@ -52,11 +71,18 @@ export function PaymentMethodsClient(props: {
     setSortOrder("0");
     setIsActive(true);
     setIsSystem(false);
-  }, []);
+    if (opts?.clearBanner !== false) setBanner(null);
+  }
 
-  function openAdd() {
-    closeModal();
-    setModalOpen(true);
+  function closeForm(opts?: { clearBanner?: boolean }) {
+    setIsFormOpen(false);
+    resetForm(opts);
+  }
+
+  function openAddForm() {
+    resetForm();
+    setBanner(null);
+    setIsFormOpen(true);
   }
 
   function startEdit(row: MethodRow) {
@@ -71,22 +97,31 @@ export function PaymentMethodsClient(props: {
     setSortOrder(String(row.sortOrder));
     setIsActive(row.isActive);
     setIsSystem(row.isSystem);
-    setModalOpen(true);
+    setBanner(null);
+    setIsFormOpen(true);
   }
 
-  React.useEffect(() => {
-    if (!modalOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closeModal();
+  async function onSaveForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBanner(null);
+    const fd = new FormData(e.currentTarget);
+    if (editingId) fd.set("id", editingId);
+    const wasEdit = editingId != null;
+    try {
+      await savePaymentMethodAction(fd);
+      closeForm({ clearBanner: false });
+      setBanner({
+        type: "ok",
+        text: wasEdit ? "Payment method updated." : "Payment method created.",
+      });
+      router.refresh();
+    } catch (err) {
+      setBanner({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not save payment method.",
+      });
     }
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [modalOpen, closeModal]);
+  }
 
   return (
     <div className="space-y-6">
@@ -100,231 +135,168 @@ export function PaymentMethodsClient(props: {
       </header>
 
       {banner ? (
-        <div className="rounded-lg border border-border bg-foreground/5 px-4 py-3 text-sm">
-          {banner}
+        <div
+          className={
+            banner.type === "error"
+              ? "rounded-lg border border-red-600/40 bg-red-600/5 px-4 py-3 text-sm text-red-800 dark:text-red-300"
+              : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200"
+          }
+        >
+          {banner.text}
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">All methods</h2>
-        <button
-          type="button"
-          className="rounded-md bg-brand text-brand-foreground px-3 py-1.5 text-sm font-medium"
-          onClick={openAdd}
+      {isFormOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingId ? "Edit payment method" : "Add payment method"}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeForm();
+          }}
         >
-          Add payment method
-        </button>
-      </div>
-
-      {methods.length === 0 ? (
-        <p className="text-sm opacity-75">No payment methods yet.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-foreground/[0.04] text-left">
-                <th className="px-3 py-2 font-medium">Name</th>
-                <th className="px-3 py-2 font-medium">Code</th>
-                <th className="px-3 py-2 font-medium">Kind</th>
-                <th className="px-3 py-2 font-medium">Order</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Usage</th>
-                <th className="px-3 py-2 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {methods.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2">{m.name}</td>
-                  <td className="px-3 py-2 font-mono text-xs opacity-80">{m.code}</td>
-                  <td className="px-3 py-2">
-                    {PAYMENT_METHOD_KIND_LABELS[
-                      m.kind as Exclude<PaymentMethodKind, "CREDIT">
-                    ] ?? m.kind}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{m.sortOrder}</td>
-                  <td className="px-3 py-2">
-                    {m.isActive ? (
-                      <span>Active</span>
-                    ) : (
-                      <span className="opacity-60">Inactive</span>
-                    )}
-                    {m.isSystem ? (
-                      <span className="ml-2 text-xs opacity-50">(built-in)</span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{m.usageCount}</td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        className="rounded-md border border-border px-2 py-1 text-xs"
-                        onClick={() => startEdit(m)}
-                      >
-                        Edit
-                      </button>
-                      {!m.isSystem ? (
-                        <button
-                          type="button"
-                          className="rounded-md border border-red-600/40 px-2 py-1 text-xs text-red-700"
-                          disabled={m.usageCount > 0}
-                          title={
-                            m.usageCount > 0
-                              ? "Used on transactions — deactivate instead"
-                              : undefined
-                          }
-                          onClick={() => setPendingDelete({ id: m.id, name: m.name })}
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {modalOpen ? (
-        <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center p-4 sm:p-6">
-          <div
-            className="absolute inset-0 bg-black/45 dark:bg-black/55 backdrop-blur-[2px]"
-            aria-hidden
-            onClick={closeModal}
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close"
+            onClick={() => closeForm()}
           />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="payment-method-modal-title"
-            className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-background shadow-xl shadow-black/10 dark:shadow-black/40 p-5 sm:p-6 space-y-4 max-h-[min(90vh,32rem)] overflow-y-auto"
-          >
+
+          <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-background text-foreground p-3 shadow-lg">
             <div className="flex items-start justify-between gap-3">
-              <h2 id="payment-method-modal-title" className="text-lg font-semibold">
+              <div className="text-sm font-semibold">
                 {editingId ? "Edit payment method" : "Add payment method"}
-              </h2>
+              </div>
               <button
                 type="button"
-                onClick={closeModal}
-                className="rounded-md p-1 text-sm opacity-70 hover:opacity-100 hover:bg-accent/25"
-                aria-label="Close"
+                className="rounded-md border border-border px-2 py-1 text-xs"
+                onClick={() => closeForm()}
               >
-                ✕
+                X
               </button>
             </div>
+
             <form
-              action={async (formData) => {
-                try {
-                  await savePaymentMethodAction(formData);
-                  setBanner(null);
-                  closeModal();
-                } catch (e) {
-                  setBanner(e instanceof Error ? e.message : "Save failed.");
-                }
-              }}
-              className="space-y-4"
+              onSubmit={(e) => void onSaveForm(e)}
+              className="mt-3 space-y-1.5 max-h-[min(28rem,calc(100vh-6rem))] overflow-y-auto pr-1"
             >
               {editingId ? <input type="hidden" name="id" value={editingId} /> : null}
 
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="payment-method-modal-name">
-                  Display name
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="payment-method-name">
+                  Name
                 </label>
-                <input
-                  id="payment-method-modal-name"
-                  name="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="rounded-md border border-border bg-transparent px-3 py-2"
-                  required
-                  autoFocus
-                />
+                <div className={fieldControlClass}>
+                  <input
+                    id="payment-method-name"
+                    name="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={inputClass}
+                    required
+                    autoFocus
+                  />
+                  <p className={hintClass}>Shown in POS and delivery order forms.</p>
+                </div>
               </div>
 
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="payment-method-modal-code">
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="payment-method-code">
                   Code
                 </label>
-                <input
-                  id="payment-method-modal-code"
-                  name="code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  className="rounded-md border border-border bg-transparent px-3 py-2 font-mono text-sm"
-                  required
-                  readOnly={isSystem}
-                  disabled={isSystem}
-                />
-                {isSystem ? (
-                  <p className="text-xs opacity-60">
-                    Built-in code cannot be changed.
-                  </p>
-                ) : (
-                  <p className="text-xs opacity-60">
-                    Uppercase letters, numbers, underscores (e.g. MOBILE_MONEY).
-                  </p>
-                )}
+                <div className={fieldControlClass}>
+                  <input
+                    id="payment-method-code"
+                    name="code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    className={`${inputClass} font-mono`}
+                    required
+                    readOnly={isSystem}
+                    disabled={isSystem}
+                  />
+                  {isSystem ? (
+                    <p className={hintClass}>Built-in code cannot be changed.</p>
+                  ) : (
+                    <p className={hintClass}>
+                      Uppercase letters, numbers, underscores (e.g. MOBILE_MONEY).
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="payment-method-modal-kind">
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="payment-method-kind">
                   Kind
                 </label>
-                <select
-                  id="payment-method-modal-kind"
-                  name="kind"
-                  value={kind}
-                  onChange={(e) =>
-                    setKind(e.target.value as Exclude<PaymentMethodKind, "CREDIT">)
-                  }
-                  className="rounded-md border border-border bg-transparent px-3 py-2"
-                  disabled={isSystem}
-                >
-                  {KIND_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                <div className={fieldControlClass}>
+                  <select
+                    id="payment-method-kind"
+                    name="kind"
+                    value={kind}
+                    onChange={(e) =>
+                      setKind(e.target.value as Exclude<PaymentMethodKind, "CREDIT">)
+                    }
+                    className={selectClass}
+                    disabled={isSystem}
+                  >
+                    {KIND_OPTIONS.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className={hintClass}>
+                    Controls how amounts are captured at checkout.
+                  </p>
+                </div>
               </div>
 
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="payment-method-modal-sort">
-                  Sort order
+              <div className={fieldRowClass}>
+                <label className={fieldLabelClass} htmlFor="payment-method-sort">
+                  Order
                 </label>
-                <input
-                  id="payment-method-modal-sort"
-                  name="sortOrder"
-                  type="number"
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
-                  className="rounded-md border border-border bg-transparent px-3 py-2 w-32"
-                />
+                <div className={fieldControlClass}>
+                  <input
+                    id="payment-method-sort"
+                    name="sortOrder"
+                    type="number"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                    className={`${inputClass} max-w-[6rem]`}
+                  />
+                  <p className={hintClass}>Lower numbers appear first in pick lists.</p>
+                </div>
               </div>
 
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  name="isActive"
-                  value="1"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                />
-                Active (shown in POS and delivery orders)
-              </label>
+              <div className={fieldRowClass}>
+                <span className={fieldLabelClass}>Active</span>
+                <div className={`${fieldControlClass} flex h-8 items-center gap-2`}>
+                  <input
+                    type="checkbox"
+                    name="isActive"
+                    value="1"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                  />
+                  <span className="text-xs opacity-80">
+                    Shown in POS and delivery orders
+                  </span>
+                </div>
+              </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-1 pl-[7.25rem]">
                 <button
                   type="submit"
-                  className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
+                  className="rounded-md bg-brand text-brand-foreground px-3 py-1.5 text-xs font-medium"
                 >
-                  {editingId ? "Save method" : "Add method"}
+                  {editingId ? "Save changes" : "Add method"}
                 </button>
                 <button
                   type="button"
-                  onClick={closeModal}
-                  className="rounded-md border border-border px-4 py-2 text-sm"
+                  onClick={() => closeForm()}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
                 >
                   Cancel
                 </button>
@@ -333,6 +305,108 @@ export function PaymentMethodsClient(props: {
           </div>
         </div>
       ) : null}
+
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h2 className="text-lg font-semibold">All methods</h2>
+          <button
+            type="button"
+            className="rounded-md bg-brand text-brand-foreground px-4 py-2 text-sm font-medium"
+            onClick={openAddForm}
+          >
+            Add payment method
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="p-2 font-medium">Name</th>
+                <th className="p-2 font-medium">Code</th>
+                <th className="p-2 font-medium">Kind</th>
+                <th className="p-2 font-medium">Order</th>
+                <th className="p-2 font-medium">Status</th>
+                <th className="p-2 font-medium">Usage</th>
+                <th className="p-2 font-medium w-36 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {methods.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-10 text-center text-sm text-foreground/70">
+                    No payment methods yet. Use{" "}
+                    <span className="font-medium text-foreground">Add payment method</span>{" "}
+                    to create one.
+                  </td>
+                </tr>
+              ) : (
+                methods.map((m) => (
+                  <tr
+                    key={m.id}
+                    className={[
+                      "border-b border-border align-top",
+                      editingId === m.id ? "bg-accent/15" : "",
+                    ].join(" ")}
+                  >
+                    <td className="p-2 font-medium">{m.name}</td>
+                    <td className="p-2 font-mono text-xs opacity-80">{m.code}</td>
+                    <td className="p-2 opacity-90">
+                      {PAYMENT_METHOD_KIND_LABELS[
+                        m.kind as Exclude<PaymentMethodKind, "CREDIT">
+                      ] ?? m.kind}
+                    </td>
+                    <td className="p-2 tabular-nums">{m.sortOrder}</td>
+                    <td className="p-2">
+                      {m.isActive ? (
+                        <span className="inline-flex rounded-full border border-emerald-600/30 bg-emerald-600/10 px-2 py-0.5 text-xs text-emerald-800 dark:text-emerald-200">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full border border-border bg-accent/10 px-2 py-0.5 text-xs opacity-80">
+                          Inactive
+                        </span>
+                      )}
+                      {m.isSystem ? (
+                        <span className="ml-2 text-xs opacity-50">(built-in)</span>
+                      ) : null}
+                    </td>
+                    <td className="p-2 tabular-nums">{m.usageCount}</td>
+                    <td className="p-2 text-right whitespace-nowrap">
+                      <div className="flex justify-end items-center gap-2">
+                        <button
+                          type="button"
+                          className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
+                          onClick={() => startEdit(m)}
+                        >
+                          Edit
+                        </button>
+                        {!m.isSystem ? (
+                          <button
+                            type="button"
+                            className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
+                            disabled={m.usageCount > 0}
+                            title={
+                              m.usageCount > 0
+                                ? "Used on transactions — deactivate instead"
+                                : undefined
+                            }
+                            onClick={() =>
+                              setPendingDelete({ id: m.id, name: m.name })
+                            }
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {pendingDelete ? (
         <ConfirmDialog
@@ -344,10 +418,14 @@ export function PaymentMethodsClient(props: {
               const fd = new FormData();
               fd.set("id", pendingDelete.id);
               await deletePaymentMethodAction(fd);
-              setBanner(null);
               setPendingDelete(null);
+              setBanner({ type: "ok", text: "Payment method deleted." });
+              router.refresh();
             } catch (e) {
-              setBanner(e instanceof Error ? e.message : "Delete failed.");
+              setBanner({
+                type: "error",
+                text: e instanceof Error ? e.message : "Could not delete payment method.",
+              });
               setPendingDelete(null);
             }
           }}

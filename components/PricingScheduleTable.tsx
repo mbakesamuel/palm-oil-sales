@@ -1,7 +1,8 @@
 import * as React from "react";
 import {
-  labelCustomerType,
+  labelCustomerTypeRow,
   type PricingProductGroup,
+  type PricingScheduleRow,
 } from "@/lib/pricing-report";
 
 /**
@@ -44,7 +45,7 @@ export function PricingScheduleTable(props: { groups: PricingProductGroup[] }) {
               {g.rows.map((r) => (
                 <tr key={r.id} className="align-top print:break-inside-avoid">
                   <td className="border border-border p-2 pl-6 print:border-black/25">
-                    {labelCustomerType(r.customerType)}
+                    {labelCustomerTypeRow(r)}
                   </td>
                   <td className="border border-border p-2 text-right tabular-nums whitespace-nowrap print:border-black/25">
                     {r.unitPriceExTax}

@@ -277,6 +277,7 @@ export async function validateSaleForSession(
       commercialServiceId: true,
       deliveryOrderNo: true,
       saleProductMode: true,
+      saleDisposition: true,
       soldAt: true,
       lines: {
         select: {

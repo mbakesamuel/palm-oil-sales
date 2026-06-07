@@ -29,7 +29,7 @@ export async function previewProductUnitPrice(
 
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
-    select: { customerType: true },
+    select: { customerTypeId: true },
   });
   if (!customer) {
     return { ok: false, error: "Customer not found." };
@@ -38,7 +38,7 @@ export async function previewProductUnitPrice(
   const r = await resolveUnitPriceExTax(
     prisma,
     productId,
-    customer.customerType,
+    customer.customerTypeId,
     soldAt,
   );
   if (!r.ok) return r;

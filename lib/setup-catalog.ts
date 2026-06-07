@@ -73,6 +73,13 @@ export const SETUP_NAV: SetupNavDefinition[] = [
   {
     group: "tax",
     groupLabel: "Tax",
+    href: "/setup/tax-rates",
+    label: "Tax rates",
+    permissionKey: "route:/setup/tax-rates",
+  },
+  {
+    group: "tax",
+    groupLabel: "Tax",
     href: "/tax-regimes",
     label: "Tax regimes",
     permissionKey: "route:/tax-regimes",
@@ -83,13 +90,6 @@ export const SETUP_NAV: SetupNavDefinition[] = [
     href: "/tax-types",
     label: "Tax types",
     permissionKey: "route:/tax-types",
-  },
-  {
-    group: "tax",
-    groupLabel: "Tax",
-    href: "/setup/tax-rates",
-    label: "Tax rates",
-    permissionKey: "route:/setup/tax-rates",
   },
   {
     group: "payment",
@@ -132,6 +132,13 @@ export const SETUP_NAV: SetupNavDefinition[] = [
     href: "/customers",
     label: "Customers",
     permissionKey: "route:/customers",
+  },
+  {
+    group: "customers",
+    groupLabel: "Customers",
+    href: "/setup/customer-types",
+    label: "Customer types",
+    permissionKey: "route:/setup/customer-types",
   },
 ];
 

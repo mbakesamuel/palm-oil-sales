@@ -45,6 +45,15 @@ export const REPORTS: ReportDefinition[] = [
   {
     group: "sales",
     groupLabel: "Sales",
+    href: "/reports/daily-sales-crosstab",
+    label: "Daily sales report",
+    description:
+      "Working month crosstab by day: Industry, Whole sale, Retail, Estates, Staff, and Transfer quantities (kg) per sales point.",
+    permissionKey: "route:/reports/daily-sales-crosstab",
+  },
+  {
+    group: "sales",
+    groupLabel: "Sales",
     href: "/reports/sales-summary-by-customer",
     label: "Sales summary by customer",
     description:
@@ -112,6 +121,15 @@ export const REPORTS: ReportDefinition[] = [
     description:
       "Compare on-hand stock to outstanding DO commitments — overall totals (stock, commitment, uncommitted balance) with breakdown by storage location and customer.",
     permissionKey: "route:/reports/stock-vs-commitments",
+  },
+  {
+    group: "stock",
+    groupLabel: "Stock",
+    href: "/reports/bota-bottle-stock",
+    label: "Bota bottle stock ledger",
+    description:
+      "Bota sales point only — IN / OUT movement history and running balance for bottled palm oil products.",
+    permissionKey: "route:/reports/bota-bottle-stock",
   },
   {
     group: "budget",

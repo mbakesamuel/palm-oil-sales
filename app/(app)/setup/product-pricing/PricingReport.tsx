@@ -3,6 +3,7 @@
 import * as React from "react";
 import { OpenReportButton } from "@/components/OpenReportButton";
 import { PricingScheduleTable } from "@/components/PricingScheduleTable";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
 import {
   buildPricingGroups,
   pickLatestPricingRows,
@@ -16,10 +17,11 @@ import {
  */
 export function PricingReport(props: {
   schedules: PricingScheduleRow[];
+  customerTypeOptions?: CustomerTypeOption[];
   /** Print route to open in a new tab when the user clicks Print. */
   printHref: string;
 }) {
-  const { schedules, printHref } = props;
+  const { schedules, customerTypeOptions = [], printHref } = props;
   const [effectiveFromIso, setEffectiveFromIso] = React.useState("");
 
   const groups = React.useMemo(() => {
@@ -27,8 +29,8 @@ export function PricingReport(props: {
       effectiveFromIso.trim() !== ""
         ? schedules.filter((r) => r.effectiveFromIso === effectiveFromIso.trim())
         : pickLatestPricingRows(schedules);
-    return buildPricingGroups(base);
-  }, [effectiveFromIso, schedules]);
+    return buildPricingGroups(base, customerTypeOptions);
+  }, [effectiveFromIso, schedules, customerTypeOptions]);
 
   const totalRows = groups.reduce((sum, g) => sum + g.rows.length, 0);
 

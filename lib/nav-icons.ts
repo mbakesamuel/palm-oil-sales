@@ -44,6 +44,7 @@ const HREF_ICONS: Record<string, LucideIcon> = {
   "/setup/role-access": Shield,
   "/users": Users,
   "/customers": UserCircle,
+  "/setup/customer-types": UserCircle,
   "/financial-years": CalendarRange,
   "/sales-points": MapPin,
   "/factories": Factory,

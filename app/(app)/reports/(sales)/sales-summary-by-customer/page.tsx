@@ -231,7 +231,11 @@ export default async function SalesSummaryByCustomerPage(props: {
 
       <div className="space-y-6">
         {data.products.map((block) => (
-          <ProductCustomerSummaryTable key={block.productId} block={block} />
+          <ProductCustomerSummaryTable
+            key={block.productId}
+            block={block}
+            customerTypeOptions={data.customerTypeOptions}
+          />
         ))}
       </div>
 
@@ -239,6 +243,7 @@ export default async function SalesSummaryByCustomerPage(props: {
         <GrandCustomerSummaryTable
           grandByType={data.grandByType}
           grandTotal={data.grandTotal}
+          customerTypeOptions={data.customerTypeOptions}
           grandBudgetVsActual={data.grandBudgetVsActual}
         />
       ) : null}

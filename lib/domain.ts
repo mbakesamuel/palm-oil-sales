@@ -40,12 +40,14 @@ export const FinancialYearStatus = {
 export type FinancialYearStatus =
   (typeof FinancialYearStatus)[keyof typeof FinancialYearStatus];
 
+/** @deprecated Legacy string codes — prefer CustomerTypeOption from lib/customer-types. */
 export const CustomerType = {
   INDUSTRY: "INDUSTRY",
   WHOLE_SALE: "WHOLE_SALE",
   RETAIL: "RETAIL",
   WORKER: "WORKER",
 } as const;
+/** @deprecated Use CustomerTypeOption.id instead. */
 export type CustomerType = (typeof CustomerType)[keyof typeof CustomerType];
 
 export const CustomerResidency = {

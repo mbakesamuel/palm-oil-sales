@@ -17,7 +17,7 @@ async function resolveSalesAndVatForCustomerLikeApp(
     where: { id: customerId },
     select: {
       residency: true,
-      customerType: true,
+      customerTypeDefinition: { select: { code: true } },
       hasTaxpayerId: true,
       taxRegimeId: true,
       taxRegime: { select: { kind: true } },
@@ -63,7 +63,7 @@ async function resolveSalesAndVatForCustomerLikeApp(
 
     if (link.taxType.code === SALES_TAX_CODE) {
       if (customer.residency !== "LOCAL") continue;
-      if (customer.customerType === "INDUSTRY") continue;
+      if (customer.customerTypeDefinition?.code === "INDUSTRY") continue;
 
       const variant = !customer.hasTaxpayerId
         ? TaxRateVariant.NO_TAXPAYER_ID
@@ -118,7 +118,7 @@ async function main() {
       select: {
         name: true,
         residency: true,
-        customerType: true,
+        customerTypeDefinition: { select: { code: true } },
         hasTaxpayerId: true,
         taxRegime: {
           select: {

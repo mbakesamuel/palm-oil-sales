@@ -1,7 +1,6 @@
-import { CustomerType, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { CustomerTypeOption } from "@/lib/customer-types/types";
 import {
-  DAILY_SALES_CUSTOMER_TYPE_LABELS,
-  DAILY_SALES_TYPE_ORDER,
   fmtKg,
   fmtXaf,
   type BudgetVsActualSlice,
@@ -26,9 +25,10 @@ function cellHasData(c: CustomerTypeCell) {
 
 export function ProductCustomerSummaryTable(props: {
   block: ProductSummaryBlock;
+  customerTypeOptions: CustomerTypeOption[];
   compact?: boolean;
 }) {
-  const { block, compact = false } = props;
+  const { block, customerTypeOptions, compact = false } = props;
   if (!cellHasData(block.total)) return null;
 
   const pad = compact ? "px-2 py-1" : "px-3 py-1.5";
@@ -49,9 +49,9 @@ export function ProductCustomerSummaryTable(props: {
           <thead>
             <tr className="border-b border-border bg-foreground/[0.04] text-left">
               <th className={`${pad} w-28 font-medium`} />
-              {DAILY_SALES_TYPE_ORDER.map((t) => (
-                <th key={t} className={`${pad} font-medium text-right`}>
-                  {DAILY_SALES_CUSTOMER_TYPE_LABELS[t]}
+              {customerTypeOptions.map((opt) => (
+                <th key={opt.id} className={`${pad} font-medium text-right`}>
+                  {opt.name}
                 </th>
               ))}
               <th className={`${pad} font-medium text-right`}>Total</th>
@@ -60,9 +60,9 @@ export function ProductCustomerSummaryTable(props: {
           <tbody>
             <tr className="border-b border-border">
               <td className={`${pad} font-medium`}>quantity</td>
-              {DAILY_SALES_TYPE_ORDER.map((t) => (
-                <td key={t} className={`${pad} text-right tabular-nums`}>
-                  {fmtQtyCell(block.byType[t].qtyKg)}
+              {customerTypeOptions.map((opt) => (
+                <td key={opt.id} className={`${pad} text-right tabular-nums`}>
+                  {fmtQtyCell(block.byType[opt.id]?.qtyKg ?? z)}
                 </td>
               ))}
               <td className={`${pad} text-right tabular-nums font-medium`}>
@@ -71,9 +71,9 @@ export function ProductCustomerSummaryTable(props: {
             </tr>
             <tr>
               <td className={`${pad} font-medium`}>revenue</td>
-              {DAILY_SALES_TYPE_ORDER.map((t) => (
-                <td key={t} className={`${pad} text-right tabular-nums`}>
-                  {fmtRevCell(block.byType[t].revenueNet)}
+              {customerTypeOptions.map((opt) => (
+                <td key={opt.id} className={`${pad} text-right tabular-nums`}>
+                  {fmtRevCell(block.byType[opt.id]?.revenueNet ?? z)}
                 </td>
               ))}
               <td className={`${pad} text-right tabular-nums font-medium`}>
@@ -91,14 +91,16 @@ export function ProductCustomerSummaryTable(props: {
 }
 
 export function GrandCustomerSummaryTable(props: {
-  grandByType: Record<CustomerType, CustomerTypeCell>;
+  grandByType: Record<string, CustomerTypeCell>;
   grandTotal: CustomerTypeCell;
+  customerTypeOptions: CustomerTypeOption[];
   grandBudgetVsActual?: BudgetVsActualSlice | null;
   title?: string;
 }) {
   const {
     grandByType,
     grandTotal,
+    customerTypeOptions,
     grandBudgetVsActual = null,
     title = "Grand total (all products)",
   } = props;
@@ -120,9 +122,9 @@ export function GrandCustomerSummaryTable(props: {
           <thead>
             <tr className="border-b border-border bg-foreground/[0.04] text-left">
               <th className="px-3 py-1.5 w-28 font-medium" />
-              {DAILY_SALES_TYPE_ORDER.map((t) => (
-                <th key={t} className="px-3 py-1.5 font-medium text-right">
-                  {DAILY_SALES_CUSTOMER_TYPE_LABELS[t]}
+              {customerTypeOptions.map((opt) => (
+                <th key={opt.id} className="px-3 py-1.5 font-medium text-right">
+                  {opt.name}
                 </th>
               ))}
               <th className="px-3 py-1.5 font-medium text-right">Total</th>
@@ -131,9 +133,9 @@ export function GrandCustomerSummaryTable(props: {
           <tbody>
             <tr className="border-b border-border">
               <td className="px-3 py-1.5 font-medium">quantity</td>
-              {DAILY_SALES_TYPE_ORDER.map((t) => (
-                <td key={t} className="px-3 py-1.5 text-right tabular-nums">
-                  {fmtQtyCell(grandByType[t].qtyKg)}
+              {customerTypeOptions.map((opt) => (
+                <td key={opt.id} className="px-3 py-1.5 text-right tabular-nums">
+                  {fmtQtyCell(grandByType[opt.id]?.qtyKg ?? z)}
                 </td>
               ))}
               <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
@@ -142,9 +144,9 @@ export function GrandCustomerSummaryTable(props: {
             </tr>
             <tr>
               <td className="px-3 py-1.5 font-medium">revenue</td>
-              {DAILY_SALES_TYPE_ORDER.map((t) => (
-                <td key={t} className="px-3 py-1.5 text-right tabular-nums">
-                  {fmtRevCell(grandByType[t].revenueNet)}
+              {customerTypeOptions.map((opt) => (
+                <td key={opt.id} className="px-3 py-1.5 text-right tabular-nums">
+                  {fmtRevCell(grandByType[opt.id]?.revenueNet ?? z)}
                 </td>
               ))}
               <td className="px-3 py-1.5 text-right tabular-nums font-semibold">

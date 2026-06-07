@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
+import { listCustomerTypeDefinitions } from "@/lib/customer-types/catalog";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getServerSession } from "@/lib/auth-server";
 import { AutoPrint } from "@/components/AutoPrint";
@@ -27,7 +28,7 @@ export default async function ProductPricingPrintPage(props: {
   const effectiveFromIso = (effectiveFrom ?? "").trim();
 
   const prisma = getPrismaClient();
-  const [schedules, settings] = await Promise.all([
+  const [schedules, settings, customerTypeOptions] = await Promise.all([
     prismaRetry(() =>
       prisma.productUnitPriceSchedule.findMany({
         orderBy: [{ productId: "asc" }, { effectiveFrom: "desc" }],
@@ -35,10 +36,12 @@ export default async function ProductPricingPrintPage(props: {
           product: {
             select: { productName: true, productCatId: true },
           },
+          customerTypeDefinition: { select: { id: true, code: true, name: true } },
         },
       }),
     ),
     getOrInitCompanySettings(),
+    listCustomerTypeDefinitions({ activeOnly: true }),
   ]);
 
   const rows: PricingScheduleRow[] = schedules.map((r) => ({
@@ -46,7 +49,8 @@ export default async function ProductPricingPrintPage(props: {
     productId: r.productId,
     productName: r.product.productName,
     productCatId: r.product.productCatId,
-    customerType: r.customerType,
+    customerTypeId: r.customerTypeId,
+    customerTypeName: r.customerTypeDefinition?.name ?? null,
     effectiveFromIso: r.effectiveFrom.toISOString().slice(0, 10),
     unitPriceExTax: r.unitPriceExTax.toString(),
   }));
@@ -55,7 +59,7 @@ export default async function ProductPricingPrintPage(props: {
     effectiveFromIso !== ""
       ? rows.filter((r) => r.effectiveFromIso === effectiveFromIso)
       : pickLatestPricingRows(rows);
-  const groups = buildPricingGroups(base);
+  const groups = buildPricingGroups(base, customerTypeOptions);
   const totalRows = groups.reduce((sum, g) => sum + g.rows.length, 0);
 
   return (
@@ -84,7 +88,7 @@ export default async function ProductPricingPrintPage(props: {
       <PricingScheduleTable groups={groups} />
 
       <ReportFooter />
-      <AutoPrint />
+      <AutoPrint closeOnFinish={false} />
     </div>
   );
 }

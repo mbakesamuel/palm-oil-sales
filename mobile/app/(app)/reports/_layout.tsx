@@ -10,6 +10,7 @@ export default function ReportsLayout() {
       <Stack.Screen name="stock-inquiry" options={{ title: "Stock inquiry" }} />
       <Stack.Screen name="daily-sales-summary" options={{ title: "Daily sales" }} />
       <Stack.Screen name="commitments" options={{ title: "DO commitments" }} />
+      <Stack.Screen name="bota-bottle-stock" options={{ title: "Bota bottle stock" }} />
     </Stack>
   );
 }

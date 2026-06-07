@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SALES_TAX_CODE, VAT_TAX_CODE } from "@/lib/tax/constants";
+import { REGIME_TYPE_LABELS, regimeTypeHint } from "@/lib/tax/regime-type-labels";
 
 type TaxTypeOpt = { id: string; code: string; name: string };
 
@@ -107,6 +108,17 @@ export function TaxRegimesClient(props: {
     setIsFormOpen(true);
   }
 
+  function selectRegimeType(next: "SIMPLIFIED" | "REAL") {
+    setKind(next);
+    setName((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed || trimmed === "Simplified" || trimmed === "Real") {
+        return REGIME_TYPE_LABELS[next];
+      }
+      return prev;
+    });
+  }
+
   function setVatAppliesAndSync(checked: boolean) {
     setVatApplies(checked);
     if (!vatTypeId) return;
@@ -172,11 +184,13 @@ export function TaxRegimesClient(props: {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Tax regimes</h1>
         <p className="text-sm opacity-75">
-          Link one or more taxes to each regime. Rates and effective dates are managed under{" "}
-          <Link href="/tax-types" className="underline underline-offset-4">
-            Tax types
+          Each regime is either <span className="font-medium">Simplified</span> or{" "}
+          <span className="font-medium">Real</span> — that tier is chosen once at
+          creation and picks which sales tax rate applies. Percentages are on{" "}
+          <Link href="/setup/tax-rates" className="underline underline-offset-4">
+            Tax rates
           </Link>
-          . “VAT applies” keeps the VAT tax in sync with the selection.
+          . Use the name to distinguish regimes on the same tier (e.g. per line).
         </p>
       </div>
 
@@ -257,6 +271,50 @@ export function TaxRegimesClient(props: {
                 </div>
               </div>
 
+              {editingId ? (
+                <div className={fieldRowClass}>
+                  <span className={fieldLabelClass}>Type</span>
+                  <div className={fieldControlClass}>
+                    <span className="inline-flex h-8 items-center rounded-full border border-border bg-accent/15 px-3 text-xs font-medium">
+                      {REGIME_TYPE_LABELS[kind]}
+                    </span>
+                    <p className={hintClass}>
+                      Locked after creation. {regimeTypeHint(kind)} Customers without a
+                      regime use the no-taxpayer-card rate on{" "}
+                      <Link href="/setup/tax-rates" className="underline underline-offset-4">
+                        Tax rates
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className={fieldRowClass}>
+                  <span className={fieldLabelClass}>Type</span>
+                  <div className={fieldControlClass}>
+                    <input type="hidden" name="kind" value={kind} />
+                    <div className="flex flex-wrap gap-2">
+                      {(["SIMPLIFIED", "REAL"] as const).map((tier) => (
+                        <button
+                          key={tier}
+                          type="button"
+                          onClick={() => selectRegimeType(tier)}
+                          className={[
+                            "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                            kind === tier
+                              ? "border-brand bg-brand/15 text-foreground"
+                              : "border-border hover:bg-accent/25",
+                          ].join(" ")}
+                        >
+                          {REGIME_TYPE_LABELS[tier]}
+                        </button>
+                      ))}
+                    </div>
+                    <p className={hintClass}>{regimeTypeHint(kind)}</p>
+                  </div>
+                </div>
+              )}
+
               <div className={fieldRowClass}>
                 <label className={fieldLabelClass} htmlFor="name">
                   Name
@@ -268,29 +326,12 @@ export function TaxRegimesClient(props: {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className={inputClass}
+                    placeholder={REGIME_TYPE_LABELS[kind]}
                     required
                   />
-                </div>
-              </div>
-
-              <div className={fieldRowClass}>
-                <label className={fieldLabelClass} htmlFor="kind">
-                  Sales tax kind
-                </label>
-                <div className={fieldControlClass}>
-                  <select
-                    id="kind"
-                    name="kind"
-                    value={kind}
-                    onChange={(e) => setKind(e.target.value as "SIMPLIFIED" | "REAL")}
-                    className={selectClass}
-                  >
-                    <option value="SIMPLIFIED">Simplified</option>
-                    <option value="REAL">Real</option>
-                  </select>
                   <p className={hintClass}>
-                    Simplified or Real regime selects the matching sales tax rate. Customers
-                    with no regime use the no-taxpayer-card rate (see Tax rates).
+                    Label for staff (e.g. line or site). Does not change the sales tax
+                    tier.
                   </p>
                 </div>
               </div>
@@ -383,10 +424,9 @@ export function TaxRegimesClient(props: {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="p-2 font-medium">Name</th>
+                <th className="p-2 font-medium">Regime</th>
                 <th className="p-2 font-medium">Line</th>
                 <th className="p-2 font-medium">Taxes</th>
-                <th className="p-2 font-medium">Kind</th>
                 <th className="p-2 font-medium">VAT</th>
                 <th className="p-2 font-medium">Customers</th>
                 <th className="p-2 font-medium w-36 text-right">Actions</th>
@@ -395,7 +435,7 @@ export function TaxRegimesClient(props: {
             <tbody>
               {regimes.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-10 text-center text-sm text-foreground/70">
+                  <td colSpan={6} className="p-10 text-center text-sm text-foreground/70">
                     No tax regimes yet. Use{" "}
                     <span className="font-medium text-foreground">Add regime</span> to
                     create one.
@@ -410,15 +450,17 @@ export function TaxRegimesClient(props: {
                       editingId === r.id ? "bg-accent/15" : "",
                     ].join(" ")}
                   >
-                    <td className="p-2 font-medium">{r.name}</td>
+                    <td className="p-2">
+                      <div className="font-medium">{r.name}</div>
+                      <span className="mt-1 inline-flex rounded-full border border-border bg-accent/10 px-2 py-0.5 text-[11px] opacity-80">
+                        {REGIME_TYPE_LABELS[r.kind]} tier
+                      </span>
+                    </td>
                     <td className="p-2 text-xs opacity-80">
                       {r.commercialServiceName ?? "All lines"}
                     </td>
                     <td className="p-2 text-xs opacity-80">
                       {r.taxCodes.length > 0 ? r.taxCodes.join(", ") : "—"}
-                    </td>
-                    <td className="p-2 text-xs opacity-80">
-                      {r.kind === "REAL" ? "Real" : "Simplified"}
                     </td>
                     <td className="p-2 text-xs opacity-80">
                       {r.vatApplies ? "Applies" : "Exempt"}
