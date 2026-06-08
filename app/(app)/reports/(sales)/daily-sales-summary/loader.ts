@@ -14,6 +14,7 @@ import {
   normalizeIsoDateInput,
   utcIsoDateToday,
 } from "@/lib/posting-calendar";
+import { saleWhereExcludingPosPlaceholderCustomers } from "@/lib/customers/operational-customer-scope";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
 
 const z = new Prisma.Decimal(0);
@@ -258,12 +259,12 @@ export async function loadDailySalesSummary(
     const { gte, lt } = utcInclusiveRange(dateFromIso, dateToIso);
     sales = await prismaRetry(() =>
       prisma.sale.findMany({
-        where: {
+        where: saleWhereExcludingPosPlaceholderCustomers({
           ...saleScope,
           ...monthWhere,
           status: ValidationStatus.VALIDATED,
           soldAt: { gte, lt },
-        },
+        }),
         orderBy: [{ soldAt: "asc" }, { invoiceNo: "asc" }],
         select: {
           id: true,

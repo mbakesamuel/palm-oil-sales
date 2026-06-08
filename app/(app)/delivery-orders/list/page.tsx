@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { listDeliveryOrdersForOperations } from "./actions";
 import { getServerSession } from "@/lib/auth-server";
-import { assertPermissionKey } from "@/lib/access-control";
+import { assertPermissionKeysOrRedirect } from "@/lib/access-control";
 import { PrintButton } from "@/components/PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +11,10 @@ export const runtime = "nodejs";
 export default async function DeliveryOrdersListPage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await assertPermissionKey("route:/delivery-orders");
-  await assertPermissionKey("route:/delivery-orders/list");
+  await assertPermissionKeysOrRedirect(
+    "route:/delivery-orders",
+    "route:/delivery-orders/list",
+  );
 
   const session = await getServerSession();
   if (!session?.userId) redirect("/login");

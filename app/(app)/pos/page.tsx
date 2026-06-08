@@ -3,7 +3,8 @@ import { getOrInitCompanySettings } from "@/lib/settings";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getServerSession } from "@/lib/auth-server";
 import { getPermissionsForSession } from "@/lib/access-control";
-import { customerWhereForScope, resolveServiceScope } from "@/lib/service-scope";
+import { customerWhereForOperationalUI } from "@/lib/customers/operational-customer-scope";
+import { resolveServiceScope } from "@/lib/service-scope";
 import {
   ensureBuiltinPaymentMethods,
   listPaymentMethodDefinitions,
@@ -54,7 +55,7 @@ export default async function PosPage(props: {
           commercialServiceRoleCode: session.commercialServiceRole?.code,
         })
       : false;
-  const customerWhere = customerWhereForScope(scope) ?? {};
+  const customerWhere = customerWhereForOperationalUI(scope);
 
   const [customers, salesPoints, storageLocations, posConfig, paymentMethods] =
     await Promise.all([

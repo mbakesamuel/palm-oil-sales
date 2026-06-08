@@ -1,7 +1,9 @@
 import type { MobileSessionPayload } from "@pos/shared";
 import {
+  canValidateConsignmentNoteValidator,
   isPlainSupervisorValidator,
   isSeniorSupervisorValidator,
+  pendingConsignmentValidationHint,
   pendingSalesValidationHint,
 } from "@pos/shared";
 
@@ -17,14 +19,33 @@ export function canValidateDeliveryOrdersOnMobile(
   return hasPermission("ui:validate-delivery-orders");
 }
 
-/** Supervisors validate pending vehicle consignment notes prepared by clerks. */
+/** Line supervisors validate pending vehicle consignment notes (clerks prepare on web). */
 export function canValidateConsignmentOnMobile(
   hasPermission: (key: string) => boolean,
   session: MobileSessionPayload | null,
 ) {
   if (!hasPermission("route:/consignment-notes")) return false;
   if (!session) return false;
-  return session.role === "SUPERVISOR" || session.role === "ADMIN";
+  const ctx = {
+    role: session.role,
+    commercialServiceRoleCode: session.commercialServiceRole?.code,
+  };
+  if (canValidateConsignmentNoteValidator(ctx)) return true;
+  // Web uses stored User.role; line role on mobile may map to senior supervisor
+  // while the account row is still SUPERVISOR.
+  if (session.role === "SUPERVISOR" || session.role === "ADMIN") return true;
+  if (isPlainSupervisorValidator(ctx)) return true;
+  if (isSeniorSupervisorValidator(ctx)) return true;
+  // Custom line role codes (e.g. "sas") with site-scoped sales validation.
+  if (!hasPermission("ui:validate-documents")) return false;
+  return Boolean(session.salesPoint?.id);
+}
+
+/** Show/fetch the consignment queue for anyone who can approve sales on mobile. */
+export function canSeeConsignmentQueueOnMobile(
+  hasPermission: (key: string) => boolean,
+) {
+  return hasPermission("ui:validate-documents");
 }
 
 export function canOpenMobileApprovals(
@@ -44,15 +65,16 @@ export function mobileValidationScreenHint(
 ): string {
   const canSales = canValidateSalesOnMobile(hasPermission);
   const canDos = canValidateDeliveryOrdersOnMobile(hasPermission);
-  const canConsignment = canValidateConsignmentOnMobile(hasPermission, session);
+  const canConsignment = canSeeConsignmentQueueOnMobile(hasPermission);
 
   if (canDos && !canSales && !canConsignment) {
     return "Managers validate delivery orders only. Open a DO, mark it reviewed, then validate.";
   }
-  if (canConsignment && !canSales && !canDos) {
-    return session?.salesPoint
-      ? `Supervisor: validate vehicle consignment notes for ${session.salesPoint.name}.`
-      : "Supervisor: validate pending vehicle consignment notes.";
+  if (canConsignment && !canSales && !canDos && session) {
+    return pendingConsignmentValidationHint({
+      role: session.role,
+      commercialServiceRoleCode: session.commercialServiceRole?.code,
+    });
   }
   if (session && canSales) {
     return pendingSalesValidationHint({
@@ -66,9 +88,19 @@ export function mobileValidationScreenHint(
 export function mobilePendingConsignmentEmptyHint(
   session: MobileSessionPayload | null,
 ): string {
-  return session?.salesPoint
-    ? `No pending vehicle consignment notes at ${session.salesPoint.name}.`
-    : "No pending vehicle consignment notes.";
+  if (!session) return "No pending vehicle consignment notes.";
+  const ctx = {
+    role: session.role,
+    commercialServiceRoleCode: session.commercialServiceRole?.code,
+  };
+  if (isSeniorSupervisorValidator(ctx)) {
+    return "No pending vehicle consignment notes at Bota.";
+  }
+  if (!canValidateConsignmentNoteValidator(ctx) && session.role !== "SUPERVISOR") {
+    return "Only sales supervisors can validate vehicle consignment notes.";
+  }
+  const site = session.salesPoint?.name ?? "your sales point";
+  return `No pending vehicle consignment notes at ${site}.`;
 }
 
 export function mobilePendingSalesEmptyHint(

@@ -270,8 +270,9 @@ model User {
   factory                   Factory?                 @relation(fields: [factoryId], references: [id])
   globalRoleDefinition      GlobalRoleDefinition?    @relation(fields: [globalRoleDefinitionId], references: [id])
   salesPoint                SalesPoint?              @relation(fields: [salesPointId], references: [id])
-  consignmentNotesCreated   VehicleConsignmentNote[] @relation("ConsignmentNotesCreatedBy")
-  consignmentNotesValidated VehicleConsignmentNote[] @relation("ConsignmentNotesValidatedBy")
+  consignmentNotesCreated      VehicleConsignmentNote[] @relation("ConsignmentNotesCreatedBy")
+  consignmentNotesValidated    VehicleConsignmentNote[] @relation("ConsignmentNotesValidatedBy")
+  salesPointsWorkingMonthSet   SalesPoint[]             @relation("SalesPointWorkingMonthSetBy")
 
   @@index([commercialServiceId])
   @@index([commercialServiceRoleId])
@@ -337,6 +338,8 @@ model Customer {
   updatedAt              DateTime               @updatedAt
   residency              CustomerResidency      @default(LOCAL)
   hasTaxpayerId          Boolean                @default(false)
+  /// System customer used only for POS walk-in / ration / public-relation posting.
+  isPosPlaceholder       Boolean                @default(false)
   commercialServiceId    String
   customerTypeId         String
   commercialService      CommercialService      @relation(fields: [commercialServiceId], references: [id])
@@ -640,20 +643,28 @@ model Payment {
 }
 
 model SalesPoint {
-  id                 Int               @id @default(autoincrement())
-  name               String
-  millId             Int?
-  deliveryOrders     DeliveryOrder[]
-  sales              Sale[]
-  mill               Mill?             @relation(fields: [millId], references: [id])
-  stockAdjustments   StockAdjustment[]
-  stockBalances      StockBalance[]
-  stockMovements     StockMovement[]
-  stockReceipts      StockReceipt[]
-  stockTransfersFrom StockTransfer[]   @relation("StockTransfersFromSalesPoint")
-  stockTransfersTo   StockTransfer[]   @relation("StockTransfersToSalesPoint")
-  storageLocations   StorageLocation[]
-  users              User[]
+  id                    Int               @id @default(autoincrement())
+  name                  String
+  millId                Int?
+  /// Working calendar month for fixed-site staff (1–12). Null until first set.
+  workingCalendarYear   Int?
+  workingCalendarMonth  Int?
+  /// FY label when working month was last set (must match open FY on use).
+  workingFinancialYear  Int?
+  workingMonthSetAt     DateTime?
+  workingMonthSetById   String?
+  deliveryOrders        DeliveryOrder[]
+  sales                 Sale[]
+  mill                  Mill?             @relation(fields: [millId], references: [id])
+  stockAdjustments      StockAdjustment[]
+  stockBalances         StockBalance[]
+  stockMovements        StockMovement[]
+  stockReceipts         StockReceipt[]
+  stockTransfersFrom    StockTransfer[]   @relation("StockTransfersFromSalesPoint")
+  stockTransfersTo      StockTransfer[]   @relation("StockTransfersToSalesPoint")
+  storageLocations      StorageLocation[]
+  users                 User[]
+  workingMonthSetBy     User?             @relation("SalesPointWorkingMonthSetBy", fields: [workingMonthSetById], references: [id])
 
   @@index([millId])
   @@map("SalesPoint")

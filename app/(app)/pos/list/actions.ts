@@ -13,7 +13,15 @@ import {
   resolveServiceScope,
   saleWhereForScope,
 } from "@/lib/service-scope";
-import { salesPointErrorForResource } from "@/lib/auth-sales-point-scope";
+import {
+  fetchActorSalesPointScope,
+  salesPointErrorForResource,
+} from "@/lib/auth-sales-point-scope";
+import {
+  formatSaleProductSummary,
+  formatSaleQtyTotals,
+  sumSaleLineQuantities,
+} from "@/lib/pos/sale-line-qty";
 export type SalesListPeriod = "month" | "year" | "all";
 
 export type SalesListFilters = {
@@ -29,15 +37,15 @@ export type SalesListRow = {
   deliveryOrderNo: string | null;
   deliveryOrderId: number | null;
   customerName: string;
+  productSummary: string;
   status: ValidationStatus;
-  totalQty: number;
   totalQtyLabel: string;
   totalAmountXaf: string;
 };
 
 export type SalesListTotals = {
   count: number;
-  totalQty: number;
+  totalQtyLabel: string;
   totalAmountXaf: string;
 };
 
@@ -71,7 +79,7 @@ export async function listSalesForOperations(input?: {
   if (!session?.userId) {
     return {
       rows: [],
-      totals: { count: 0, totalQty: 0, totalAmountXaf: "" },
+      totals: { count: 0, totalQtyLabel: "", totalAmountXaf: "" },
       periodLabel: "",
     };
   }
@@ -80,19 +88,16 @@ export async function listSalesForOperations(input?: {
   if (commercialServiceErrorForOperations(scope)) {
     return {
       rows: [],
-      totals: { count: 0, totalQty: 0, totalAmountXaf: "" },
+      totals: { count: 0, totalQtyLabel: "", totalAmountXaf: "" },
       periodLabel: "",
     };
   }
 
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { id: true, role: true, salesPointId: true, isActive: true },
-  });
+  const actor = await fetchActorSalesPointScope(prisma, session.userId);
   if (!actor?.isActive) {
     return {
       rows: [],
-      totals: { count: 0, totalQty: 0, totalAmountXaf: "" },
+      totals: { count: 0, totalQtyLabel: "", totalAmountXaf: "" },
       periodLabel: "",
     };
   }
@@ -107,14 +112,14 @@ export async function listSalesForOperations(input?: {
 
   const openPeriod = await getOpenFinancialYearPeriod();
   const { monthFilter } = await resolveReportWorkingMonthFilter();
-  const workingMonth = monthFilter?.financialMonth;
 
-  if (period === "month" && openPeriod && workingMonth != null) {
+  if (period === "month" && openPeriod && monthFilter != null) {
     dateWhere = {
-      financialYear: openPeriod.financialYear,
-      financialMonth: workingMonth,
+      financialYear: monthFilter.financialYear,
+      postingCalendarYear: monthFilter.postingCalendarYear,
+      financialMonth: monthFilter.financialMonth,
     };
-    periodLabel = `Current financial month (FY ${openPeriod.financialYear} · M${String(workingMonth).padStart(2, "0")})`;
+    periodLabel = `Current financial month (FY ${openPeriod.financialYear} · ${monthFilter.label})`;
   } else if (period === "year" && openPeriod) {
     dateWhere = { financialYear: openPeriod.financialYear };
     periodLabel = `Current financial year (FY ${openPeriod.financialYear})`;
@@ -149,7 +154,14 @@ export async function listSalesForOperations(input?: {
       salesPoint: { select: { name: true } },
       customerNameSnapshot: true,
       commercialServiceId: true,
-      lines: { select: { qtyKg: true } },
+      saleProductMode: true,
+      lines: {
+        select: {
+          qtyKg: true,
+          qtyUnits: true,
+          product: { select: { productName: true } },
+        },
+      },
     },
   });
 
@@ -199,19 +211,17 @@ export async function listSalesForOperations(input?: {
 
   const rows: SalesListRow[] = [];
   let total = new Prisma.Decimal(0);
-  let totalQty = 0;
+  const qtyTotals = { kg: 0, units: 0 };
 
   for (const r of rowsRaw) {
     if (salesPointErrorForResource(actor, r.salesPointId)) continue;
     if (commercialServiceErrorForResource(scope, r.commercialServiceId)) continue;
 
     const rowTotal = r.grossAmount ?? new Prisma.Decimal(0);
-    const rowQty = r.lines.reduce(
-      (acc, d) => acc + Number(d.qtyKg ?? 0),
-      0,
-    );
+    const rowQty = sumSaleLineQuantities(r.saleProductMode, r.lines);
     total = total.add(rowTotal);
-    totalQty += rowQty;
+    qtyTotals.kg += rowQty.kg;
+    qtyTotals.units += rowQty.units;
 
     const doKey =
       r.salesPointId != null && r.deliveryOrderNo?.trim()
@@ -227,16 +237,20 @@ export async function listSalesForOperations(input?: {
       deliveryOrderNo: matchedDo?.deliveryOrderNo ?? null,
       deliveryOrderId: matchedDo?.id ?? null,
       customerName: r.customerNameSnapshot,
+      productSummary: formatSaleProductSummary(r.lines),
       status: r.status,
-      totalQty: rowQty,
-      totalQtyLabel: rowQty ? rowQty.toLocaleString(undefined) : "",
+      totalQtyLabel: formatSaleQtyTotals(rowQty),
       totalAmountXaf: fmtXaf(rowTotal),
     });
   }
 
   return {
     rows,
-    totals: { count: rows.length, totalQty, totalAmountXaf: fmtXaf(total) },
+    totals: {
+      count: rows.length,
+      totalQtyLabel: formatSaleQtyTotals(qtyTotals),
+      totalAmountXaf: fmtXaf(total),
+    },
     periodLabel,
   };
 }

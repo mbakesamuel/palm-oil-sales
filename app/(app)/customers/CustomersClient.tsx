@@ -25,6 +25,7 @@ type RateHints = {
 type CustomerRow = {
   id: string;
   name: string;
+  isPosPlaceholder: boolean;
   phone: string | null;
   email: string | null;
   address: string | null;
@@ -625,7 +626,14 @@ export function CustomersClient(props: {
                       editingId === c.id ? "bg-accent/15" : "",
                     ].join(" ")}
                   >
-                    <td className="p-2 font-medium">{c.name}</td>
+                    <td className="p-2 font-medium">
+                      {c.name}
+                      {c.isPosPlaceholder ? (
+                        <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal opacity-70">
+                          POS system
+                        </span>
+                      ) : null}
+                    </td>
                     {scopeMode === "all" ? (
                       <td className="p-2 text-xs opacity-80">{c.commercialService.name}</td>
                     ) : null}
@@ -643,24 +651,28 @@ export function CustomersClient(props: {
                       {c.taxRegime ? (c.taxpayerId ?? "—") : "—"}
                     </td>
                     <td className="p-2 text-right">
-                      <div className="flex justify-end gap-2 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(c)}
-                          className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPendingDelete({ id: c.id, name: c.name })
-                          }
-                          className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      {c.isPosPlaceholder ? (
+                        <span className="text-xs opacity-60">System record</span>
+                      ) : (
+                        <div className="flex justify-end gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(c)}
+                            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent/25"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPendingDelete({ id: c.id, name: c.name })
+                            }
+                            className="rounded-md border border-red-600/40 text-red-700 dark:text-red-400 px-3 py-1.5 text-xs hover:bg-red-600/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

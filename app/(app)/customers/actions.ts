@@ -150,6 +150,14 @@ export async function deleteCustomer(formData: FormData) {
 
   await assertCustomerAccessible(prisma, session, scope, id);
 
+  const row = await prisma.customer.findUnique({
+    where: { id },
+    select: { isPosPlaceholder: true },
+  });
+  if (row?.isPosPlaceholder) {
+    throw new Error("POS system customers cannot be deleted.");
+  }
+
   await prisma.customer.delete({ where: { id } });
 
   revalidatePath("/customers");

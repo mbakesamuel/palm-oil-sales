@@ -14,7 +14,7 @@ import type {
 import { ApiError, apiFetch } from "@/api/client";
 import { useAuth } from "@/auth/AuthProvider";
 import {
-  canValidateConsignmentOnMobile,
+  canSeeConsignmentQueueOnMobile,
   canValidateDeliveryOrdersOnMobile,
   canValidateSalesOnMobile,
   mobilePendingConsignmentEmptyHint,
@@ -56,11 +56,13 @@ export default function ValidationScreen() {
         );
         setSales(res.rows);
       }
-      if (canValidateConsignmentOnMobile(hasPermission, session)) {
+      if (canSeeConsignmentQueueOnMobile(hasPermission)) {
         const res = await apiFetch<PendingConsignmentResponse>(
           "/api/mobile/v1/validation/consignment-notes",
         );
         setConsignments(res.rows);
+      } else {
+        setConsignments([]);
       }
       if (canValidateDeliveryOrdersOnMobile(hasPermission)) {
         const res = await apiFetch<DoQueueResponse>(
@@ -132,7 +134,7 @@ export default function ValidationScreen() {
         </>
       ) : null}
 
-      {canValidateConsignmentOnMobile(hasPermission, session) ? (
+      {canSeeConsignmentQueueOnMobile(hasPermission) ? (
         <>
           <Text style={styles.section}>Vehicle consignment</Text>
           {consignments.length === 0 ? (

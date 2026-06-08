@@ -4,8 +4,8 @@ import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { getPrismaClient } from "@/lib/prisma";
 import { prismaRetry } from "@/lib/prisma-retry";
 import { getOrInitCompanySettings } from "@/lib/settings";
+import { customerWhereForOperationalUI } from "@/lib/customers/operational-customer-scope";
 import {
-  customerWhereForScope,
   deliveryOrderWhereForScope,
   resolveServiceScope,
 } from "@/lib/service-scope";
@@ -187,7 +187,7 @@ export async function loadCustomerDeliveryMonitor(
     ...(doServiceWhere ?? {}),
   };
 
-  const customerScopeWhere = customerWhereForScope(serviceScope) ?? {};
+  const customerScopeWhere = customerWhereForOperationalUI(serviceScope);
 
   const customerIdsWithScopedOrders = await prismaRetry(() =>
     prisma.deliveryOrder.findMany({

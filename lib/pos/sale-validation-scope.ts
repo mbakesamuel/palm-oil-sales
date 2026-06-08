@@ -102,3 +102,26 @@ export function pendingSalesValidationHint(ctx: SaleValidatorContext): string {
   }
   return "Open each item to review lines and totals before validating.";
 }
+
+/** Same Bota split as sales validation; falls back to fixed-site check for other validators. */
+export function consignmentNoteAccessError(
+  salesPointId: number | null,
+  botaSalesPointId: number | null,
+  ctx: SaleValidatorContext,
+  fixedSiteAccessError: string | null,
+): string | null {
+  if (saleValidatorUsesBotaSplit(ctx)) {
+    return saleValidationScopeError(salesPointId, botaSalesPointId, ctx);
+  }
+  return fixedSiteAccessError;
+}
+
+export function pendingConsignmentValidationHint(ctx: SaleValidatorContext): string {
+  if (isSeniorSupervisorValidator(ctx)) {
+    return "Senior supervisor: validate vehicle consignment notes at Bota.";
+  }
+  if (isPlainSupervisorValidator(ctx)) {
+    return "Sales supervisor: validate vehicle consignment notes at your sales point (not Bota).";
+  }
+  return "Supervisor: validate vehicle consignment notes at your sales point.";
+}

@@ -6,8 +6,8 @@ import {
   getPermissionsForSession,
 } from "@/lib/access-control";
 import { loadAuthSessionByUserId } from "@/lib/load-auth-session";
+import { customerWhereForOperationalUI } from "@/lib/customers/operational-customer-scope";
 import {
-  customerWhereForScope,
   productWhereForScope,
   resolveServiceScope,
 } from "@/lib/service-scope";
@@ -51,7 +51,7 @@ export default async function DeliveryOrdersPage(props: {
   const lookupNoRaw = Array.isArray(sp.no) ? sp.no[0] : sp.no;
   const initialLookupNo = typeof lookupNoRaw === "string" ? lookupNoRaw : "";
   const productWhere = productWhereForScope(scope);
-  const customerWhere = customerWhereForScope(scope) ?? {};
+  const customerWhere = customerWhereForOperationalUI(scope);
 
   const [customers, products, salesPoints, paymentMethods] = await Promise.all([
     prismaRetry(() =>

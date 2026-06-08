@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { listSalesForOperations } from "./actions";
 import { getServerSession } from "@/lib/auth-server";
-import { assertPermissionKey } from "@/lib/access-control";
+import { assertPermissionKeysOrRedirect } from "@/lib/access-control";
 import { PrintButton } from "@/components/PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +11,7 @@ export const runtime = "nodejs";
 export default async function SalesListPage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await assertPermissionKey("route:/pos");
-  await assertPermissionKey("route:/pos/list");
+  await assertPermissionKeysOrRedirect("route:/pos", "route:/pos/list");
 
   const session = await getServerSession();
   if (!session?.userId) redirect("/login");
@@ -96,8 +95,9 @@ export default async function SalesListPage(props: {
                 <th className="px-3 py-2 text-left">Sales point</th>
                 <th className="px-3 py-2 text-left">DO No</th>
                 <th className="px-3 py-2 text-left">Customer</th>
+                <th className="px-3 py-2 text-left">Product</th>
                 <th className="px-3 py-2 text-left">Status</th>
-                <th className="px-3 py-2 text-right">Qty (kg)</th>
+                <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 text-right">Total</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
@@ -105,7 +105,7 @@ export default async function SalesListPage(props: {
             <tbody>
               {data.rows.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-8 text-center opacity-70" colSpan={9}>
+                  <td className="px-3 py-8 text-center opacity-70" colSpan={10}>
                     No sales invoices match these filters.
                   </td>
                 </tr>
@@ -130,6 +130,7 @@ export default async function SalesListPage(props: {
                       )}
                     </td>
                     <td className="px-3 py-2">{r.customerName}</td>
+                    <td className="px-3 py-2 text-xs">{r.productSummary}</td>
                     <td className="px-3 py-2">
                       <span className="rounded-md border border-border px-2 py-0.5 text-xs">
                         {r.status}
@@ -165,13 +166,11 @@ export default async function SalesListPage(props: {
             </tbody>
             <tfoot>
               <tr className="border-t border-border bg-foreground/2">
-                <td className="px-3 py-2 text-xs font-medium opacity-70" colSpan={6}>
+                <td className="px-3 py-2 text-xs font-medium opacity-70" colSpan={7}>
                   Totals ({data.periodLabel})
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                  {data.totals.totalQty
-                    ? data.totals.totalQty.toLocaleString(undefined)
-                    : ""}
+                  {data.totals.totalQtyLabel}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
                   {data.totals.totalAmountXaf}

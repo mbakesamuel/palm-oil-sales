@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { getServerSession } from "@/lib/auth-server";
 import { sessionRequiresFixedPostingSite } from "@/lib/sales-point-assignment";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
+import { saleWhereExcludingPosPlaceholderCustomers } from "@/lib/customers/operational-customer-scope";
 import {
   commercialServiceErrorForOperations,
   mergeWhereWithServiceScope,
@@ -88,21 +89,23 @@ export default async function SalesReportPage() {
     getPrismaClient(),
   ]);
 
-  const where = mergeWhereWithServiceScope(
-    {
-      vehicleNumber: { not: "BPO-OUTBOUND" },
-      ...(scopedToSalesPoint && assignedSalesPointId != null
-        ? { salesPointId: assignedSalesPointId }
-        : {}),
-      ...(monthFilter
-        ? {
-            financialYear: monthFilter.financialYear,
-            postingCalendarYear: monthFilter.postingCalendarYear,
-            financialMonth: monthFilter.financialMonth,
-          }
-        : {}),
-    },
-    scope,
+  const where = saleWhereExcludingPosPlaceholderCustomers(
+    mergeWhereWithServiceScope(
+      {
+        vehicleNumber: { not: "BPO-OUTBOUND" },
+        ...(scopedToSalesPoint && assignedSalesPointId != null
+          ? { salesPointId: assignedSalesPointId }
+          : {}),
+        ...(monthFilter
+          ? {
+              financialYear: monthFilter.financialYear,
+              postingCalendarYear: monthFilter.postingCalendarYear,
+              financialMonth: monthFilter.financialMonth,
+            }
+          : {}),
+      },
+      scope,
+    ),
   );
 
   const sales = await prismaRetry(() =>

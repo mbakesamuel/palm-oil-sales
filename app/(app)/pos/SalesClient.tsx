@@ -1769,7 +1769,12 @@ export function SalesClient(props: {
                     Select customer
                   </option>
                   {customers
-                    .filter((c) => c.id !== walkInCustomerId)
+                    .filter(
+                      (c) =>
+                        c.id !== walkInCustomerId &&
+                        c.id !== rationCustomerId &&
+                        c.id !== publicRelationCustomerId,
+                    )
                     .map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -1789,7 +1794,14 @@ export function SalesClient(props: {
                   <option value="" disabled>
                     Select customer
                   </option>
-                  {customers.map((c) => (
+                  {customers
+                    .filter(
+                      (c) =>
+                        c.id !== walkInCustomerId &&
+                        c.id !== rationCustomerId &&
+                        c.id !== publicRelationCustomerId,
+                    )
+                    .map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>

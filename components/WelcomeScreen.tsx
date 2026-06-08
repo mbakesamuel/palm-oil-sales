@@ -6,8 +6,8 @@ export function WelcomeScreen() {
     <div className="welcome-hero relative min-h-dvh w-full overflow-hidden text-brand-foreground">
       <WelcomeHeroCarousel />
 
-      <main className="relative z-10 flex min-h-dvh w-full flex-col items-center justify-center px-4 pb-16 pt-4 text-center sm:px-6">
-        <div className="mx-auto max-w-2xl space-y-6 px-6 py-8 sm:px-8">
+      <main className="pointer-events-none relative z-10 flex min-h-dvh w-full flex-col items-center justify-center px-4 pb-16 pt-4 text-center sm:px-6">
+        <div className="pointer-events-auto mx-auto max-w-2xl space-y-6 px-6 py-8 sm:px-8">
           <div className="space-y-2 rounded-2xl border border-brand/30 bg-brand/90 p-5 shadow-lg backdrop-blur-sm">
             <h1 className="text-4xl font-bold tracking-tight text-accent drop-shadow-sm sm:text-5xl md:text-6xl">
               Sales Management App

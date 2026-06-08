@@ -22,6 +22,7 @@ import {
   type IsoDate,
 } from "@/lib/posting-calendar";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
+import { saleWhereExcludingPosPlaceholderCustomers } from "@/lib/customers/operational-customer-scope";
 import {
   mergeWhereWithServiceScope,
   saleWhereForScope,
@@ -452,18 +453,20 @@ export async function loadSalesSummaryByCustomer(
 
   const sales = await prismaRetry(() =>
     prisma.sale.findMany({
-      where: mergeWhereWithServiceScope(
-        {
-          ...saleScopeBase,
-          ...monthWhere,
-          status: ValidationStatus.VALIDATED,
-          soldAt: { gte, lt },
-          lines: {
-            some: { product: { productCat: { isBottled: false } } },
+      where: saleWhereExcludingPosPlaceholderCustomers(
+        mergeWhereWithServiceScope(
+          {
+            ...saleScopeBase,
+            ...monthWhere,
+            status: ValidationStatus.VALIDATED,
+            soldAt: { gte, lt },
+            lines: {
+              some: { product: { productCat: { isBottled: false } } },
+            },
           },
-        },
-        scope,
-        saleWhereForScope,
+          scope,
+          saleWhereForScope,
+        ),
       ),
       select: {
         customer: {
