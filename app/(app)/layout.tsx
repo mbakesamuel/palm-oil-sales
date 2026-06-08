@@ -10,6 +10,7 @@ import { INVOKE_PATH_HEADER } from "@/auth.config";
 import { headers } from "next/headers";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { prismaDateToIso } from "@/lib/posting-calendar";
+import { resolveWorkingMonthForSession } from "@/lib/sales-point-working-month";
 import { resolveCompanyLogoSrc } from "@/lib/company-logo";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import {
@@ -63,9 +64,10 @@ export default async function AppLayout({
     await assertRouteAllowedForPath(pathname, session);
   }
 
-  const [settings, openPeriod] = await Promise.all([
+  const [settings, openPeriod, initialWorkingMonth] = await Promise.all([
     getOrInitCompanySettings(),
     getOpenFinancialYearPeriod(),
+    resolveWorkingMonthForSession(session),
   ]);
   const footerCtx = await resolveAppShellFooterContext(session, settings);
   const subtitle = formatAppShellSidebarSubtitle(footerCtx);
@@ -89,6 +91,19 @@ export default async function AppLayout({
         }
         openPeriodEndIso={
           openPeriod ? prismaDateToIso(openPeriod.endDate) : null
+        }
+        initialWorkingMonth={
+          initialWorkingMonth && openPeriod
+            ? {
+                financialYear: initialWorkingMonth.financialYear,
+                calendarYear: initialWorkingMonth.calendarYear,
+                calendarMonth: initialWorkingMonth.calendarMonth,
+                source: initialWorkingMonth.source,
+                canChange: initialWorkingMonth.canChange,
+                salesPointId: initialWorkingMonth.salesPointId,
+                salesPointName: initialWorkingMonth.salesPointName,
+              }
+            : null
         }
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden print:h-auto print:overflow-visible">

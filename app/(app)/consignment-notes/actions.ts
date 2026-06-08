@@ -6,12 +6,18 @@ import { getPrismaClient } from "@/lib/prisma";
 import { getServerSession } from "@/lib/auth-server";
 import {
   canCreateOrEditConsignmentNoteDraft,
-  canValidateConsignmentNote,
+  canValidateConsignmentForActor,
+  effectiveSessionRole,
 } from "@/lib/auth-roles";
+import type { AuthSession } from "@/lib/auth-session";
 import {
+  fetchActorSalesPointScope,
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
+import { resolveBotaSalesPointId } from "@/lib/pos/sale-product-mode";
+import { consignmentNoteAccessError } from "@/lib/pos/sale-validation-scope";
+import type { UserRole } from "@/lib/domain";
 import type {
   ConsignmentNotePrintModel,
   DoContextDto,
@@ -80,6 +86,28 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
   return { session, actor };
 }
 
+async function consignmentAccessErrorForSession(
+  prisma: ReturnType<typeof getPrismaClient>,
+  session: AuthSession,
+  salesPointId: number | null,
+): Promise<string | null> {
+  const [scopedActor, botaSalesPoint] = await Promise.all([
+    fetchActorSalesPointScope(prisma, session.userId),
+    resolveBotaSalesPointId(prisma),
+  ]);
+  if (!scopedActor?.isActive) return "Login required.";
+  const ctx = {
+    role: effectiveSessionRole(session),
+    commercialServiceRoleCode: session.commercialServiceRole?.code,
+  };
+  return consignmentNoteAccessError(
+    salesPointId,
+    botaSalesPoint,
+    ctx,
+    salesPointErrorForResource(scopedActor, salesPointId),
+  );
+}
+
 function revalidateConsignmentPaths(consignmentId: string) {
   revalidatePath("/consignment-notes");
   revalidatePath(`/consignment-notes/${consignmentId}`);
@@ -143,7 +171,7 @@ function sumSaleLinesQtyKg(lines: { qtyKg: Prisma.Decimal }[]): Prisma.Decimal {
 
 async function toFormView(
   prisma: ReturnType<typeof getPrismaClient>,
-  actor: Awaited<ReturnType<typeof requireActor>>["actor"],
+  session: AuthSession,
   sale: {
     id: string;
     invoiceNo: string;
@@ -175,7 +203,11 @@ async function toFormView(
     } | null;
   },
 ): Promise<LoadedConsignmentFormView | null> {
-  const accessErr = salesPointErrorForResource(actor, sale.salesPointId);
+  const accessErr = await consignmentAccessErrorForSession(
+    prisma,
+    session,
+    sale.salesPointId,
+  );
   if (accessErr) return null;
 
   const thisLifted = sumSaleLinesQtyKg(sale.lines);
@@ -242,10 +274,10 @@ export async function loadSaleForConsignmentByInvoice(
   if (!invoiceNo) return null;
 
   const prisma = getPrismaClient();
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/consignment-notes");
-    ({ actor } = await requireActor(prisma));
+    ({ session } = await requireActor(prisma));
   } catch {
     return null;
   }
@@ -256,7 +288,7 @@ export async function loadSaleForConsignmentByInvoice(
   });
   if (!sale) return null;
 
-  return toFormView(prisma, actor, sale);
+  return toFormView(prisma, session, sale);
 }
 
 export async function loadConsignmentByVcnNo(
@@ -266,10 +298,10 @@ export async function loadConsignmentByVcnNo(
   if (!consignmentNoteNo) return null;
 
   const prisma = getPrismaClient();
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/consignment-notes");
-    ({ actor } = await requireActor(prisma));
+    ({ session } = await requireActor(prisma));
   } catch {
     return null;
   }
@@ -283,7 +315,7 @@ export async function loadConsignmentByVcnNo(
   });
   if (!row) return null;
 
-  return toFormView(prisma, actor, { ...row.sale, consignmentNote: row });
+  return toFormView(prisma, session, { ...row.sale, consignmentNote: row });
 }
 
 /** Exposed for client refresh of DO totals after sale changes (same as embedded in load). */
@@ -560,7 +592,12 @@ export async function validateConsignmentNote(
     };
   }
 
-  if (!canValidateConsignmentNote(actor.role)) {
+  if (
+    !canValidateConsignmentForActor(
+      effectiveSessionRole(session),
+      actor.role as UserRole,
+    )
+  ) {
     return {
       ok: false,
       error: "Only supervisors can validate a vehicle consignment note.",
@@ -575,8 +612,9 @@ export async function validateConsignmentNote(
     include: { sale: { select: { salesPointId: true } } },
   });
   if (!existing) return { ok: false, error: "Consignment note not found." };
-  const accessErr = salesPointErrorForResource(
-    actor,
+  const accessErr = await consignmentAccessErrorForSession(
+    prisma,
+    session,
     existing.sale.salesPointId,
   );
   if (accessErr) return { ok: false, error: accessErr };
@@ -610,11 +648,11 @@ export async function loadConsignmentPrintById(
   | { ok: false; reason: "auth" | "missing" }
 > {
   const prisma = getPrismaClient();
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
+  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let settings: Awaited<ReturnType<typeof getOrInitCompanySettings>>;
   try {
     await assertPermissionKey("route:/consignment-notes");
-    ({ actor } = await requireActor(prisma));
+    ({ session } = await requireActor(prisma));
     settings = await getOrInitCompanySettings();
   } catch {
     return { ok: false, reason: "auth" };
@@ -638,7 +676,13 @@ export async function loadConsignmentPrintById(
   });
   if (!note) return { ok: false, reason: "missing" };
 
-  if (salesPointErrorForResource(actor, note.sale.salesPointId)) {
+  if (
+    await consignmentAccessErrorForSession(
+      prisma,
+      session,
+      note.sale.salesPointId,
+    )
+  ) {
     return { ok: false, reason: "missing" };
   }
 

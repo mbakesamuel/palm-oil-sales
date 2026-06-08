@@ -3,6 +3,10 @@
 import * as React from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  getWorkingMonthForSessionAction,
+  setSalesPointWorkingMonthAction,
+} from "@/app/(app)/financial-years/working-month-actions";
+import {
   defaultSelectableMonthForToday,
   firstDayOfCalendarMonth,
   lastDayOfCalendarMonth,
@@ -15,8 +19,21 @@ import {
 } from "@/lib/working-period-cookie";
 
 const STORAGE_KEY = "po_working_period_v2";
+const SITE_POLL_MS = 30_000;
 
 type StoredByUser = Record<string, { calendarYear: number; calendarMonth: number }>;
+
+export type WorkingMonthSource = "sales_point" | "personal";
+
+export type InitialWorkingMonth = {
+  financialYear: number;
+  calendarYear: number;
+  calendarMonth: number;
+  source: WorkingMonthSource;
+  canChange: boolean;
+  salesPointId: number | null;
+  salesPointName: string | null;
+};
 
 export type WorkingPeriodContextValue = {
   openFinancialYear: number | null;
@@ -27,6 +44,10 @@ export type WorkingPeriodContextValue = {
   workingCalendarMonth: number;
   workingMonthStartIso: string | null;
   workingMonthEndIso: string | null;
+  workingMonthSource: WorkingMonthSource;
+  canChangeWorkingMonth: boolean;
+  salesPointId: number | null;
+  salesPointName: string | null;
   setWorkingCalendarMonth: (year: number, month: number) => void;
   fyLabel: string;
   workingMonthLabel: string;
@@ -91,13 +112,40 @@ function writeStoredMonth(
   }
 }
 
+function applyResolvedMonth(
+  year: number,
+  month: number,
+  selectable: SelectableMonth[],
+  setYear: (y: number) => void,
+  setMonth: (m: number) => void,
+): void {
+  const ok = selectable.some((r) => r.year === year && r.month === month);
+  if (ok) {
+    setYear(year);
+    setMonth(month);
+    return;
+  }
+  const d = selectable[0];
+  if (d) {
+    setYear(d.year);
+    setMonth(d.month);
+  }
+}
+
 export function WorkingPeriodProvider(props: {
   children: React.ReactNode;
   openFinancialYear: number | null;
   openPeriodStartIso: string | null;
   openPeriodEndIso: string | null;
+  initialWorkingMonth: InitialWorkingMonth | null;
 }) {
-  const { children, openFinancialYear, openPeriodStartIso, openPeriodEndIso } = props;
+  const {
+    children,
+    openFinancialYear,
+    openPeriodStartIso,
+    openPeriodEndIso,
+    initialWorkingMonth,
+  } = props;
   const { status: authStatus, session } = useAuth();
   const userId = session?.userId ?? null;
 
@@ -112,8 +160,23 @@ export function WorkingPeriodProvider(props: {
     return listSelectableCalendarMonths(openPeriodStartIso, openPeriodEndIso);
   }, [openFinancialYear, openPeriodStartIso, openPeriodEndIso]);
 
-  const [workingCalYear, setWorkingCalYear] = React.useState(2000);
-  const [workingCalMonth, setWorkingCalMonth] = React.useState(1);
+  const [workingCalYear, setWorkingCalYear] = React.useState(
+    initialWorkingMonth?.calendarYear ?? 2000,
+  );
+  const [workingCalMonth, setWorkingCalMonth] = React.useState(
+    initialWorkingMonth?.calendarMonth ?? 1,
+  );
+  const [workingMonthSource, setWorkingMonthSource] =
+    React.useState<WorkingMonthSource>(initialWorkingMonth?.source ?? "personal");
+  const [canChangeWorkingMonth, setCanChangeWorkingMonth] = React.useState(
+    initialWorkingMonth?.canChange ?? true,
+  );
+  const [salesPointId, setSalesPointId] = React.useState<number | null>(
+    initialWorkingMonth?.salesPointId ?? null,
+  );
+  const [salesPointName, setSalesPointName] = React.useState<string | null>(
+    initialWorkingMonth?.salesPointName ?? null,
+  );
 
   const applyMonthForUser = React.useCallback(() => {
     if (
@@ -129,6 +192,25 @@ export function WorkingPeriodProvider(props: {
 
     if (authStatus === "loading") return;
 
+    if (
+      initialWorkingMonth &&
+      initialWorkingMonth.financialYear === openFinancialYear &&
+      initialWorkingMonth.source === "sales_point"
+    ) {
+      applyResolvedMonth(
+        initialWorkingMonth.calendarYear,
+        initialWorkingMonth.calendarMonth,
+        selectableMonths,
+        setWorkingCalYear,
+        setWorkingCalMonth,
+      );
+      setWorkingMonthSource("sales_point");
+      setCanChangeWorkingMonth(initialWorkingMonth.canChange);
+      setSalesPointId(initialWorkingMonth.salesPointId);
+      setSalesPointName(initialWorkingMonth.salesPointName);
+      return;
+    }
+
     if (userId) {
       const stored = readStoredMonth(openFinancialYear, userId);
       if (stored) {
@@ -138,9 +220,31 @@ export function WorkingPeriodProvider(props: {
         if (ok) {
           setWorkingCalYear(stored.calendarYear);
           setWorkingCalMonth(stored.calendarMonth);
+          setWorkingMonthSource("personal");
+          setCanChangeWorkingMonth(true);
+          setSalesPointId(null);
+          setSalesPointName(null);
           return;
         }
       }
+    }
+
+    if (
+      initialWorkingMonth &&
+      initialWorkingMonth.financialYear === openFinancialYear
+    ) {
+      applyResolvedMonth(
+        initialWorkingMonth.calendarYear,
+        initialWorkingMonth.calendarMonth,
+        selectableMonths,
+        setWorkingCalYear,
+        setWorkingCalMonth,
+      );
+      setWorkingMonthSource(initialWorkingMonth.source);
+      setCanChangeWorkingMonth(initialWorkingMonth.canChange);
+      setSalesPointId(initialWorkingMonth.salesPointId);
+      setSalesPointName(initialWorkingMonth.salesPointName);
+      return;
     }
 
     const d = defaultSelectableMonthForToday(openPeriodStartIso, openPeriodEndIso);
@@ -161,11 +265,41 @@ export function WorkingPeriodProvider(props: {
     openPeriodStartIso,
     openPeriodEndIso,
     selectableMonths,
+    initialWorkingMonth,
   ]);
 
   React.useEffect(() => {
     applyMonthForUser();
   }, [applyMonthForUser]);
+
+  const syncFromServer = React.useCallback(async () => {
+    const res = await getWorkingMonthForSessionAction();
+    if ("error" in res) return;
+    if (openFinancialYear != null && res.financialYear !== openFinancialYear) return;
+    const ok = selectableMonths.some(
+      (m) => m.year === res.calendarYear && m.month === res.calendarMonth,
+    );
+    if (!ok) return;
+    setWorkingCalYear(res.calendarYear);
+    setWorkingCalMonth(res.calendarMonth);
+    setWorkingMonthSource(res.source);
+    setCanChangeWorkingMonth(res.canChange);
+    setSalesPointId(res.salesPointId);
+    setSalesPointName(res.salesPointName);
+  }, [openFinancialYear, selectableMonths]);
+
+  React.useEffect(() => {
+    if (workingMonthSource !== "sales_point" || openFinancialYear == null) return;
+    const id = window.setInterval(() => {
+      void syncFromServer();
+    }, SITE_POLL_MS);
+    const onFocus = () => void syncFromServer();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [workingMonthSource, openFinancialYear, syncFromServer]);
 
   React.useEffect(() => {
     if (openFinancialYear == null || !userId) return;
@@ -186,13 +320,33 @@ export function WorkingPeriodProvider(props: {
 
   const setWorkingCalendarMonth = React.useCallback(
     (year: number, month: number) => {
+      if (workingMonthSource === "sales_point" && canChangeWorkingMonth && salesPointId) {
+        void (async () => {
+          const fd = new FormData();
+          fd.set("salesPointId", String(salesPointId));
+          fd.set("calendarYear", String(year));
+          fd.set("calendarMonth", String(month));
+          const result = await setSalesPointWorkingMonthAction(fd);
+          if (!result.ok) return;
+          setWorkingCalYear(year);
+          setWorkingCalMonth(month);
+        })();
+        return;
+      }
+
       setWorkingCalYear(year);
       setWorkingCalMonth(month);
       if (openFinancialYear != null && userId) {
         writeStoredMonth(openFinancialYear, userId, year, month);
       }
     },
-    [openFinancialYear, userId],
+    [
+      workingMonthSource,
+      canChangeWorkingMonth,
+      salesPointId,
+      openFinancialYear,
+      userId,
+    ],
   );
 
   const fyLabel =
@@ -228,6 +382,10 @@ export function WorkingPeriodProvider(props: {
       workingCalendarMonth: workingCalMonth,
       workingMonthStartIso: workingMonthStartEnd.startIso,
       workingMonthEndIso: workingMonthStartEnd.endIso,
+      workingMonthSource,
+      canChangeWorkingMonth,
+      salesPointId,
+      salesPointName,
       setWorkingCalendarMonth,
       fyLabel,
       workingMonthLabel,
@@ -241,6 +399,10 @@ export function WorkingPeriodProvider(props: {
       workingCalMonth,
       workingMonthStartEnd.startIso,
       workingMonthStartEnd.endIso,
+      workingMonthSource,
+      canChangeWorkingMonth,
+      salesPointId,
+      salesPointName,
       setWorkingCalendarMonth,
       fyLabel,
       workingMonthLabel,

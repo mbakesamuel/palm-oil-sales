@@ -7,11 +7,13 @@ import {
   validateReviewedDeliveryOrders,
 } from "./actions";
 import { getServerSession } from "@/lib/auth-server";
-import { assertPermissionKey } from "@/lib/access-control";
+import { assertPermissionKeysOrRedirect } from "@/lib/access-control";
 
 export default async function DeliveryOrderValidationQueuePage() {
-  await assertPermissionKey("route:/delivery-orders/validation-queue");
-  await assertPermissionKey("ui:validate-delivery-orders");
+  await assertPermissionKeysOrRedirect(
+    "route:/delivery-orders/validation-queue",
+    "ui:validate-delivery-orders",
+  );
 
   const session = await getServerSession();
   if (!session?.userId) redirect("/login");

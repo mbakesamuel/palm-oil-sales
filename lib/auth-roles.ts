@@ -101,5 +101,23 @@ export function canCreateOrEditConsignmentNoteDraft(role: UserRole): boolean {
 
 /** Validate a pending vehicle consignment note after a clerk has prepared it. */
 export function canValidateConsignmentNote(role: UserRole): boolean {
-  return role === UserRole.SUPERVISOR || role === UserRole.ADMIN;
+  return (
+    role === UserRole.SUPERVISOR ||
+    role === UserRole.SENIOR_SUPERVISOR ||
+    role === UserRole.ADMIN
+  );
+}
+
+/**
+ * Web consignment actions use `User.role` on the account row; mobile should accept
+ * either the line-role workflow role or the stored enum (whichever allows validation).
+ */
+export function canValidateConsignmentForActor(
+  workflowRole: UserRole,
+  storedUserRole: UserRole,
+): boolean {
+  return (
+    canValidateConsignmentNote(workflowRole) ||
+    canValidateConsignmentNote(storedUserRole)
+  );
 }

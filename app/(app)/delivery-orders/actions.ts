@@ -14,6 +14,7 @@ import {
   toOpenFinancialYearForPosting,
 } from "@/lib/financial-year";
 import { firstDayOfCalendarMonth, noonUtcFromIsoDate } from "@/lib/posting-calendar";
+import { resolveWorkingMonthForSession } from "@/lib/sales-point-working-month";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import {
   combinedVatAndOtherRates,
@@ -33,6 +34,7 @@ import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
+import { assertCustomerSelectableForOperations } from "@/lib/customers/operational-customer-scope";
 import { validateCustomerForCommercialPosting } from "@/lib/customer-commercial";
 import {
   commercialServiceErrorForOperations,
@@ -497,6 +499,12 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
 
   if (!customerId) return { ok: false, error: "Customer is required." };
 
+  const selectableCheck = await assertCustomerSelectableForOperations(
+    prisma,
+    customerId,
+  );
+  if (!selectableCheck.ok) return { ok: false, error: selectableCheck.error };
+
   let session: Awaited<ReturnType<typeof requireActor>>["session"];
   let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
@@ -523,20 +531,17 @@ export async function saveDeliveryOrder(formData: FormData): Promise<SaveHeaderR
     };
   }
 
-  const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
-  const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
-  const postingCMRaw = String(formData.get("postingCalendarMonth") ?? "").trim();
-  const postingFY = Number.parseInt(postingFYRaw, 10);
-  const postingCalendarYear = Number.parseInt(postingCYRaw, 10);
-  const postingCalendarMonth = Number.parseInt(postingCMRaw, 10);
-
-  if (!Number.isFinite(postingFY) || !Number.isFinite(postingCalendarYear) || !Number.isFinite(postingCalendarMonth)) {
+  const resolvedWorkingMonth = await resolveWorkingMonthForSession(session);
+  if (!resolvedWorkingMonth) {
     return {
       ok: false,
       error:
         "Working financial period is missing. Set your working month under Financial years before saving.",
     };
   }
+  const postingFY = resolvedWorkingMonth.financialYear;
+  const postingCalendarYear = resolvedWorkingMonth.calendarYear;
+  const postingCalendarMonth = resolvedWorkingMonth.calendarMonth;
 
   const dateIssued = dateIssuedRaw
     ? new Date(`${dateIssuedRaw}T12:00:00.000Z`)

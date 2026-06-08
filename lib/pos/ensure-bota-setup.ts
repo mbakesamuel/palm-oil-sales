@@ -70,7 +70,13 @@ export async function ensureBotaPosSetup(prisma: PrismaClient) {
         name: WALK_IN_CUSTOMER_NAME,
         customerTypeId: retailCustomerTypeId,
         hasTaxpayerId: false,
+        isPosPlaceholder: true,
       },
+    });
+  } else {
+    await prisma.customer.updateMany({
+      where: { id: walkIn.id, isPosPlaceholder: false },
+      data: { isPosPlaceholder: true },
     });
   }
 }

@@ -11,6 +11,7 @@ import {
   getOpenFinancialYearPeriod,
   toOpenFinancialYearForPosting,
 } from "@/lib/financial-year";
+import { resolveWorkingMonthForSession } from "@/lib/sales-point-working-month";
 import { noonUtcFromIsoDate, normalizeIsoDateInput, prismaDateToIso, utcIsoDateToday } from "@/lib/posting-calendar";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { VAT_TAX_CODE } from "@/lib/tax/constants";
@@ -33,6 +34,7 @@ import {
   salesPointErrorForResource,
   salesPointErrorForSubmitted,
 } from "@/lib/auth-sales-point-scope";
+import { assertCustomerSelectableForOperations } from "@/lib/customers/operational-customer-scope";
 import {
   assertCustomerMatchesPostingLine,
   commercialServiceErrorForCustomer,
@@ -247,13 +249,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   const vehicleNumberRaw = String(formData.get("vehicleNumber") ?? "").trim();
   const deliveryOrderNoRaw = String(formData.get("deliveryOrderNo") ?? "").trim();
 
-  const postingFYRaw = String(formData.get("postingFinancialYear") ?? "").trim();
-  const postingCYRaw = String(formData.get("postingCalendarYear") ?? "").trim();
-  const postingCMRaw = String(formData.get("postingCalendarMonth") ?? "").trim();
-  const postingFY = Number.parseInt(postingFYRaw, 10);
-  const postingCalendarYear = Number.parseInt(postingCYRaw, 10);
-  const postingCalendarMonth = Number.parseInt(postingCMRaw, 10);
-
   const transactionDateRaw = String(formData.get("transactionDate") ?? "").trim();
   const transactionIso = normalizeIsoDateInput(transactionDateRaw) ?? utcIsoDateToday();
   const soldAt = noonUtcFromIsoDate(transactionIso);
@@ -270,6 +265,18 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
+
+  const resolvedWorkingMonth = await resolveWorkingMonthForSession(session);
+  if (!resolvedWorkingMonth) {
+    return {
+      ok: false,
+      error:
+        "Working financial period is missing. Set your working month under Financial years before posting.",
+    };
+  }
+  const postingFY = resolvedWorkingMonth.financialYear;
+  const postingCalendarYear = resolvedWorkingMonth.calendarYear;
+  const postingCalendarMonth = resolvedWorkingMonth.calendarMonth;
 
   const effectiveSalesPointId = session.salesPoint?.id ?? salesPointId;
   const spErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
@@ -407,6 +414,13 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
     };
     customerNameSnapshot = walkInCustomerName;
   } else {
+    const selectableCheck = await assertCustomerSelectableForOperations(
+      prisma,
+      customerIdRaw,
+    );
+    if (!selectableCheck.ok) {
+      return { ok: false, error: selectableCheck.error };
+    }
     const row = await prisma.customer.findUnique({
       where: { id: customerIdRaw },
       select: {
@@ -434,13 +448,6 @@ export async function createSale(formData: FormData): Promise<SaveSaleResult> {
   );
   if (lineMismatch) return { ok: false, error: lineMismatch };
 
-  if (!Number.isFinite(postingFY) || !Number.isFinite(postingCalendarYear) || !Number.isFinite(postingCalendarMonth)) {
-    return {
-      ok: false,
-      error:
-        "Working financial period is missing. Set your working month under Financial years before posting.",
-    };
-  }
   if (!openPeriod) {
     return { ok: false, error: "No financial year is open." };
   }

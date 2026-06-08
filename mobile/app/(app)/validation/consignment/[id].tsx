@@ -3,6 +3,8 @@ import { Alert, Text } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { MobileConsignmentDetail } from "@pos/shared";
 import { apiFetch } from "@/api/client";
+import { useAuth } from "@/auth/AuthProvider";
+import { canValidateConsignmentOnMobile } from "@/constants/validation-access";
 import {
   ReviewField,
   ReviewLineTable,
@@ -16,6 +18,7 @@ import {
 export default function ConsignmentReviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { hasPermission, session } = useAuth();
   const [detail, setDetail] = useState<MobileConsignmentDetail | null>(null);
   const [busy, setBusy] = useState(true);
   const [acting, setActing] = useState(false);
@@ -79,7 +82,9 @@ export default function ConsignmentReviewScreen() {
 
   if (busy || !detail) return <ReviewLoader />;
 
-  const canValidate = detail.status === "PENDING";
+  const canValidate =
+    detail.status === "PENDING" &&
+    canValidateConsignmentOnMobile(hasPermission, session);
 
   return (
     <ReviewScroll

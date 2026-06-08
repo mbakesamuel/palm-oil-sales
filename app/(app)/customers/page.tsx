@@ -59,6 +59,7 @@ export default async function CustomersPage() {
         commercialService: { select: { id: true, name: true } },
         taxRegime: { select: { id: true, name: true, vatApplies: true } },
         createdAt: true,
+        isPosPlaceholder: true,
       },
       take: 200,
     }),

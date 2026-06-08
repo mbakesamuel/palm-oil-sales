@@ -29,14 +29,29 @@ export type PrismaDb = {
   customer: {
     findFirst: (args: {
       where: { name: string; commercialServiceId: string };
-      select: { id: true; name: true; customerTypeId: true };
-    }) => Promise<{ id: string; name: string; customerTypeId: string } | null>;
+      select: {
+        id: true;
+        name: true;
+        customerTypeId: true;
+        isPosPlaceholder?: true;
+      };
+    }) => Promise<{
+      id: string;
+      name: string;
+      customerTypeId: string;
+      isPosPlaceholder?: boolean;
+    } | null>;
+    update: (args: {
+      where: { id: string };
+      data: { isPosPlaceholder: boolean };
+    }) => Promise<unknown>;
     create: (args: {
       data: {
         commercialServiceId: string;
         name: string;
         customerTypeId: string;
         hasTaxpayerId: boolean;
+        isPosPlaceholder: boolean;
       };
       select: { id: true; name: true; customerTypeId: true };
     }) => Promise<{ id: string; name: string; customerTypeId: string }>;
@@ -133,15 +148,24 @@ export async function getOrCreatePosPlaceholderCustomer(
 ): Promise<{ id: string; name: string; customerTypeId: string }> {
   const existing = await db.customer.findFirst({
     where: { name: placeholderName, commercialServiceId },
-    select: { id: true, name: true, customerTypeId: true },
+    select: { id: true, name: true, customerTypeId: true, isPosPlaceholder: true },
   });
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.isPosPlaceholder) {
+      await db.customer.update({
+        where: { id: existing.id },
+        data: { isPosPlaceholder: true },
+      });
+    }
+    return existing;
+  }
   return db.customer.create({
     data: {
       commercialServiceId,
       name: placeholderName,
       customerTypeId,
       hasTaxpayerId: false,
+      isPosPlaceholder: true,
     },
     select: { id: true, name: true, customerTypeId: true },
   });

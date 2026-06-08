@@ -25,6 +25,16 @@ export function isPlainSupervisorValidator(
   );
 }
 
+/** Sales supervisors and senior supervisors validate vehicle consignment (Bota split on server). */
+export function canValidateConsignmentNoteValidator(
+  ctx: SaleValidatorRoleContext,
+): boolean {
+  if (ctx.role === "ADMIN") return true;
+  return (
+    isPlainSupervisorValidator(ctx) || isSeniorSupervisorValidator(ctx)
+  );
+}
+
 export function pendingSalesValidationHint(ctx: SaleValidatorRoleContext): string {
   if (isSeniorSupervisorValidator(ctx)) {
     return "Senior supervisor: validate all pending sales invoices at Bota.";
@@ -33,4 +43,16 @@ export function pendingSalesValidationHint(ctx: SaleValidatorRoleContext): strin
     return "Sales supervisor: validate all pending sales invoices at your sales point (not Bota).";
   }
   return "Open each item to review lines and totals before validating.";
+}
+
+export function pendingConsignmentValidationHint(
+  ctx: SaleValidatorRoleContext,
+): string {
+  if (isSeniorSupervisorValidator(ctx)) {
+    return "Senior supervisor: validate vehicle consignment notes at Bota.";
+  }
+  if (isPlainSupervisorValidator(ctx)) {
+    return "Sales supervisor: validate vehicle consignment notes at your sales point (not Bota).";
+  }
+  return "Supervisor: validate vehicle consignment notes at your sales point.";
 }

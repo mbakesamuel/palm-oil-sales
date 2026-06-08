@@ -17,6 +17,7 @@ import {
   lastDayOfCalendarMonth,
 } from "@/lib/posting-calendar";
 import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
+import { saleWhereExcludingPosPlaceholderCustomers } from "@/lib/customers/operational-customer-scope";
 import {
   mergeWhereWithServiceScope,
   resolveServiceScope,
@@ -233,17 +234,19 @@ export async function loadDailySalesCrosstab(
 
     const sales = await prismaRetry(() =>
       prisma.sale.findMany({
-        where: mergeWhereWithServiceScope(
-          {
-            status: ValidationStatus.VALIDATED,
-            salesPointId: effectiveSalesPointId,
-            financialYear: monthFilter.financialYear,
-            postingCalendarYear: monthFilter.postingCalendarYear,
-            financialMonth: monthFilter.financialMonth,
-            soldAt: { gte, lt },
-          },
-          scope,
-          saleWhereForScope,
+        where: saleWhereExcludingPosPlaceholderCustomers(
+          mergeWhereWithServiceScope(
+            {
+              status: ValidationStatus.VALIDATED,
+              salesPointId: effectiveSalesPointId,
+              financialYear: monthFilter.financialYear,
+              postingCalendarYear: monthFilter.postingCalendarYear,
+              financialMonth: monthFilter.financialMonth,
+              soldAt: { gte, lt },
+            },
+            scope,
+            saleWhereForScope,
+          ),
         ),
         select: {
           soldAt: true,

@@ -74,7 +74,7 @@ export const homeApprovalAction: HomeAction = {
   icon: "checkmark-done-outline",
   tone: "forest",
   tab: "approvals",
-  description: "Review sales and delivery orders",
+  description: "Review sales, vehicle consignment, and delivery orders",
 };
 
 export const homeMoreActions: HomeAction[] = [

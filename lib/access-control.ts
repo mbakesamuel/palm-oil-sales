@@ -380,6 +380,19 @@ export async function assertRouteAllowedForPath(
   }
 }
 
+/** True when the session has a permission key (and commercial module, when applicable). */
+export async function isPermissionKeyAllowedForSession(
+  session: AuthSession,
+  key: PermissionKey,
+): Promise<boolean> {
+  if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
+    const profile = await loadCommercialProfileForSession(session);
+    if (!isRouteEnabledByProfile(profile, key)) return false;
+  }
+  const perms = await getPermissionsForSession(session);
+  return Boolean(perms[key]);
+}
+
 /** For server actions / APIs: same rules as `route:*` page access (throws if denied). */
 export async function assertPermissionKey(key: PermissionKey): Promise<void> {
   const session = await getServerSession();
@@ -394,14 +407,37 @@ export async function assertPermissionKeyForSession(
   session: AuthSession,
   key: PermissionKey,
 ): Promise<void> {
-  if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
-    const profile = await loadCommercialProfileForSession(session);
-    if (!isRouteEnabledByProfile(profile, key)) {
-      throw new Error("This feature is not enabled for your commercial line.");
+  if (!(await isPermissionKeyAllowedForSession(session, key))) {
+    if (!roleSeesAllCommercialServices(session.role) && !session.globalRole) {
+      const profile = await loadCommercialProfileForSession(session);
+      if (!isRouteEnabledByProfile(profile, key)) {
+        throw new Error("This feature is not enabled for your commercial line.");
+      }
     }
-  }
-  const perms = await getPermissionsForSession(session);
-  if (!perms[key]) {
     throw new Error("You do not have permission to perform this action.");
+  }
+}
+
+/** Server pages: redirect to `/forbidden` instead of throwing into the error boundary. */
+export async function assertPermissionKeyOrRedirect(
+  key: PermissionKey,
+): Promise<void> {
+  const session = await getServerSession();
+  if (!session?.userId) redirect("/login");
+  if (!(await isPermissionKeyAllowedForSession(session, key))) {
+    redirect("/forbidden");
+  }
+}
+
+/** Like `assertPermissionKeyOrRedirect` but checks several keys in one session load. */
+export async function assertPermissionKeysOrRedirect(
+  ...keys: PermissionKey[]
+): Promise<void> {
+  const session = await getServerSession();
+  if (!session?.userId) redirect("/login");
+  for (const key of keys) {
+    if (!(await isPermissionKeyAllowedForSession(session, key))) {
+      redirect("/forbidden");
+    }
   }
 }

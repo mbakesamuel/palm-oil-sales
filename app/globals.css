@@ -202,6 +202,11 @@ body {
   width: 100%;
 }
 
+.welcome-carousel-track {
+  transition: transform 700ms ease-in-out;
+  will-change: transform;
+}
+
 @keyframes welcome-carousel-ken-burns {
   from {
     transform: scale(1);
@@ -212,9 +217,14 @@ body {
 }
 
 .welcome-carousel-slide-active {
-  animation: welcome-carousel-ken-burns 7s ease-out forwards;
+  animation: welcome-carousel-ken-burns 5s ease-out forwards;
   transform-origin: center center;
   will-change: transform;
+}
+
+/* Reset zoom when a slide becomes inactive so Ken Burns restarts next time. */
+.welcome-hero img:not(.welcome-carousel-slide-active) {
+  transform: scale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
