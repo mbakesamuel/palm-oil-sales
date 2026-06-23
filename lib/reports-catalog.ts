@@ -153,16 +153,7 @@ export const REPORTS: ReportDefinition[] = [
     href: "/reports/pricing",
     label: "Product & variant pricing",
     description:
-      "Unit prices (ex tax) for the open financial year — Main category (by customer type) and other products; filter by effective date or latest schedules.",
-    permissionKey: "route:/reports/pricing",
-  },
-  {
-    group: "pricing",
-    groupLabel: "Pricing",
-    href: "/reports/pricing#bottled",
-    label: "Bottled variant prices",
-    description:
-      "Bottled product sizes and scheduled unit prices (section of the unified pricing report).",
+      "Unit prices (ex tax) for the open financial year — Main category (by customer type), other products, and bottled variants; filter by effective date or latest schedules.",
     permissionKey: "route:/reports/pricing",
   },
 ];

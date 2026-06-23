@@ -120,7 +120,7 @@ export default async function PricingReportPrintPage(props: {
       <PricingScheduleTable groups={groups} />
 
       <ReportFooter signatory />
-      <AutoPrint />
+      <AutoPrint closeOnFinish={false} />
     </div>
   );
 }

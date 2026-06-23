@@ -5,6 +5,7 @@ import { listCustomerTypeDefinitions } from "@/lib/customer-types/catalog";
 import { getOrInitCompanySettings } from "@/lib/settings";
 import { getOpenFinancialYearPeriod } from "@/lib/financial-year";
 import { getServerSession } from "@/lib/auth-server";
+import { OpenReportButton } from "@/components/OpenReportButton";
 import { PricingReport } from "@/app/(app)/setup/product-pricing/PricingReport";
 import type { PricingScheduleRow } from "@/lib/pricing-report";
 
@@ -71,20 +72,26 @@ export default async function PricingReportPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Product pricing</h1>
-        <p className="text-sm opacity-80 mt-1">
-          Unit prices for the open financial year, grouped by product. FY{" "}
-          {String(openFy.financialYear)} (
-          {openFy.startDate.toISOString().slice(0, 10)}–
-          {openFy.endDate.toISOString().slice(0, 10)}).
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Product pricing</h1>
+          <p className="text-sm opacity-80 mt-1">
+            Unit prices for the open financial year, grouped by product. FY{" "}
+            {String(openFy.financialYear)} (
+            {openFy.startDate.toISOString().slice(0, 10)}–
+            {openFy.endDate.toISOString().slice(0, 10)}).
+          </p>
+        </div>
+        <OpenReportButton
+          href="/reports/pricing/print"
+          label="Print report"
+          sameTab
+        />
       </div>
 
       <PricingReport
         schedules={scheduleModels}
         customerTypeOptions={customerTypeOptions}
-        printHref="/reports/pricing/print"
       />
     </div>
   );

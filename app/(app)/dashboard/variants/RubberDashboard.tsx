@@ -3,6 +3,7 @@ import { loadRubberDashboardData } from "@/lib/dashboard/load-dashboard-data";
 import { quickLinksForModules } from "@/lib/dashboard-widgets";
 import { DashboardFilterPanel } from "../_shared/DashboardFilterPanel";
 import { DashboardPageLayout } from "../_shared/DashboardPageLayout";
+import { DashboardSidebar } from "../_shared/DashboardSidebar";
 import { RubberDashboardView } from "../_shared/RubberDashboardView";
 
 export async function RubberDashboard(props: {
@@ -19,12 +20,14 @@ export async function RubberDashboard(props: {
       actionHref="/stock"
       actionLabel="Stock"
       sidebar={
-        <DashboardFilterPanel
-          monthFilter={data.monthFilter}
-          hasOpenFy={data.hasOpenFy}
-          scopeLabel={data.scopeHint}
-          quickLinks={quickLinksForModules(profile.enabledModules)}
-        />
+        <DashboardSidebar>
+          <DashboardFilterPanel
+            monthFilter={data.monthFilter}
+            hasOpenFy={data.hasOpenFy}
+            scopeLabel={data.scopeHint}
+            quickLinks={quickLinksForModules(profile.enabledModules)}
+          />
+        </DashboardSidebar>
       }
     >
       <RubberDashboardView data={data} />

@@ -2,6 +2,7 @@ import { siteLabelForKind, type CommercialProfile } from "@/lib/commercial-profi
 import { loadGenericDashboardData } from "@/lib/dashboard/load-dashboard-data";
 import { DashboardFilterPanel } from "../_shared/DashboardFilterPanel";
 import { DashboardPageLayout } from "../_shared/DashboardPageLayout";
+import { DashboardSidebar } from "../_shared/DashboardSidebar";
 import { GenericDashboardView } from "../_shared/GenericDashboardView";
 
 export async function GenericLineDashboard(props: {
@@ -18,12 +19,14 @@ export async function GenericLineDashboard(props: {
       actionHref="/setup"
       actionLabel="Setup"
       sidebar={
-        <DashboardFilterPanel
-          monthFilter={data.monthFilter}
-          hasOpenFy={data.hasOpenFy}
-          scopeLabel={serviceName}
-          quickLinks={data.quickLinks}
-        />
+        <DashboardSidebar>
+          <DashboardFilterPanel
+            monthFilter={data.monthFilter}
+            hasOpenFy={data.hasOpenFy}
+            scopeLabel={serviceName}
+            quickLinks={data.quickLinks}
+          />
+        </DashboardSidebar>
       }
     >
       <GenericDashboardView data={data} />

@@ -22,7 +22,7 @@ function Checkbox(props: {
       type="checkbox"
       className="h-4 w-4 accent-primary"
       checked={props.checked}
-      onChange={(e) => props.onChange(e.currentTarget.checked)}
+      onChange={(e) => props.onChange(e.target.checked)}
       aria-label={props["aria-label"]}
     />
   );
@@ -156,9 +156,10 @@ export function ValidationQueueClient(props: {
             className={inputClass}
             value={filters.q ?? ""}
             placeholder="DO no or customer…"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setFilters((f) => ({ ...f, q: e.currentTarget.value }))
-            }
+            onChange={(e) => {
+              const q = e.target.value;
+              setFilters((f) => ({ ...f, q }));
+            }}
           />
         </div>
 
@@ -169,9 +170,10 @@ export function ValidationQueueClient(props: {
             type="date"
             value={filters.from ?? ""}
             max={filters.to ?? todayIso()}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setFilters((f) => ({ ...f, from: e.currentTarget.value || null }))
-            }
+            onChange={(e) => {
+              const from = e.target.value || null;
+              setFilters((f) => ({ ...f, from }));
+            }}
           />
         </div>
 
@@ -183,9 +185,10 @@ export function ValidationQueueClient(props: {
             value={filters.to ?? ""}
             min={filters.from ?? undefined}
             max={todayIso()}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setFilters((f) => ({ ...f, to: e.currentTarget.value || null }))
-            }
+            onChange={(e) => {
+              const to = e.target.value || null;
+              setFilters((f) => ({ ...f, to }));
+            }}
           />
         </div>
 
@@ -194,12 +197,10 @@ export function ValidationQueueClient(props: {
           <select
             className={inputClass}
             value={filters.reviewed ?? "all"}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setFilters((f) => ({
-                ...f,
-                reviewed: e.currentTarget.value as ValidationQueueFilters["reviewed"],
-              }))
-            }
+            onChange={(e) => {
+              const reviewed = e.target.value as ValidationQueueFilters["reviewed"];
+              setFilters((f) => ({ ...f, reviewed }));
+            }}
           >
             <option value="all">All</option>
             <option value="exclude">Unreviewed only</option>

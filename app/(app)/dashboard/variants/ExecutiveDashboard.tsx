@@ -1,5 +1,6 @@
 import { DashboardFilterPanel } from "../_shared/DashboardFilterPanel";
 import { DashboardPageLayout } from "../_shared/DashboardPageLayout";
+import { DashboardSidebar } from "../_shared/DashboardSidebar";
 import { ExecutiveDashboardView } from "../_shared/ExecutiveDashboardView";
 import { loadExecutiveDashboardData } from "@/lib/dashboard/load-dashboard-data";
 
@@ -13,11 +14,13 @@ export async function ExecutiveDashboard() {
       actionHref="/setup"
       actionLabel="Setup"
       sidebar={
-        <DashboardFilterPanel
-          monthFilter={data.monthFilter}
-          hasOpenFy={data.hasOpenFy}
-          scopeLabel="All commercial lines"
-        />
+        <DashboardSidebar>
+          <DashboardFilterPanel
+            monthFilter={data.monthFilter}
+            hasOpenFy={data.hasOpenFy}
+            scopeLabel="All commercial lines"
+          />
+        </DashboardSidebar>
       }
     >
       <ExecutiveDashboardView data={data} />

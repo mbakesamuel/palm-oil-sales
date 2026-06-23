@@ -8,6 +8,7 @@ import { UserRole } from "@/lib/domain";
 import { PERMISSION_KEYS, type PermissionKey } from "@/lib/access-control-keys";
 import {
   permissionKeysForModules,
+  effectiveEnabledModules,
   type CommercialModuleKey,
 } from "@/lib/commercial-modules";
 import {
@@ -282,7 +283,9 @@ function applyCommercialModuleFilter(
   profile: CommercialProfile | null,
 ): RolePermissionMap {
   if (!profile) return perms;
-  const allowed = permissionKeysForModules(profile.enabledModules);
+  const allowed = permissionKeysForModules(
+    effectiveEnabledModules(profile.enabledModules),
+  );
   const out = { ...perms };
   for (const k of PERMISSION_KEYS) {
     if (k.startsWith("route:") && !allowed.has(k)) {

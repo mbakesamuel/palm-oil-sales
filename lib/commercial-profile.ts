@@ -5,12 +5,13 @@ import type { PermissionKey } from "@/lib/access-control-keys";
 import type { CommercialSiteKind } from "@/lib/domain-commercial";
 import {
   type CommercialModuleKey,
-  moduleKeyForPathname,
-  moduleKeyForRoutePermissionKey,
+  effectiveEnabledModules,
+  routePermissionKeyEnabledForModules,
   parseEnabledModulesJson,
   PALM_OIL_MODULE_KEYS,
   RUBBER_MODULE_KEYS,
 } from "@/lib/commercial-modules";
+import { resolveRoutePermissionKey } from "@/lib/resolve-route-permission";
 import { getPrismaClient } from "@/lib/prisma";
 export type CommercialProfile = {
   commercialServiceId: string;
@@ -98,12 +99,11 @@ export function isRouteEnabledByProfile(
   pathnameOrPermissionKey: string,
 ): boolean {
   if (!profile) return true;
-  const mod =
-    pathnameOrPermissionKey.startsWith("route:")
-      ? moduleKeyForRoutePermissionKey(pathnameOrPermissionKey as PermissionKey)
-      : moduleKeyForPathname(pathnameOrPermissionKey);
-  if (!mod) return true;
-  return profile.enabledModules.includes(mod);
+  const key = pathnameOrPermissionKey.startsWith("route:")
+    ? (pathnameOrPermissionKey as PermissionKey)
+    : resolveRoutePermissionKey(pathnameOrPermissionKey);
+  if (!key) return true;
+  return routePermissionKeyEnabledForModules(key, profile.enabledModules);
 }
 
 export function commercialServiceErrorForModule(
