@@ -131,13 +131,15 @@ const MODULE_ROUTE_KEYS: Record<CommercialModuleKey, readonly PermissionKey[]> =
   stock: ["route:/stock"],
 };
 
-const ROUTE_TO_MODULE = new Map<string, CommercialModuleKey>();
+const ROUTE_TO_MODULES = new Map<string, CommercialModuleKey[]>();
 for (const [mod, keys] of Object.entries(MODULE_ROUTE_KEYS) as [
   CommercialModuleKey,
   readonly PermissionKey[],
 ][]) {
   for (const k of keys) {
-    ROUTE_TO_MODULE.set(k, mod);
+    const list = ROUTE_TO_MODULES.get(k) ?? [];
+    if (!list.includes(mod)) list.push(mod);
+    ROUTE_TO_MODULES.set(k, list);
   }
 }
 
@@ -153,16 +155,44 @@ export function permissionKeysForModules(
   return out;
 }
 
-export function moduleKeyForRoutePermissionKey(key: PermissionKey): CommercialModuleKey | null {
-  return ROUTE_TO_MODULE.get(key) ?? null;
+export function moduleKeysForRoutePermissionKey(key: PermissionKey): CommercialModuleKey[] {
+  return ROUTE_TO_MODULES.get(key) ?? [];
 }
 
-export function moduleKeyForPathname(pathname: string): CommercialModuleKey | null {
+/** True when any module that exposes this route is enabled on the line. */
+export function routePermissionKeyEnabledForModules(
+  key: PermissionKey,
+  modules: readonly CommercialModuleKey[],
+): boolean {
+  const routeModules = moduleKeysForRoutePermissionKey(key);
+  if (routeModules.length === 0) return true;
+  const effective = effectiveEnabledModules(modules);
+  return routeModules.some((mod) => effective.includes(mod));
+}
+
+export function moduleKeyForRoutePermissionKey(
+  key: PermissionKey,
+  enabledModules?: readonly CommercialModuleKey[],
+): CommercialModuleKey | null {
+  const modules = moduleKeysForRoutePermissionKey(key);
+  if (modules.length === 0) return null;
+  if (enabledModules) {
+    const effective = effectiveEnabledModules(enabledModules);
+    const match = modules.find((mod) => effective.includes(mod));
+    if (match) return match;
+  }
+  return modules[0] ?? null;
+}
+
+export function moduleKeyForPathname(
+  pathname: string,
+  enabledModules?: readonly CommercialModuleKey[],
+): CommercialModuleKey | null {
   const path = pathname.trim();
   if (!path) return null;
   const candidates = [`route:${path}`, ...findRoutePrefixKeys(path)];
   for (const c of candidates) {
-    const mod = ROUTE_TO_MODULE.get(c);
+    const mod = moduleKeyForRoutePermissionKey(c as PermissionKey, enabledModules);
     if (mod) return mod;
   }
   return null;
@@ -185,4 +215,14 @@ export function parseEnabledModulesJson(raw: unknown): CommercialModuleKey[] {
   return raw
     .map((x) => String(x).trim())
     .filter((x): x is CommercialModuleKey => valid.has(x));
+}
+
+/** Operations modules imply their report suite for route gating (e.g. palm_operations → palm_reports). */
+export function effectiveEnabledModules(
+  modules: readonly CommercialModuleKey[],
+): CommercialModuleKey[] {
+  const set = new Set<CommercialModuleKey>(modules);
+  if (set.has("palm_operations")) set.add("palm_reports");
+  if (set.has("rubber_operations")) set.add("rubber_reports");
+  return [...set];
 }

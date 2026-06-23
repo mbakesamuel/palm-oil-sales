@@ -6,7 +6,7 @@ import { WELCOME_CAROUSEL_SLIDES } from "@/lib/welcome-carousel-slides";
 
 const SLIDES = [...WELCOME_CAROUSEL_SLIDES];
 const SLIDE_COUNT = SLIDES.length;
-const AUTO_ADVANCE_MS = 5000;
+const AUTO_ADVANCE_MS = 20000;
 
 export function WelcomeHeroCarousel() {
   const [activeIndex, setActiveIndex] = React.useState(0);
@@ -54,9 +54,20 @@ export function WelcomeHeroCarousel() {
     [goPrev, goNext],
   );
 
-  const activeSlide = SLIDES[activeIndex];
+  const safeActiveIndex =
+    SLIDE_COUNT <= 1
+      ? 0
+      : ((activeIndex % SLIDE_COUNT) + SLIDE_COUNT) % SLIDE_COUNT;
+
+  React.useEffect(() => {
+    if (activeIndex !== safeActiveIndex) {
+      setActiveIndex(safeActiveIndex);
+    }
+  }, [activeIndex, safeActiveIndex]);
+
+  const activeSlide = SLIDES[safeActiveIndex];
   const slideStepPct = 100 / SLIDE_COUNT;
-  const trackOffsetPct = activeIndex * slideStepPct;
+  const trackOffsetPct = safeActiveIndex * slideStepPct;
 
   return (
     <>
@@ -73,14 +84,14 @@ export function WelcomeHeroCarousel() {
               key={slide.id}
               className="relative h-full shrink-0 overflow-hidden"
               style={{ width: `${slideStepPct}%` }}
-              aria-hidden={index !== activeIndex}
+              aria-hidden={index !== safeActiveIndex}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- static files from /public */}
               <img
                 src={slide.src}
-                alt={index === activeIndex ? slide.alt : ""}
+                alt={index === safeActiveIndex ? slide.alt : ""}
                 className={`h-full w-full object-cover ${
-                  index === activeIndex && !reduceMotion
+                  index === safeActiveIndex && !reduceMotion
                     ? "welcome-carousel-slide-active"
                     : ""
                 }`}
@@ -110,7 +121,7 @@ export function WelcomeHeroCarousel() {
         onKeyDown={onControlsKeyDown}
       >
         <p className="sr-only" aria-live="polite">
-          Slide {activeIndex + 1} of {SLIDE_COUNT}: {activeSlide.alt}
+          Slide {safeActiveIndex + 1} of {SLIDE_COUNT}: {activeSlide.alt}
         </p>
 
         <button
@@ -140,10 +151,10 @@ export function WelcomeHeroCarousel() {
               key={slide.id}
               type="button"
               role="tab"
-              aria-selected={index === activeIndex}
+              aria-selected={index === safeActiveIndex}
               aria-label={`Go to slide ${index + 1}: ${slide.alt}`}
               className={`h-2.5 rounded-full transition-all duration-300 ${
-                index === activeIndex
+                index === safeActiveIndex
                   ? "w-6 bg-white"
                   : "w-2.5 bg-white/45 hover:bg-white/70"
               }`}

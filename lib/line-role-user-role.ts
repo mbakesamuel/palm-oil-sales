@@ -12,13 +12,15 @@ export function userRoleFromLineRoleCode(code: string): UserRole {
     .trim()
     .toLowerCase();
 
-  if (c.includes("senior") && c.includes("supervisor")) return UserRole.SENIOR_SUPERVISOR;
+  if (c === "sss" || (c.includes("senior") && c.includes("supervisor"))) {
+    return UserRole.SENIOR_SUPERVISOR;
+  }
   // Factory site managers supervise one factory like a supervisor.
   if (c.includes("factory") && c.includes("manager")) return UserRole.SUPERVISOR;
-  // Line/site managers (commercial service staff) — validate DOs, reclassify stock, etc.
-  if (c.includes("manager")) return UserRole.MANAGER;
-  if (c.includes("supervisor")) return UserRole.SUPERVISOR;
-  if (c.includes("clerk")) return UserRole.CLERK;
+  // Line/site managers — validate DOs, reclassify stock, etc.
+  if (c === "man" || c.includes("manager")) return UserRole.MANAGER;
+  if (c === "sas" || c.includes("supervisor")) return UserRole.SUPERVISOR;
+  if (c.includes("clerk") || c === "sac" || c === "prc") return UserRole.CLERK;
 
   return UserRole.CLERK;
 }

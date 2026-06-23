@@ -89,6 +89,8 @@ export function snapshotForLegacyUserRole(role: UserRole): RolePermissionMap {
     base["route:/setup/sales-budget"] = true;
   }
 
+  base["route:/reports"] = true;
+  base["route:/reports/sales"] = true;
   grantPalmOilReportRoutes(base);
 
   base["ui:validate-documents"] =

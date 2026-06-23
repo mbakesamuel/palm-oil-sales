@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Leaf, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { loginWithCredentials } from "./actions";
@@ -46,11 +46,6 @@ export function LoginForm(props: {
       className="space-y-5 rounded-2xl border border-border bg-white p-6 shadow-[0_8px_32px_rgb(45_80_22/0.12)]"
     >
       <div className="space-y-3 border-b border-border pb-5">
-        <div className="flex justify-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand/10 text-brand">
-            <Leaf className="h-7 w-7" strokeWidth={1.75} aria-hidden />
-          </span>
-        </div>
         <div className="relative flex min-h-10 items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element -- SVG from /public */}
           <img

@@ -1,5 +1,6 @@
 import { DashboardFilterPanel } from "../_shared/DashboardFilterPanel";
 import { DashboardPageLayout } from "../_shared/DashboardPageLayout";
+import { DashboardSidebar } from "../_shared/DashboardSidebar";
 import { PalmOilDashboardView } from "../_shared/PalmOilDashboardView";
 import { loadPalmOilDashboardData } from "@/lib/dashboard/load-dashboard-data";
 import { quickLinksForModules } from "@/lib/dashboard-widgets";
@@ -26,12 +27,14 @@ export async function PalmOilDashboard(props: {
       actionHref="/setup"
       actionLabel="Setup"
       sidebar={
-        <DashboardFilterPanel
-          monthFilter={data.monthFilter}
-          hasOpenFy={data.hasOpenFy}
-          scopeLabel={scopeLabel}
-          quickLinks={quickLinksForModules(profile.enabledModules)}
-        />
+        <DashboardSidebar>
+          <DashboardFilterPanel
+            monthFilter={data.monthFilter}
+            hasOpenFy={data.hasOpenFy}
+            scopeLabel={scopeLabel}
+            quickLinks={quickLinksForModules(profile.enabledModules)}
+          />
+        </DashboardSidebar>
       }
     >
       <PalmOilDashboardView data={data} />
