@@ -27,6 +27,7 @@ const MOBILE_ROUTE_PERMISSIONS: Array<{ prefix: string; key: PermissionKey }> = 
   },
   { prefix: "/api/mobile/v1/stock/receipts", key: "route:/stock" },
   { prefix: "/api/mobile/v1/stock/transfers", key: "route:/stock" },
+  { prefix: "/api/mobile/v1/pos", key: "route:/pos" },
   { prefix: "/api/mobile/v1/me", key: "route:/dashboard" },
 ];
 

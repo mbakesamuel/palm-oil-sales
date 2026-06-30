@@ -71,6 +71,24 @@ import {
 } from "@/lib/pos/sale-product-mode";
 import { runValidatePosSale } from "@/lib/pos/validate-pos-sale";
 import {
+  createSaleForSession,
+  createSaleInputFromFormData,
+  listAvailableDeliveryOrdersForSession,
+  lookupDeliveryOrderForSession,
+  previewPosLineStockForSession,
+  previewPosTaxesForSession,
+  type PosLineStockPreview,
+  type PosTaxPreviewRow,
+  type SaveSaleResult,
+} from "@/lib/services/pos-sales";
+import type {
+  AvailableDeliveryOrderRow,
+  LoadedSaleView,
+  PendingSaleRow,
+  SaleMutationResult,
+  SalePrintPayload,
+} from "./types";
+import {
   pendingSalesPointFilter,
   saleValidationScopeError,
 } from "@/lib/pos/sale-validation-scope";
@@ -112,100 +130,6 @@ function saleLineUsesUnits(
   return line.qtyUnits != null && line.qtyUnits.gt(0);
 }
 
-type PosLineInput = {
-  productId: string;
-  qtyKg: string;
-  qtyUnits?: string;
-  unitPricePerKg: string;
-  unitPricePerUnit?: string;
-  storageLocationId: string;
-};
-
-type PosPaymentInput = {
-  paymentMethodId: string;
-  amount: string;
-  chequeNo?: string;
-  bank?: string;
-  traiteNo?: string;
-  traiteIssuedOn?: string;
-  traiteMaturityOn?: string;
-};
-
-export type SaveSaleResult =
-  | { ok: true; id: string; invoiceNo: string; soldAtIso: string }
-  | { ok: false; error: string };
-
-export type SaleMutationResult = { ok: true } | { ok: false; error: string };
-
-export type LoadedSaleView = {
-  id: string;
-  invoiceNo: string;
-  soldAtIso: string;
-  referenceNumber: string | null;
-  salesPointId: number | null;
-  salesPointName: string | null;
-  customerId: string;
-  customerName: string;
-  taxpayerId: string | null;
-  vatApplies: boolean;
-  createdByUserId: string;
-  createdByName: string;
-  status: ValidationStatus;
-  validatedAtIso: string | null;
-  validatedByUserId: string | null;
-  validatedByName: string | null;
-  financialYear: number | null;
-  financialMonth: number | null;
-  postingCalendarYear: number | null;
-  vehicleNumber: string;
-  dateIssuedIso: string;
-  deliveryOrderNo: string | null;
-  saleProductMode: PosSaleProductMode | null;
-  saleDisposition: PosSaleDisposition | null;
-  netAmount: string;
-  vatAmount: string;
-  grossAmount: string;
-  lines: Array<{
-    productId: number;
-    productName: string;
-    productCat: string;
-    storageLocationId: number | null;
-    qtyKg: string;
-    qtyUnits: string | null;
-    unitPricePerKg: string;
-    unitPricePerUnit: string | null;
-    lineNet: string;
-    lineVat: string;
-    lineGross: string;
-  }>;
-  payments: Array<{
-    paymentMethodId: string;
-    methodCode: string;
-    methodName: string;
-    kind: PaymentMethodKind;
-    amount: string;
-    chequeNo: string | null;
-    bank: string | null;
-    traiteNo: string | null;
-    traiteIssuedOn: string | null;
-    traiteMaturityOn: string | null;
-    paidAtIso: string;
-  }>;
-  appliedTaxes: Array<{
-    code: string;
-    label: string;
-    rate: string;
-    amount: string;
-  }>;
-};
-
-export type PosTaxPreviewRow = {
-  code: string;
-  label: string;
-  rate: string;
-  ratePercentLabel: string;
-};
-
 function d(value: string | number) {
   return new Prisma.Decimal(value);
 }
@@ -227,723 +151,61 @@ async function requireActor(prisma: ReturnType<typeof getPrismaClient>) {
 }
 
 export async function createSale(formData: FormData): Promise<SaveSaleResult> {
-  const prisma = getPrismaClient();
-  const customerIdRaw = String(formData.get("customerId") ?? "").trim();
-  const useWalkIn = String(formData.get("useWalkInCustomer") ?? "") === "1";
-  const walkInCustomerName = String(formData.get("walkInCustomerName") ?? "").trim();
-  const typedCustomerName = String(formData.get("typedCustomerName") ?? "").trim();
-  const referenceNumberRaw = String(formData.get("referenceNumber") ?? "").trim();
-  const salesPointRaw = String(formData.get("salesPointId") ?? "").trim();
-  const salesPointId = salesPointRaw ? Number.parseInt(salesPointRaw, 10) : null;
-  const linesJson = String(formData.get("lines") ?? "[]");
-  const paymentsJson = String(formData.get("payments") ?? "[]");
-  const saleProductModeRaw = parseSaleProductMode(
-    String(formData.get("saleProductMode") ?? ""),
-  );
-  const saleDisposition = parseSaleDisposition(
-    String(formData.get("saleDisposition") ?? ""),
-  );
-
-  const lines = JSON.parse(linesJson) as PosLineInput[];
-  const payments = JSON.parse(paymentsJson) as PosPaymentInput[];
-  const vehicleNumberRaw = String(formData.get("vehicleNumber") ?? "").trim();
-  const deliveryOrderNoRaw = String(formData.get("deliveryOrderNo") ?? "").trim();
-
-  const transactionDateRaw = String(formData.get("transactionDate") ?? "").trim();
-  const transactionIso = normalizeIsoDateInput(transactionDateRaw) ?? utcIsoDateToday();
-  const soldAt = noonUtcFromIsoDate(transactionIso);
-
-  if (salesPointRaw && !Number.isFinite(salesPointId)) {
-    return { ok: false, error: "Invalid sales point." };
-  }
-
-  let session: Awaited<ReturnType<typeof requireActor>>["session"];
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
     await assertPermissionKey("route:/pos");
-    ({ session, actor } = await requireActor(prisma));
+    const session = await getServerSession();
+    if (!session?.userId) return { ok: false, error: "Login required." };
+    const result = await createSaleForSession(
+      session,
+      createSaleInputFromFormData(formData),
+    );
+    if (result.ok) {
+      revalidatePath("/pos");
+      revalidatePath("/dashboard");
+    }
+    return result;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-
-  const resolvedWorkingMonth = await resolveWorkingMonthForSession(session);
-  if (!resolvedWorkingMonth) {
-    return {
-      ok: false,
-      error:
-        "Working financial period is missing. Set your working month under Financial years before posting.",
-    };
-  }
-  const postingFY = resolvedWorkingMonth.financialYear;
-  const postingCalendarYear = resolvedWorkingMonth.calendarYear;
-  const postingCalendarMonth = resolvedWorkingMonth.calendarMonth;
-
-  const effectiveSalesPointId = session.salesPoint?.id ?? salesPointId;
-  const spErr = salesPointErrorForSubmitted(actor, effectiveSalesPointId);
-  if (spErr) return { ok: false, error: spErr };
-  if (effectiveSalesPointId == null) {
-    return { ok: false, error: "Sales point is required." };
-  }
-
-  const botaSalesPointId = await resolveBotaSalesPointId(prisma);
-  const saleProductMode = normalizeSaleModeForSalesPoint(
-    saleProductModeRaw,
-    effectiveSalesPointId,
-    botaSalesPointId,
-  );
-  const modeErr = assertSaleModeForSalesPoint(
-    saleProductMode,
-    effectiveSalesPointId,
-    botaSalesPointId,
-  );
-  if (modeErr) return { ok: false, error: modeErr };
-
-  const dispositionErr = assertDispositionForSaleMode(
-    saleDisposition,
-    saleProductMode,
-  );
-  if (dispositionErr) return { ok: false, error: dispositionErr };
-
-  const isBottleMode = saleProductMode === PosSaleProductMode.BOTTLE;
-  const skipDo = isBottleMode || isNoDeliveryOrderDisposition(saleDisposition);
-  const skipTax = isBottleMode || isNoTaxDisposition(saleDisposition);
-  const skipPayment = isNonPaymentDisposition(saleDisposition);
-  const referenceNumber = isBottleMode ? null : referenceNumberRaw || null;
-  const deliveryOrderNo = skipDo ? null : deliveryOrderNoRaw || null;
-  const vehicleNumber = isBottleMode
-    ? vehicleNumberRaw || BOTTLE_VEHICLE_PLACEHOLDER
-    : vehicleNumberRaw;
-
-  if (!skipDo && !deliveryOrderNo) {
-    return { ok: false, error: "Delivery Order number is required." };
-  }
-  if (!isBottleMode && !vehicleNumber) {
-    return { ok: false, error: "Vehicle number is required." };
-  }
-  const usesTypedCustomerName =
-    saleDisposition === "RATION" || saleDisposition === "PUBLIC_RELATION";
-  if (usesTypedCustomerName) {
-    if (!typedCustomerName) {
-      return { ok: false, error: "Enter the customer name." };
-    }
-  } else if (isBottleMode && useWalkIn) {
-    if (!walkInCustomerName) {
-      return { ok: false, error: "Enter the walk-in customer name." };
-    }
-  } else if (!customerIdRaw) {
-    return { ok: false, error: "Customer is required." };
-  }
-
-  const scope = resolveServiceScope(session);
-  const csOpErr = commercialServiceErrorForOperations(scope);
-  if (csOpErr) return { ok: false, error: csOpErr };
-
-  if (!Array.isArray(lines) || lines.length === 0) return { ok: false, error: "Add at least one line." };
-  if (!skipPayment && (!Array.isArray(payments) || payments.length === 0))
-    return { ok: false, error: "Add at least one payment." };
-
-  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
-
-  let customer: {
-    id: string;
-    name: string;
-    taxpayerId: string | null;
-    taxRegimeId: string | null;
-    customerTypeId: string;
-    commercialServiceId: string;
-  };
-  let customerNameSnapshot: string;
-
-  if (saleDisposition === "RATION") {
-    const workerTypeId = await getCustomerTypeIdByCode("WORKER");
-    if (!workerTypeId) {
-      return { ok: false, error: "Worker customer type is not configured." };
-    }
-    const placeholder = await getOrCreatePosPlaceholderCustomer(
-      prisma,
-      commercialService.id,
-      RATION_POS_CUSTOMER_NAME,
-      workerTypeId,
-    );
-    customer = {
-      id: placeholder.id,
-      name: placeholder.name,
-      taxpayerId: null,
-      taxRegimeId: null,
-      customerTypeId: placeholder.customerTypeId,
-      commercialServiceId: commercialService.id,
-    };
-    customerNameSnapshot = typedCustomerName;
-  } else if (saleDisposition === "PUBLIC_RELATION") {
-    const workerTypeId = await getCustomerTypeIdByCode("WORKER");
-    if (!workerTypeId) {
-      return { ok: false, error: "Worker customer type is not configured." };
-    }
-    const placeholder = await getOrCreatePosPlaceholderCustomer(
-      prisma,
-      commercialService.id,
-      PUBLIC_RELATION_POS_CUSTOMER_NAME,
-      workerTypeId,
-    );
-    customer = {
-      id: placeholder.id,
-      name: placeholder.name,
-      taxpayerId: null,
-      taxRegimeId: null,
-      customerTypeId: placeholder.customerTypeId,
-      commercialServiceId: commercialService.id,
-    };
-    customerNameSnapshot = typedCustomerName;
-  } else if (isBottleMode && useWalkIn) {
-    const retailCustomerTypeId = await getCustomerTypeIdByCode("RETAIL");
-    if (!retailCustomerTypeId) {
-      return { ok: false, error: "Retail customer type is not configured." };
-    }
-    const walkIn = await getOrCreateWalkInCustomer(
-      prisma,
-      commercialService.id,
-      retailCustomerTypeId,
-    );
-    customer = {
-      id: walkIn.id,
-      name: walkIn.name,
-      taxpayerId: null,
-      taxRegimeId: null,
-      customerTypeId: walkIn.customerTypeId,
-      commercialServiceId: commercialService.id,
-    };
-    customerNameSnapshot = walkInCustomerName;
-  } else {
-    const selectableCheck = await assertCustomerSelectableForOperations(
-      prisma,
-      customerIdRaw,
-    );
-    if (!selectableCheck.ok) {
-      return { ok: false, error: selectableCheck.error };
-    }
-    const row = await prisma.customer.findUnique({
-      where: { id: customerIdRaw },
-      select: {
-        id: true,
-        name: true,
-        taxpayerId: true,
-        taxRegimeId: true,
-        customerTypeId: true,
-        commercialServiceId: true,
-      },
-    });
-    if (!row) return { ok: false, error: "Customer not found." };
-    customer = row;
-    customerNameSnapshot = row.name;
-  }
-
-  const openPeriod = await getOpenFinancialYearPeriod();
-
-  const custScopeErr = commercialServiceErrorForCustomer(scope, customer.commercialServiceId);
-  if (custScopeErr) return { ok: false, error: custScopeErr };
-
-  const lineMismatch = assertCustomerMatchesPostingLine(
-    customer.commercialServiceId,
-    commercialService.id,
-  );
-  if (lineMismatch) return { ok: false, error: lineMismatch };
-
-  if (!openPeriod) {
-    return { ok: false, error: "No financial year is open." };
-  }
-  const open = toOpenFinancialYearForPosting(openPeriod);
-  try {
-    assertPostingPeriod(open, postingFY, postingCalendarYear, postingCalendarMonth);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid posting period." };
-  }
-  try {
-    assertTransactionDateInWorkingMonth(open, soldAt, postingCalendarYear, postingCalendarMonth);
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "Transaction date is outside the working month.",
-    };
-  }
-
-  let net = d(0);
-  let preparedLines: Array<{
-    productId: number;
-    storageLocationId: number;
-    qtyKg: Prisma.Decimal;
-    qtyUnits: Prisma.Decimal | null;
-    isBottled: boolean;
-    unitPrice: Prisma.Decimal;
-    lineNet: Prisma.Decimal;
-  }> = [];
-  try {
-    preparedLines = [];
-    for (const l of lines) {
-      if (!l.productId) throw new Error("Each line must have a product.");
-      const productId = Number.parseInt(l.productId, 10);
-      if (!Number.isFinite(productId)) throw new Error("Invalid product selected.");
-      const storageLocationId = Number.parseInt(String(l.storageLocationId ?? ""), 10);
-      if (!Number.isFinite(storageLocationId)) throw new Error("Storage location is required on each line.");
-      if (effectiveSalesPointId == null) throw new Error("Sales point is required.");
-      const locOk = await prisma.storageLocation.findFirst({
-        where: { id: storageLocationId, salesPointId: effectiveSalesPointId },
-        select: { id: true },
-      });
-      if (!locOk) throw new Error("One or more storage locations do not belong to the selected sales point.");
-      const product = await prisma.product.findUnique({
-        where: { productId },
-        select: {
-          productName: true,
-          productCat: { select: { isBottled: true } },
-        },
-      });
-      if (!product) throw new Error("Product not found.");
-      const isBottled = product.productCat?.isBottled === true;
-      if (isBottleMode && !isBottled) {
-        throw new Error("Only bottled palm oil products are allowed in bottle sales mode.");
-      }
-      if (!isBottleMode && isBottled) {
-        throw new Error("Bottled products cannot be sold in loose sales mode.");
-      }
-      let qtyKg: Prisma.Decimal;
-      let qtyUnits: Prisma.Decimal | null;
-      if (isBottled) {
-        const units = d(l.qtyUnits ?? l.qtyKg);
-        if (units.lte(0)) throw new Error("Qty must be > 0.");
-        qtyKg = new Prisma.Decimal(0);
-        qtyUnits = units;
-      } else {
-        qtyKg = d(l.qtyKg);
-        if (qtyKg.lte(0)) throw new Error("Qty must be > 0.");
-        qtyUnits = null;
-      }
-      let price: Prisma.Decimal;
-      if (saleDisposition === "PUBLIC_RELATION") {
-        price = d(0);
-      } else if (isBottleMode && saleDisposition !== "RATION") {
-        const priced = await resolveBottledUnitPriceExTax(prisma, productId, soldAt);
-        if (!priced.ok) throw new Error(priced.error);
-        price = money2(priced.unitPriceExTax);
-      } else {
-        const priced = await resolveUnitPriceExTax(
-          prisma,
-          productId,
-          customer.customerTypeId,
-          soldAt,
-        );
-        if (!priced.ok) throw new Error(priced.error);
-        price = money2(priced.unitPriceExTax);
-      }
-
-      if (price.lt(0)) throw new Error("Unit price must be >= 0.");
-      const lineQty = isBottled ? qtyUnits! : qtyKg;
-      const lineNet = money2(lineQty.mul(price));
-      net = net.add(lineNet);
-
-      preparedLines.push({
-        productId,
-        storageLocationId,
-        qtyKg,
-        qtyUnits,
-        isBottled,
-        unitPrice: price,
-        lineNet,
-      });
-    }
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid line items." };
-  }
-
-  if (deliveryOrderNo) {
-    const linkedDo = await prisma.deliveryOrder.findUnique({
-      where: { deliveryOrderNo },
-      select: { commercialServiceId: true },
-    });
-    const doCsErr = commercialServiceErrorForResource(
-      scope,
-      linkedDo?.commercialServiceId ?? null,
-    );
-    if (doCsErr) return { ok: false, error: doCsErr };
-
-    const productRows = await prisma.product.findMany({
-      where: { productId: { in: [...new Set(preparedLines.map((l) => l.productId))] } },
-      select: { productId: true, productName: true },
-    });
-    const nameById = new Map(productRows.map((p) => [p.productId, p.productName]));
-    const check = await validateSaleAgainstDeliveryOrder({
-      deliveryOrderNo,
-      customerId: customer.id,
-      lines: preparedLines.map((l) => ({
-        productId: l.productId,
-        productName: nameById.get(l.productId) ?? `Product ${l.productId}`,
-        qtyKg: l.qtyKg,
-      })),
-    });
-    if (!check.ok) return { ok: false, error: check.error };
-  }
-
-  try {
-    const stockByLocation = new Map<
-      string,
-      {
-        productId: number;
-        storageLocationId: number;
-        qty: Prisma.Decimal;
-      }
-    >();
-    for (const l of preparedLines) {
-      const key = `${l.productId}:${l.storageLocationId}`;
-      const lineQty = l.isBottled ? l.qtyUnits! : l.qtyKg;
-      const existing = stockByLocation.get(key);
-      if (existing) {
-        existing.qty = existing.qty.add(lineQty);
-      } else {
-        stockByLocation.set(key, {
-          productId: l.productId,
-          storageLocationId: l.storageLocationId,
-          qty: lineQty,
-        });
-      }
-    }
-    for (const group of stockByLocation.values()) {
-      await assertPosSellableQtyAvailable(prisma, {
-        salesPointId: effectiveSalesPointId,
-        storageLocationId: group.storageLocationId,
-        productId: group.productId,
-        qty: group.qty,
-      });
-    }
-  } catch (e) {
-    if (isInsufficientStockError(e)) {
-      return { ok: false, error: e.message };
-    }
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid storage location." };
-  }
-
-  let appliedTaxCreates: Array<{
-    taxTypeId: string | null;
-    codeSnapshot: string;
-    labelSnapshot: string;
-    rateSnapshot: Prisma.Decimal;
-    amount: Prisma.Decimal;
-  }> = [];
-  let totalTax = d(0);
-  let vatAmount = d(0);
-  let vatRateSnapshot = d(0);
-  let gross = net;
-
-  if (skipTax) {
-    gross = money2(net);
-  } else {
-    const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
-
-    appliedTaxCreates = resolved.taxes.map((t) => ({
-      taxTypeId: t.taxTypeId,
-      codeSnapshot: t.code,
-      labelSnapshot: t.label,
-      rateSnapshot: t.rate,
-      amount: money2(net.mul(t.rate)),
-    }));
-
-    totalTax = appliedTaxCreates.reduce((acc, row) => acc.add(row.amount), d(0));
-    vatAmount = appliedTaxCreates
-      .filter((r) => r.codeSnapshot === VAT_TAX_CODE)
-      .reduce((acc, r) => acc.add(r.amount), d(0));
-    ({ vatRateSnapshot } = legacyVatSnapshotFromResolved(resolved.taxes));
-    gross = money2(net.add(totalTax));
-  }
-
-  let lineVatRunning = d(0);
-  const lineCreates = preparedLines.map((l, idx) => {
-    let lineVat = d(0);
-    if (!skipTax) {
-      const isLast = idx === preparedLines.length - 1;
-      if (net.lte(0)) {
-        lineVat = d(0);
-      } else if (isLast) {
-        lineVat = money2(totalTax.sub(lineVatRunning));
-      } else {
-        lineVat = money2(l.lineNet.div(net).mul(totalTax));
-        lineVatRunning = lineVatRunning.add(lineVat);
-      }
-    }
-    return {
-      productId: l.productId,
-      storageLocationId: l.storageLocationId,
-      qtyKg: l.qtyKg,
-      qtyUnits: l.qtyUnits,
-      unitPricePerKg: l.isBottled ? d(0) : l.unitPrice,
-      unitPricePerUnit: l.isBottled ? l.unitPrice : null,
-      lineNet: l.lineNet,
-      lineVat,
-      lineGross: money2(l.lineNet.add(lineVat)),
-    };
-  });
-
-  let paidTotal = d(0);
-  let preparedPayments: Array<{
-    paymentMethodId: string;
-    amount: Prisma.Decimal;
-    chequeNo: string | null;
-    bank: string | null;
-    traiteNo: string | null;
-    traiteIssuedOn: Date | null;
-    traiteMaturityOn: Date | null;
-  }> = [];
-  if (!skipPayment) {
-    try {
-      preparedPayments = await Promise.all(
-        payments
-          .filter((p) => d(p.amount).gt(0))
-          .map(async (p) => {
-            const amount = money2(d(p.amount));
-            if (amount.lte(0)) throw new Error("Payment amount must be > 0.");
-
-            const paymentMethodId = String(p.paymentMethodId ?? "").trim();
-            if (!paymentMethodId) throw new Error("Payment method is required.");
-
-            const methodRow = await assertPaymentMethodUsable(paymentMethodId);
-            if (methodRow.kind === "CREDIT") {
-              throw new Error("Credit payments cannot be created from this screen.");
-            }
-
-            const fields = validatePaymentFields(
-              methodRow.kind as PaymentMethodKind,
-              p,
-              { normalizeIsoDateInput, noonUtcFromIsoDate },
-            );
-
-            paidTotal = paidTotal.add(amount);
-            return {
-              paymentMethodId: methodRow.id,
-              amount,
-              ...fields,
-            };
-          }),
-      );
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Invalid payments." };
-    }
-
-    if (preparedPayments.length === 0) return { ok: false, error: "Payment amount must be > 0." };
-    if (!paidTotal.equals(gross)) {
-      return { ok: false, error: "No credit sales: payment total must equal gross amount." };
-    }
-  }
-
-  const invoiceNo = await allocateInvoiceNo(prisma, commercialService.id, soldAt);
-
-  if (effectiveSalesPointId == null) {
-    return {
-      ok: false,
-      error: "Sales point is required to raise a sales invoice.",
-    };
-  }
-
-  let created: { id: string; invoiceNo: string; soldAt: Date };
-  try {
-    created = await prisma.$transaction(
-      async (tx) => {
-        const sale = await tx.sale.create({
-          data: {
-            invoiceNo,
-            soldAt,
-            customerId: customer.id,
-            createdByUserId: session.userId,
-            referenceNumber,
-            salesPointId: effectiveSalesPointId,
-            vehicleNumber,
-            dateIssued: soldAt,
-            deliveryOrderNo,
-            saleProductMode,
-            saleDisposition,
-            status: ValidationStatus.PENDING,
-            customerNameSnapshot,
-            taxRegimeId: skipTax ? null : customer.taxRegimeId,
-            vatRateSnapshot,
-            netAmount: net,
-            vatAmount,
-            grossAmount: gross,
-            financialYear: postingFY,
-            financialMonth: postingCalendarMonth,
-            postingCalendarYear,
-            commercialServiceId: commercialService.id,
-            issuerPhoneSnapshot: commercialService.phone ?? null,
-            issuerAddressSnapshot: commercialService.address ?? null,
-            commercialServiceNameSnapshot: commercialService.name,
-            appliedTaxes: { create: appliedTaxCreates },
-            lines: { create: lineCreates },
-            payments: skipPayment
-              ? undefined
-              : {
-                  create: preparedPayments.map((p) => ({
-                    paymentMethodId: p.paymentMethodId,
-                    amount: p.amount,
-                    chequeNo: p.chequeNo,
-                    bank: p.bank,
-                    traiteNo: p.traiteNo,
-                    traiteIssuedOn: p.traiteIssuedOn,
-                    traiteMaturityOn: p.traiteMaturityOn,
-                    paidAt: soldAt,
-                  })),
-                },
-          },
-          select: { id: true, invoiceNo: true, soldAt: true },
-        });
-
-        return { id: sale.id, invoiceNo: sale.invoiceNo, soldAt: sale.soldAt };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Could not create sale." };
-  }
-
-  revalidatePath("/pos");
-  revalidatePath("/dashboard");
-
-  return { ok: true, id: created.id, invoiceNo: created.invoiceNo, soldAtIso: created.soldAt.toISOString() };
 }
 
 export async function previewPosTaxes(
   customerId: string,
   transactionIso: string,
 ): Promise<{ ok: true; taxes: PosTaxPreviewRow[] } | { ok: false; error: string }> {
-  const prisma = getPrismaClient();
-  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/pos");
-    ({ session } = await requireActor(prisma));
+    const session = await getServerSession();
+    if (!session?.userId) return { ok: false, error: "Login required." };
+    return previewPosTaxesForSession(session, customerId, transactionIso);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-
-  const cid = String(customerId ?? "").trim();
-  if (!cid) return { ok: false, error: "Customer is required." };
-
-  const scope = resolveServiceScope(session);
-  const csOpErr = commercialServiceErrorForOperations(scope);
-  if (csOpErr) return { ok: false, error: csOpErr };
-
-  const commercialService = await resolveCommercialServiceForUserId(prisma, session.userId);
-  const custCheck = await validateCustomerForCommercialPosting(
-    prisma,
-    scope,
-    cid,
-    commercialService.id,
-  );
-  if (!custCheck.ok) return custCheck;
-
-  const iso = normalizeIsoDateInput(transactionIso) ?? utcIsoDateToday();
-  const soldAt = noonUtcFromIsoDate(iso);
-
-  const customer = await prisma.customer.findUnique({
-    where: { id: cid },
-    select: { id: true },
-  });
-  if (!customer) return { ok: false, error: "Customer not found." };
-
-  const resolved = await resolveTaxesForCustomer(prisma, customer.id, soldAt);
-  if (!resolved.ok) return { ok: false, error: resolved.error };
-
-  return {
-    ok: true,
-    taxes: resolved.taxes.map((t) => {
-      const pct = new Prisma.Decimal(t.rate.toString())
-        .mul(100)
-        .toDecimalPlaces(2)
-        .toString();
-      return {
-        code: t.code,
-        label: t.label,
-        rate: t.rate.toString(),
-        ratePercentLabel: pct,
-      };
-    }),
-  };
 }
-
-export type PosLineStockPreview =
-  | {
-      ok: true;
-      sellableQty: string;
-      unsellableQty: string;
-      salesBlocked: boolean;
-      message: string | null;
-    }
-  | { ok: false; error: string };
 
 export async function previewPosLineStock(
   salesPointIdRaw: string,
   storageLocationIdRaw: string,
   productIdRaw: string,
 ): Promise<PosLineStockPreview> {
-  const prisma = getPrismaClient();
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
   try {
     await assertPermissionKey("route:/pos");
-    ({ actor } = await requireActor(prisma));
+    const session = await getServerSession();
+    if (!session?.userId) return { ok: false, error: "Login required." };
+    return previewPosLineStockForSession(
+      session,
+      Number.parseInt(String(salesPointIdRaw ?? "").trim(), 10),
+      Number.parseInt(String(storageLocationIdRaw ?? "").trim(), 10),
+      Number.parseInt(String(productIdRaw ?? "").trim(), 10),
+    );
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-
-  const salesPointId = Number.parseInt(String(salesPointIdRaw ?? "").trim(), 10);
-  const storageLocationId = Number.parseInt(String(storageLocationIdRaw ?? "").trim(), 10);
-  const productId = Number.parseInt(String(productIdRaw ?? "").trim(), 10);
-  if (!Number.isFinite(salesPointId) || salesPointId <= 0) {
-    return { ok: false, error: "Sales point is required." };
-  }
-  if (!Number.isFinite(storageLocationId) || storageLocationId <= 0) {
-    return { ok: false, error: "Storage location is required." };
-  }
-  if (!Number.isFinite(productId) || productId <= 0) {
-    return { ok: false, error: "Product is required." };
-  }
-
-  const spErr = salesPointErrorForSubmitted(actor, salesPointId);
-  if (spErr) return { ok: false, error: spErr };
-
-  const locOk = await prisma.storageLocation.findFirst({
-    where: { id: storageLocationId, salesPointId },
-    select: { name: true },
-  });
-  if (!locOk) {
-    return { ok: false, error: "Storage location does not belong to the selected sales point." };
-  }
-
-  const breakdown = await getLocationStockBreakdown(
-    prisma,
-    salesPointId,
-    storageLocationId,
-    productId,
-  );
-  const salesBlocked = isPosLocationBlockedByUnsellableStock(breakdown);
-  let message: string | null = null;
-  if (salesBlocked) {
-    message = `This location holds ${breakdown.unsellableQty.toString()} kg unsellable stock for this product. Sales from this location are not allowed.`;
-  }
-
-  return {
-    ok: true,
-    sellableQty: breakdown.sellableQty.toString(),
-    unsellableQty: breakdown.unsellableQty.toString(),
-    salesBlocked,
-    message,
-  };
 }
 
 function money2Print(value: Prisma.Decimal) {
   return value.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
-
-export type PendingSaleRow = {
-  invoiceNo: string;
-  soldAtIso: string;
-  customerName: string;
-  totalLabel: string;
-  salesPointName: string | null;
-};
 
 /**
  * Lightweight listing of PENDING palm-oil sales for the supervisor lookup
@@ -1139,72 +401,19 @@ export async function loadSaleByInvoiceNo(rawNo: string): Promise<LoadedSaleView
   };
 }
 
-export type AvailableDeliveryOrderRow = {
-  deliveryOrderNo: string;
-  dateIssued: string;
-  customerName: string;
-  balanceKg: string;
-};
-
-/**
- * Validated delivery orders at a sales point that still have qty balance
- * (for the POS D.O. combo picker).
- */
 export async function listAvailableDeliveryOrdersForSale(
   salesPointIdRaw: string,
 ): Promise<AvailableDeliveryOrderRow[]> {
   const salesPointId = Number.parseInt(String(salesPointIdRaw ?? "").trim(), 10);
   if (!Number.isFinite(salesPointId)) return [];
-
-  const prisma = getPrismaClient();
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
-  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/pos");
-    ({ session, actor } = await requireActor(prisma));
+    const session = await getServerSession();
+    if (!session?.userId) return [];
+    return listAvailableDeliveryOrdersForSession(session, salesPointId);
   } catch {
     return [];
   }
-
-  const scope = resolveServiceScope(session);
-  if (commercialServiceErrorForOperations(scope)) return [];
-
-  const spErr = salesPointErrorForSubmitted(actor, salesPointId);
-  if (spErr) return [];
-
-  const scopeWhere = deliveryOrderWhereForScope(scope) ?? {};
-
-  const orders = await prisma.deliveryOrder.findMany({
-    where: {
-      ...scopeWhere,
-      salesPointId,
-      status: ValidationStatus.VALIDATED,
-    },
-    orderBy: [{ dateIssued: "desc" }, { deliveryOrderNo: "desc" }],
-    take: 200,
-    select: {
-      deliveryOrderNo: true,
-      dateIssued: true,
-      customer: { select: { name: true } },
-    },
-  });
-
-  const rows = await Promise.all(
-    orders.map(async (o) => {
-      const ctx = await loadDeliveryOrderControl(o.deliveryOrderNo);
-      if (!ctx) return null;
-      const balance = new Prisma.Decimal(ctx.totalBalanceKg);
-      if (balance.lte(0)) return null;
-      return {
-        deliveryOrderNo: o.deliveryOrderNo,
-        dateIssued: o.dateIssued.toISOString().slice(0, 10),
-        customerName: o.customer.name,
-        balanceKg: ctx.totalBalanceKg,
-      };
-    }),
-  );
-
-  return rows.filter((r): r is AvailableDeliveryOrderRow => r != null);
 }
 
 export async function lookupDeliveryOrderForSale(
@@ -1214,49 +423,14 @@ export async function lookupDeliveryOrderForSale(
   | { ok: true; data: DeliveryOrderLookupDto & { customerMatches: boolean } }
   | { ok: false; error: string }
 > {
-  const deliveryOrderNo = String(rawNo ?? "").trim();
-  if (!deliveryOrderNo) {
-    return { ok: false, error: "Enter a delivery order number." };
-  }
-  const prisma = getPrismaClient();
-  let actor: Awaited<ReturnType<typeof requireActor>>["actor"];
-  let session: Awaited<ReturnType<typeof requireActor>>["session"];
   try {
     await assertPermissionKey("route:/pos");
-    ({ session, actor } = await requireActor(prisma));
+    const session = await getServerSession();
+    if (!session?.userId) return { ok: false, error: "Login required." };
+    return lookupDeliveryOrderForSession(session, rawNo, selectedCustomerId);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Login required." };
   }
-
-  const scope = resolveServiceScope(session);
-
-  const ctx = await loadDeliveryOrderControl(deliveryOrderNo);
-  if (!ctx) {
-    return { ok: false, error: "No delivery order with that number." };
-  }
-
-  const orderSp = await prisma.deliveryOrder.findUnique({
-    where: { deliveryOrderNo },
-    select: { salesPointId: true, status: true, commercialServiceId: true },
-  });
-  const accessErr = salesPointErrorForResource(actor, orderSp?.salesPointId ?? null);
-  if (accessErr) {
-    return { ok: false, error: accessErr };
-  }
-  const csErr = commercialServiceErrorForResource(scope, orderSp?.commercialServiceId ?? null);
-  if (csErr) {
-    return { ok: false, error: csErr };
-  }
-
-  const statusErr = deliveryOrderPosUsageError(orderSp?.status);
-  if (statusErr) {
-    return { ok: false, error: statusErr };
-  }
-
-  const data = toDeliveryOrderLookupDto(ctx);
-  const customerMatches =
-    !selectedCustomerId || selectedCustomerId === ctx.customerId;
-  return { ok: true, data: { ...data, customerMatches } };
 }
 
 export async function deleteSale(formData: FormData): Promise<SaleMutationResult> {
@@ -1374,15 +548,6 @@ export async function validateSale(formData: FormData): Promise<SaleMutationResu
   revalidatePath("/stock");
   return { ok: true };
 }
-
-export type SalePrintPayload = {
-  companyName: string;
-  department: string | null;
-  companyPhone: string | null;
-  companyAddress: string | null;
-  logoSrc: string;
-  sale: SalePrintModel;
-};
 
 export async function loadSalePrintById(
   saleId: string,
