@@ -17,7 +17,8 @@ export const ROLE_ACCESS_GROUPS: readonly RoleAccessGroup[] = [
   {
     id: "operations",
     label: "Operations",
-    description: "POS, delivery orders, stock movement, consignment notes.",
+    description:
+      "POS, delivery orders, stock movement, consignment notes. Supervisors with mobile access can also raise sales on the app when they have validate POS sales.",
     keys: [
       "route:/delivery-orders",
       "route:/delivery-orders/list",

@@ -26,7 +26,7 @@ import type {
   PosTaxPreviewRow,
   SaleMutationResult,
   SaveSaleResult,
-} from "./actions";
+} from "./types";
 
 type Customer = {
   id: string;

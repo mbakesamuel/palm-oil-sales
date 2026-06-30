@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import type { Ionicons } from "@expo/vector-icons";
+import { MOBILE_POS_LINKS } from "@pos/shared";
 import { reportLinks, stockLinks } from "@/constants/home-links";
 import type { AgroIconTone } from "@/theme/agro";
 
@@ -64,6 +65,17 @@ export const homeStockActions: HomeAction[] = stockLinks.map((s) => ({
   tone: stockToneById[s.id] ?? "moss",
   tab: "approvals",
   description: s.description,
+}));
+
+export const homePosActions: HomeAction[] = (MOBILE_POS_LINKS ?? []).map((p) => ({
+  id: p.id,
+  label: p.label,
+  href: "/(app)/pos",
+  permission: "__raise_sale__",
+  icon: "cart-outline" as const,
+  tone: "harvest" as const,
+  tab: "approvals" as const,
+  description: p.description,
 }));
 
 export const homeApprovalAction: HomeAction = {

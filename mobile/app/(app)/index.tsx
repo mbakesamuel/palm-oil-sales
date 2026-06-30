@@ -10,6 +10,7 @@ import { ProfileBanner } from "@/components/home/ProfileBanner";
 import {
   homeApprovalAction,
   homeMoreActions,
+  homePosActions,
   homeReportActions,
   homeStockActions,
   homeTabs,
@@ -29,6 +30,9 @@ function isActionAllowed(
   if (action.permission === "__approvals__") {
     return canOpenMobileApprovals(hasPermission, session);
   }
+  if (action.permission === "__raise_sale__") {
+    return hasPermission("route:/pos") && hasPermission("ui:validate-documents");
+  }
   return hasPermission(action.permission);
 }
 
@@ -44,6 +48,7 @@ export default function HomeScreen() {
     const all = [
       ...homeReportActions,
       ...homeStockActions,
+      ...homePosActions,
       homeApprovalAction,
       ...homeMoreActions,
     ].filter((action) => isActionAllowed(action, hasPermission, session));

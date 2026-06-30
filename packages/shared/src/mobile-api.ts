@@ -268,3 +268,133 @@ export const MOBILE_STOCK_LINKS = [
     permission: "ui:receive-stock-transfer",
   },
 ] as const;
+
+export type MobilePosProductRow = {
+  productId: number;
+  productName: string;
+};
+
+export type MobilePosPaymentMethod = {
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+};
+
+export type MobilePosStorageLocation = {
+  id: number;
+  salesPointId: number;
+  name: string;
+  isDefault: boolean;
+};
+
+export type MobilePosCustomerRow = {
+  id: string;
+  name: string;
+  customerTypeId: string;
+  taxRegimeId: string | null;
+  vatApplies: boolean;
+};
+
+export type MobilePosConfig = {
+  botaSalesPointId: number | null;
+  bottleOilStoreLocationId: number | null;
+  walkInCustomerId: string;
+  rationCustomerId: string;
+  publicRelationCustomerId: string;
+  looseProducts: MobilePosProductRow[];
+  bottledProducts: MobilePosProductRow[];
+  salesPoints: Array<{ id: number; name: string }>;
+  storageLocations: MobilePosStorageLocation[];
+  paymentMethods: MobilePosPaymentMethod[];
+  effectiveSalesPointId: number | null;
+  isBota: boolean;
+  transactionDateMinIso: string | null;
+  transactionDateMaxIso: string | null;
+  workingMonth: {
+    financialYear: number;
+    calendarYear: number;
+    calendarMonth: number;
+    salesPointName: string | null;
+  } | null;
+};
+
+export type MobilePosLineInput = {
+  productId: string;
+  qtyKg: string;
+  qtyUnits?: string;
+  unitPricePerKg: string;
+  unitPricePerUnit?: string;
+  storageLocationId: string;
+};
+
+export type MobilePosPaymentInput = {
+  paymentMethodId: string;
+  amount: string;
+  chequeNo?: string;
+  bank?: string;
+  traiteNo?: string;
+  traiteIssuedOn?: string;
+  traiteMaturityOn?: string;
+};
+
+export type MobileCreateSaleRequest = {
+  customerId?: string;
+  useWalkInCustomer?: boolean;
+  walkInCustomerName?: string;
+  typedCustomerName?: string;
+  referenceNumber?: string;
+  salesPointId?: number | null;
+  saleProductMode: string;
+  saleDisposition: string;
+  vehicleNumber?: string;
+  deliveryOrderNo?: string;
+  transactionDate?: string;
+  lines: MobilePosLineInput[];
+  payments: MobilePosPaymentInput[];
+};
+
+export type MobileCreateSaleResponse =
+  | {
+      ok: true;
+      id: string;
+      invoiceNo: string;
+      soldAtIso: string;
+      grossAmount: string;
+      status: "VALIDATED";
+    }
+  | { ok: false; error: string; saleId?: string; invoiceNo?: string };
+
+export type MobilePosDeliveryOrderRow = {
+  deliveryOrderNo: string;
+  dateIssued: string;
+  customerName: string;
+  balanceKg: string;
+};
+
+export type MobilePosTaxPreviewRow = {
+  code: string;
+  label: string;
+  rate: string;
+  ratePercentLabel: string;
+};
+
+export type MobilePosLineStockPreview =
+  | {
+      ok: true;
+      sellableQty: string;
+      unsellableQty: string;
+      salesBlocked: boolean;
+      message: string | null;
+    }
+  | { ok: false; error: string };
+
+export const MOBILE_POS_LINKS = [
+  {
+    id: "raise-sale",
+    label: "Raise sale",
+    description: "Create and validate a sales invoice",
+    permission: "route:/pos",
+    validatePermission: "ui:validate-documents",
+  },
+] as const;

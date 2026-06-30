@@ -30,6 +30,7 @@ export default function AppLayout() {
       <Stack.Screen name="reports" options={{ headerShown: false }} />
       <Stack.Screen name="validation" options={{ headerShown: false }} />
       <Stack.Screen name="stock" options={{ headerShown: false }} />
+      <Stack.Screen name="pos" options={{ headerShown: false }} />
     </Stack>
   );
 }

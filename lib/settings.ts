@@ -72,4 +72,3 @@ export async function getOrInitCompanySettings() {
   await ensureMinimalCommercialService();
   return row;
 }
-
