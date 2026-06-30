@@ -76,7 +76,7 @@ export function getApiBaseUrl(): string {
 export function describeApiConnection(): string {
   const base = getApiBaseUrl();
   if (!base) return "API URL is not configured.";
-  return `Using API at ${base}`;
+  return `Connected to API at ${base}`;
 }
 
 export class ApiError extends Error {

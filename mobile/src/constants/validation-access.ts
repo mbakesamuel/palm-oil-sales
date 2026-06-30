@@ -59,6 +59,18 @@ export function canOpenMobileApprovals(
   );
 }
 
+export function canAccessMobileApprovalsInbox(
+  hasPermission: (key: string) => boolean,
+  session?: MobileSessionPayload | null,
+) {
+  return (
+    canOpenMobileApprovals(hasPermission, session) ||
+    hasPermission("ui:post-stock-receipt") ||
+    hasPermission("ui:dispatch-stock-transfer") ||
+    hasPermission("ui:receive-stock-transfer")
+  );
+}
+
 export function mobileValidationScreenHint(
   session: MobileSessionPayload | null,
   hasPermission: (key: string) => boolean,

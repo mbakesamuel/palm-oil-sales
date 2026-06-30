@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
 import type { MobileSessionPayload } from "@pos/shared";
 import { useAuth } from "@/auth/AuthProvider";
 import { ActionGrid } from "@/components/home/ActionGrid";
@@ -17,7 +16,11 @@ import {
   type HomeAction,
   type HomeTabId,
 } from "@/constants/home-actions";
-import { canOpenMobileApprovals } from "@/constants/validation-access";
+import {
+  canAccessMobileApprovalsInbox,
+  canOpenMobileApprovals,
+} from "@/constants/validation-access";
+import { usePendingApprovalsCount } from "@/hooks/usePendingApprovalsCount";
 import { useSafePadding } from "@/hooks/use-safe-padding";
 import { agro, agroHomeSheet } from "@/theme/agro";
 
@@ -38,17 +41,17 @@ function isActionAllowed(
 
 export default function HomeScreen() {
   const { session, logout, hasPermission } = useAuth();
-  const router = useRouter();
   const { scrollBottom } = useSafePadding();
   const [tab, setTab] = useState<HomeTabId>("dashboard");
 
-  const canApprovals = canOpenMobileApprovals(hasPermission, session);
+  const canAccessApprovalsInbox = canAccessMobileApprovalsInbox(hasPermission, session);
+  const pendingCount = usePendingApprovalsCount(canAccessApprovalsInbox);
 
   const actionsByTab = useMemo(() => {
     const all = [
+      ...homePosActions,
       ...homeReportActions,
       ...homeStockActions,
-      ...homePosActions,
       homeApprovalAction,
       ...homeMoreActions,
     ].filter((action) => isActionAllowed(action, hasPermission, session));
@@ -87,10 +90,10 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       <View style={styles.topPanel}>
         <HomeHeader
-          title="Sales Monitor"
-          notificationCount={canApprovals ? 1 : 0}
+          title="Sales Mobile"
+          notificationCount={pendingCount}
           onNotifications={
-            canApprovals ? () => router.push("/(app)/validation" as never) : undefined
+            canAccessApprovalsInbox ? () => setTab("approvals") : undefined
           }
           onSignOut={() => void logout()}
         />
