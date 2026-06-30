@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "POS Monitor",
-    "slug": "pos-monitor",
+    "name": "Sales Mobile",
+    "slug": "sales-mobile",
     "version": "1.0.0",
-    "scheme": "posmonitor",
+    "scheme": "salesmobile",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "plugins": [

@@ -74,7 +74,7 @@ export const homePosActions: HomeAction[] = (MOBILE_POS_LINKS ?? []).map((p) => 
   permission: "__raise_sale__",
   icon: "cart-outline" as const,
   tone: "harvest" as const,
-  tab: "approvals" as const,
+  tab: "dashboard" as const,
   description: p.description,
 }));
 

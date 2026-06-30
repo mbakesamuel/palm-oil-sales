@@ -15,7 +15,11 @@ import {
   utcIsoDateToday,
 } from "@/lib/posting-calendar";
 import { saleWhereExcludingPosPlaceholderCustomers } from "@/lib/customers/operational-customer-scope";
-import { resolveReportWorkingMonthFilter } from "@/lib/report-working-month-filter";
+import {
+  resolveReportMonthFilter,
+  type ReportMonthSnapshot,
+} from "@/lib/report-working-month-filter";
+import type { SelectableMonth } from "@/lib/posting-calendar";
 
 const z = new Prisma.Decimal(0);
 
@@ -43,12 +47,15 @@ export type DailySummaryReportData = {
   assignedSalesPointId: number | null;
   assignedSalesPointName: string | null;
   monthFilter: Awaited<
-    ReturnType<typeof resolveReportWorkingMonthFilter>
+    ReturnType<typeof resolveReportMonthFilter>
   >["monthFilter"];
-  /** Inclusive calendar bounds for the working month (UTC ISO dates). */
+  /** Inclusive calendar bounds for the selected month (UTC ISO dates). */
   monthFirstIso: string | null;
   monthLastIso: string | null;
   hasOpenFy: boolean;
+  monthInvalid: boolean;
+  selectableMonths: SelectableMonth[];
+  workingMonth: ReportMonthSnapshot | null;
   /** @deprecated Use `dateFromIso` / `dateToIso`; kept when from === to. */
   selectedIso: string | null;
   dateFromIso: string | null;
@@ -66,6 +73,8 @@ export type DailySalesSummaryDateParams = {
   date?: string | null;
   from?: string | null;
   to?: string | null;
+  year?: string | null;
+  month?: string | null;
 };
 
 function utcInclusiveRange(fromIso: string, toIso: string): { gte: Date; lt: Date } {
@@ -191,13 +200,29 @@ export async function loadDailySalesSummary(
       ? { date: rawParams }
       : (rawParams ?? {});
 
-  const [{ monthFilter, hasOpenFy }, prisma, customerTypeOptions, defaultCustomerTypeId] =
-    await Promise.all([
-      resolveReportWorkingMonthFilter(),
-      getPrismaClient(),
-      listCustomerTypeDefinitions({ activeOnly: true }),
-      resolveDefaultCustomerTypeId(),
-    ]);
+  const yearParam = params.year?.trim();
+  const monthParam = params.month?.trim();
+  const calendarYear =
+    yearParam && /^\d{4}$/.test(yearParam) ? Number.parseInt(yearParam, 10) : undefined;
+  const calendarMonth =
+    monthParam && /^\d{1,2}$/.test(monthParam)
+      ? Number.parseInt(monthParam, 10)
+      : undefined;
+
+  const [
+    { monthFilter, hasOpenFy, monthInvalid, selectableMonths, workingMonth },
+    prisma,
+    customerTypeOptions,
+    defaultCustomerTypeId,
+  ] = await Promise.all([
+    resolveReportMonthFilter(session, {
+      calendarYear,
+      calendarMonth,
+    }),
+    getPrismaClient(),
+    listCustomerTypeDefinitions({ activeOnly: true }),
+    resolveDefaultCustomerTypeId(),
+  ]);
 
   const monthFirstIso = monthFilter
     ? firstDayOfCalendarMonth(
@@ -377,6 +402,9 @@ export async function loadDailySalesSummary(
     monthFirstIso,
     monthLastIso,
     hasOpenFy,
+    monthInvalid,
+    selectableMonths,
+    workingMonth,
     selectedIso,
     dateFromIso,
     dateToIso,

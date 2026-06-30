@@ -89,6 +89,20 @@ export type MobilePendingConsignmentRow = {
   salesPointName: string | null;
 };
 
+export type MobileApprovalsSummary = {
+  total: number;
+  validation: {
+    sales: number;
+    consignmentNotes: number;
+    deliveryOrders: number;
+  };
+  stock: {
+    receipts: number;
+    transferDispatch: number;
+    transferReceive: number;
+  };
+};
+
 export type MobileConsignmentDetail = {
   id: string;
   consignmentNoteNo: string;

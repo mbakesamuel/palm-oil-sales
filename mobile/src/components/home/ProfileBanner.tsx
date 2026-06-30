@@ -13,11 +13,7 @@ function initials(displayName: string) {
 }
 
 function roleLineForSession(session: MobileSessionPayload) {
-  const parts = [
-    session.roleLabel ?? session.role,
-    session.commercialServiceRole?.name ?? session.commercialService?.name,
-  ].filter(Boolean);
-  return parts.join(" - ");
+  return session.roleLabel ?? session.role;
 }
 
 export function ProfileBanner(props: { session: MobileSessionPayload }) {
@@ -31,10 +27,10 @@ export function ProfileBanner(props: { session: MobileSessionPayload }) {
       <View style={styles.body}>
         <Text style={styles.name}>{session.displayName}</Text>
         <Text style={styles.role}>{roleLineForSession(session)}</Text>
-        <View style={styles.profileLink}>
+       {/*  <View style={styles.profileLink}>
           <Text style={styles.profileLinkText}>View Personal Profile</Text>
           <Ionicons name="chevron-down" size={14} color={agro.leaf} />
-        </View>
+        </View> */}
       </View>
     </View>
   );
