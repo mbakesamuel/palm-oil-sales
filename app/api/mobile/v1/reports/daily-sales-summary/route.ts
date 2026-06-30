@@ -18,6 +18,8 @@ export async function GET(request: Request) {
         date: url.searchParams.get("date"),
         from: url.searchParams.get("from"),
         to: url.searchParams.get("to"),
+        year: url.searchParams.get("year"),
+        month: url.searchParams.get("month"),
       });
 
       const z = new Prisma.Decimal(0);
@@ -33,6 +35,14 @@ export async function GET(request: Request) {
         dateInvalid: data.dateInvalid,
         rangeInvalid: data.rangeInvalid,
         hasOpenFy: data.hasOpenFy,
+        monthLabel: data.monthFilter?.label ?? null,
+        selectedYear: data.monthFilter?.postingCalendarYear ?? null,
+        selectedMonth: data.monthFilter?.financialMonth ?? null,
+        monthFirstIso: data.monthFirstIso,
+        monthLastIso: data.monthLastIso,
+        monthInvalid: data.monthInvalid,
+        selectableMonths: data.selectableMonths,
+        workingMonth: data.workingMonth,
         grandQty: fmtKg(data.grandQty),
         rowCount: data.rows.length,
         scopedToSalesPoint: data.scopedToSalesPoint,
